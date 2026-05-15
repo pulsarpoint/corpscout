@@ -77,19 +77,6 @@ func queryString(r *http.Request, key string) *string {
 
 // --- stub handlers for endpoints implemented in later tasks ---
 
-func (h *Handlers) handleStats(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-func (h *Handlers) handleListDomains(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-
-func (h *Handlers) handleListJobs(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
 func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not implemented")
 }

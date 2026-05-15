@@ -59,7 +59,8 @@ func (s *stubQuerier) CompletePullRun(ctx context.Context, arg db.CompletePullRu
 }
 
 func (s *stubQuerier) CountDomains(ctx context.Context, arg db.CountDomainsParams) (int64, error) {
-	return 0, nil
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(int64), ret.Error(1)
 }
 
 func (s *stubQuerier) CreateDomainReview(ctx context.Context, arg db.CreateDomainReviewParams) (db.CompanyDomainReview, error) {
@@ -88,7 +89,8 @@ func (s *stubQuerier) GetSourceByName(ctx context.Context, name string) (db.Data
 }
 
 func (s *stubQuerier) GetStats(ctx context.Context) (db.GetStatsRow, error) {
-	return db.GetStatsRow{}, nil
+	ret := s.Called(ctx)
+	return ret.Get(0).(db.GetStatsRow), ret.Error(1)
 }
 
 func (s *stubQuerier) InsertSourceSnapshot(ctx context.Context, arg db.InsertSourceSnapshotParams) error {
@@ -100,7 +102,11 @@ func (s *stubQuerier) ListCandidatesForReview(ctx context.Context, arg db.ListCa
 }
 
 func (s *stubQuerier) ListDomains(ctx context.Context, arg db.ListDomainsParams) ([]db.ListDomainsRow, error) {
-	return nil, nil
+	ret := s.Called(ctx, arg)
+	if v, ok := ret.Get(0).([]db.ListDomainsRow); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
 }
 
 func (s *stubQuerier) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]db.CompanyDomainReview, error) {
