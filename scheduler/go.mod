@@ -29,6 +29,7 @@ require (
 	github.com/riverqueue/river/rivershared v0.14.0 // indirect
 	github.com/riverqueue/river/rivertype v0.14.0 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
