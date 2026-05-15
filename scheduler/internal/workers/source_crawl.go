@@ -37,6 +37,12 @@ func NewSourceCrawlWorker(q db.Querier, crawler *crawlerclient.Client, riverClie
 	}
 }
 
+// SetRiverClient injects the river client after construction to break the
+// chicken-and-egg dependency: workers must be registered before the client exists.
+func (w *SourceCrawlWorker) SetRiverClient(rc *river.Client[pgx.Tx]) {
+	w.riverClient = rc
+}
+
 // Work executes a source crawl job.
 func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawlArgs]) error {
 	sourceName := job.Args.SourceName

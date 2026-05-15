@@ -11,10 +11,12 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
+	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
-func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*river.Client[pgx.Tx], error) {
+func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db.Querier, crawler *crawlerclient.Client) (*river.Client[pgx.Tx], error) {
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
 	if err != nil {
 		return nil, err
@@ -27,9 +29,12 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*ri
 		slog.Info("river migration applied", "version", v.Version, "direction", "up")
 	}
 
+	sourceCrawlWorker := workers.NewSourceCrawlWorker(q, crawler, nil)
+	domainResolveWorker := workers.NewDomainResolveWorker(q, crawler)
+
 	w := river.NewWorkers()
-	river.AddWorker(w, &workers.SourceCrawlWorker{})
-	river.AddWorker(w, &workers.DomainResolveWorker{})
+	river.AddWorker(w, sourceCrawlWorker)
+	river.AddWorker(w, domainResolveWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -39,5 +44,11 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*ri
 		Workers: w,
 	}
 
-	return river.NewClient(riverpgxv5.New(pool), riverCfg)
+	rc, err := river.NewClient(riverpgxv5.New(pool), riverCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceCrawlWorker.SetRiverClient(rc)
+	return rc, nil
 }
