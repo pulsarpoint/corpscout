@@ -25,6 +25,9 @@ func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if items == nil {
+		items = []db.ListCandidatesForReviewRow{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "page": page, "limit": limit,
 	})
