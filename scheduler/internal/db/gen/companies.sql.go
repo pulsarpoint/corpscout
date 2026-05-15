@@ -14,18 +14,29 @@ import (
 )
 
 const countCompanies = `-- name: CountCompanies :one
-SELECT COUNT(*) FROM companies
+SELECT COUNT(*) FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
+  AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
+  AND ($4::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = $4
+  ))
 `
 
 type CountCompaniesParams struct {
 	Status    *string     `json:"status"`
 	CountryID pgtype.UUID `json:"country_id"`
+	Q         *string     `json:"q"`
+	SourceID  pgtype.UUID `json:"source_id"`
 }
 
 func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCompanies, arg.Status, arg.CountryID)
+	row := q.db.QueryRow(ctx, countCompanies,
+		arg.Status,
+		arg.CountryID,
+		arg.Q,
+		arg.SourceID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -53,16 +64,22 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at FROM companies
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
+  AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
+  AND ($4::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = $4
+  ))
 ORDER BY name
-LIMIT $4 OFFSET $3
+LIMIT $6 OFFSET $5
 `
 
 type ListCompaniesParams struct {
 	Status    *string     `json:"status"`
 	CountryID pgtype.UUID `json:"country_id"`
+	Q         *string     `json:"q"`
+	SourceID  pgtype.UUID `json:"source_id"`
 	Offset    int32       `json:"offset"`
 	Limit     int32       `json:"limit"`
 }
@@ -71,6 +88,8 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 	rows, err := q.db.Query(ctx, listCompanies,
 		arg.Status,
 		arg.CountryID,
+		arg.Q,
+		arg.SourceID,
 		arg.Offset,
 		arg.Limit,
 	)

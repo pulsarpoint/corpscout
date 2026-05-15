@@ -104,6 +104,20 @@ func (q *Queries) UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabl
 	return err
 }
 
+const updateSourceInterval = `-- name: UpdateSourceInterval :exec
+UPDATE data_sources SET crawl_interval_hours = $2, updated_at = now() WHERE name = $1
+`
+
+type UpdateSourceIntervalParams struct {
+	Name               string `json:"name"`
+	CrawlIntervalHours int32  `json:"crawl_interval_hours"`
+}
+
+func (q *Queries) UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error {
+	_, err := q.db.Exec(ctx, updateSourceInterval, arg.Name, arg.CrawlIntervalHours)
+	return err
+}
+
 const upsertDataSource = `-- name: UpsertDataSource :one
 INSERT INTO data_sources (name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, config)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

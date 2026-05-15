@@ -36,13 +36,21 @@ ON CONFLICT (company_id, source_id) DO UPDATE SET
 SELECT * FROM companies WHERE id = $1;
 
 -- name: ListCompanies :many
-SELECT * FROM companies
+SELECT * FROM companies c
 WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('country_id')::uuid IS NULL OR country_id = sqlc.narg('country_id'))
+  AND (sqlc.narg('q')::text IS NULL OR name ILIKE '%' || sqlc.narg('q') || '%')
+  AND (sqlc.narg('source_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = sqlc.narg('source_id')
+  ))
 ORDER BY name
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountCompanies :one
-SELECT COUNT(*) FROM companies
+SELECT COUNT(*) FROM companies c
 WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
-  AND (sqlc.narg('country_id')::uuid IS NULL OR country_id = sqlc.narg('country_id'));
+  AND (sqlc.narg('country_id')::uuid IS NULL OR country_id = sqlc.narg('country_id'))
+  AND (sqlc.narg('q')::text IS NULL OR name ILIKE '%' || sqlc.narg('q') || '%')
+  AND (sqlc.narg('source_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = sqlc.narg('source_id')
+  ));

@@ -13,20 +13,27 @@ import (
 type Querier interface {
 	CompletePullRun(ctx context.Context, arg CompletePullRunParams) error
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
+	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
+	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
+	GetStats(ctx context.Context) (GetStatsRow, error)
 	InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
+	ListCountries(ctx context.Context) ([]Country, error)
+	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
 	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
+	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error
 	UpsertCompanyAlias(ctx context.Context, arg UpsertCompanyAliasParams) error
 	UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEIParams) (Company, error)
 	UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompanyByRegNumberParams) (Company, error)

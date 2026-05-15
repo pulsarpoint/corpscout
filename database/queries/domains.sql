@@ -31,3 +31,19 @@ LIMIT $1 OFFSET $2;
 
 -- name: UpdateCompanyDomainStatus :exec
 UPDATE company_domains SET status = $2, relationship_type = $3 WHERE id = $1;
+
+-- name: ListDomains :many
+SELECT d.domain, cd.*
+FROM company_domains cd
+JOIN domains d ON d.id = cd.domain_id
+WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
+  AND (sqlc.narg('signal')::text IS NULL OR cd.signal = sqlc.narg('signal'))
+  AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'))
+ORDER BY cd.confidence DESC, d.domain
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountDomains :one
+SELECT COUNT(*) FROM company_domains cd
+WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
+  AND (sqlc.narg('signal')::text IS NULL OR cd.signal = sqlc.narg('signal'))
+  AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'));

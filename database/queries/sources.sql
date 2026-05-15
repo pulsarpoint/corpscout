@@ -21,3 +21,6 @@ RETURNING *;
 
 -- name: UpdateSourceEnabled :exec
 UPDATE data_sources SET enabled = $2, updated_at = now() WHERE name = $1;
+
+-- name: UpdateSourceInterval :exec
+UPDATE data_sources SET crawl_interval_hours = $2, updated_at = now() WHERE name = $1;

@@ -12,6 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const countDomains = `-- name: CountDomains :one
+SELECT COUNT(*) FROM company_domains cd
+WHERE ($1::text IS NULL OR cd.status = $1)
+  AND ($2::text IS NULL OR cd.signal = $2)
+  AND ($3::smallint IS NULL OR cd.confidence >= $3)
+`
+
+type CountDomainsParams struct {
+	Status        *string `json:"status"`
+	Signal        *string `json:"signal"`
+	MinConfidence *int16  `json:"min_confidence"`
+}
+
+func (q *Queries) CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDomains, arg.Status, arg.Signal, arg.MinConfidence)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const listCandidatesForReview = `-- name: ListCandidatesForReview :many
 SELECT cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at, c.name AS company_name, d.domain
 FROM company_domains cd
@@ -64,6 +84,77 @@ func (q *Queries) ListCandidatesForReview(ctx context.Context, arg ListCandidate
 			&i.LastSeenAt,
 			&i.CompanyName,
 			&i.Domain,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDomains = `-- name: ListDomains :many
+SELECT d.domain, cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at
+FROM company_domains cd
+JOIN domains d ON d.id = cd.domain_id
+WHERE ($1::text IS NULL OR cd.status = $1)
+  AND ($2::text IS NULL OR cd.signal = $2)
+  AND ($3::smallint IS NULL OR cd.confidence >= $3)
+ORDER BY cd.confidence DESC, d.domain
+LIMIT $5 OFFSET $4
+`
+
+type ListDomainsParams struct {
+	Status        *string `json:"status"`
+	Signal        *string `json:"signal"`
+	MinConfidence *int16  `json:"min_confidence"`
+	Offset        int32   `json:"offset"`
+	Limit         int32   `json:"limit"`
+}
+
+type ListDomainsRow struct {
+	Domain           string    `json:"domain"`
+	ID               uuid.UUID `json:"id"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
+	FirstSeenAt      time.Time `json:"first_seen_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+}
+
+func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error) {
+	rows, err := q.db.Query(ctx, listDomains,
+		arg.Status,
+		arg.Signal,
+		arg.MinConfidence,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDomainsRow
+	for rows.Next() {
+		var i ListDomainsRow
+		if err := rows.Scan(
+			&i.Domain,
+			&i.ID,
+			&i.CompanyID,
+			&i.DomainID,
+			&i.RelationshipType,
+			&i.Status,
+			&i.Signal,
+			&i.Confidence,
+			&i.Evidence,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}
