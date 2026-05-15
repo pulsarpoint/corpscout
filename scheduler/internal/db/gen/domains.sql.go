@@ -96,9 +96,10 @@ func (q *Queries) ListCandidatesForReview(ctx context.Context, arg ListCandidate
 }
 
 const listDomains = `-- name: ListDomains :many
-SELECT d.domain, cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at
+SELECT d.domain, c.name AS company_name, cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at
 FROM company_domains cd
 JOIN domains d ON d.id = cd.domain_id
+JOIN companies c ON c.id = cd.company_id
 WHERE ($1::text IS NULL OR cd.status = $1)
   AND ($2::text IS NULL OR cd.signal = $2)
   AND ($3::smallint IS NULL OR cd.confidence >= $3)
@@ -116,6 +117,7 @@ type ListDomainsParams struct {
 
 type ListDomainsRow struct {
 	Domain           string    `json:"domain"`
+	CompanyName      string    `json:"company_name"`
 	ID               uuid.UUID `json:"id"`
 	CompanyID        uuid.UUID `json:"company_id"`
 	DomainID         uuid.UUID `json:"domain_id"`
@@ -145,6 +147,7 @@ func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]Lis
 		var i ListDomainsRow
 		if err := rows.Scan(
 			&i.Domain,
+			&i.CompanyName,
 			&i.ID,
 			&i.CompanyID,
 			&i.DomainID,

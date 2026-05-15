@@ -16,7 +16,7 @@ import (
 func TestListDomains_returns_paginated(t *testing.T) {
 	q := &stubQuerier{}
 
-	row := db.ListDomainsRow{Domain: "example.com"}
+	row := db.ListDomainsRow{Domain: "example.com", CompanyName: "Acme Corp"}
 	q.On("ListDomains", mock.Anything, mock.AnythingOfType("db.ListDomainsParams")).
 		Return([]db.ListDomainsRow{row}, nil)
 	q.On("CountDomains", mock.Anything, mock.AnythingOfType("db.CountDomainsParams")).
@@ -36,6 +36,10 @@ func TestListDomains_returns_paginated(t *testing.T) {
 	items, ok := body["items"].([]any)
 	require.True(t, ok, "items should be a list")
 	assert.Len(t, items, 1)
+
+	item := items[0].(map[string]any)
+	assert.Equal(t, "example.com", item["domain"])
+	assert.Equal(t, "Acme Corp", item["company_name"])
 
 	total, ok := body["total"].(float64)
 	require.True(t, ok, "total should be a number")
