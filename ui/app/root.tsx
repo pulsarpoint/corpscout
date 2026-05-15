@@ -1,7 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "~/components/ui/sonner";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
+import { AppSidebar } from "~/components/app/AppSidebar";
+import { api } from "~/lib/api";
 import "./app.css";
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -26,6 +29,30 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
+function AppShell() {
+  const [pendingReview, setPendingReview] = useState<number | undefined>();
+
+  useEffect(() => {
+    api.getStats()
+      .then((s) => setPendingReview(s.pending_review))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <SidebarProvider>
+      <AppSidebar pendingReview={pendingReview} />
+      <SidebarInset>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+        </header>
+        <main className="flex-1 p-4">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
 export default function App() {
-  return <Outlet />;
+  return <AppShell />;
 }
