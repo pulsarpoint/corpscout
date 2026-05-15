@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -167,6 +168,20 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 
 			totalUpserted++
 
+			// If the registry provided a website URL, persist it directly as a
+			// registry_website signal (confidence 90) and skip the domain_resolve
+			// job — no need to call the external signal pipeline.
+			if rec.Website != nil && *rec.Website != "" {
+				if domain, err := w.persistRegistryWebsite(ctx, company.ID, *rec.Website, sourceName); err != nil {
+					slog.Error("source crawl: persist registry website failed",
+						"source", sourceName, "company_id", company.ID, "website", *rec.Website, "error", err)
+				} else if domain != "" {
+					slog.Info("source crawl: persisted registry website",
+						"source", sourceName, "company_id", company.ID, "domain", domain)
+					continue
+				}
+			}
+
 			// Enqueue domain resolve job if river client is available.
 			if w.riverClient != nil {
 				if _, err := w.riverClient.Insert(ctx, DomainResolveArgs{
@@ -255,6 +270,93 @@ func companyExternalID(rec crawlerclient.CompanyRecord) string {
 		return *rec.RegistrationNumber
 	}
 	return rec.Name
+}
+
+// persistRegistryWebsite upserts a domain from a registry-provided website URL and
+// links it to the company as a registry_website signal (confidence 90).
+// Returns the domain string on success, empty string if the URL is unusable.
+func (w *SourceCrawlWorker) persistRegistryWebsite(ctx context.Context, companyID uuid.UUID, rawURL string, source string) (string, error) {
+	domain := extractDomain(rawURL)
+	if domain == "" {
+		return "", nil
+	}
+
+	domainRow, err := w.db.UpsertDomain(ctx, domain)
+	if err != nil {
+		return "", errors.Wrap(err, "upsert domain")
+	}
+
+	evidence, _ := json.Marshal(map[string]any{"source": source, "raw_url": rawURL})
+	_, err = w.db.UpsertCompanyDomain(ctx, db.UpsertCompanyDomainParams{
+		CompanyID:        companyID,
+		DomainID:         domainRow.ID,
+		RelationshipType: "official_site",
+		Status:           "active",
+		Signal:           "registry_website",
+		Confidence:       90,
+		Evidence:         evidence,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "upsert company domain")
+	}
+	return domain, nil
+}
+
+// extractDomain parses a raw URL or bare hostname from a registry website field
+// and returns the lowercase hostname with no port, or empty string if unusable.
+func extractDomain(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Add scheme if missing so url.Parse works correctly.
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	host = strings.TrimSuffix(host, ".")
+	for strings.HasPrefix(host, "*.") {
+		host = host[2:]
+	}
+	if host == "" || host == "localhost" || !strings.Contains(host, ".") {
+		return ""
+	}
+	// Reject raw IP addresses.
+	if isIPAddress(host) {
+		return ""
+	}
+	return host
+}
+
+// isIPAddress returns true if s is a valid IPv4 or IPv6 address literal.
+func isIPAddress(s string) bool {
+	// IPv6 literal inside brackets is already stripped by url.Hostname().
+	// Simple heuristic: if all segments of dot-split are numeric, it's an IPv4.
+	parts := strings.Split(s, ".")
+	if len(parts) == 4 {
+		allDigits := true
+		for _, p := range parts {
+			if len(p) == 0 || len(p) > 3 {
+				allDigits = false
+				break
+			}
+			for _, c := range p {
+				if c < '0' || c > '9' {
+					allDigits = false
+					break
+				}
+			}
+		}
+		if allDigits {
+			return true
+		}
+	}
+	// IPv6: contains colons.
+	return strings.Contains(s, ":")
 }
 
 // mustJSON marshals v to JSON, returning an empty object on error.

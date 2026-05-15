@@ -295,3 +295,112 @@ func TestSourceCrawlWorker_work_upserts_companies(t *testing.T) {
 	q.AssertCalled(t, "UpsertCompanyAlias", ctx, mock.Anything)
 	q.AssertCalled(t, "CompletePullRun", ctx, mock.Anything)
 }
+
+func TestExtractDomain(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://www.example.com/path", "www.example.com"},
+		{"http://example.com", "example.com"},
+		{"www.example.no", "www.example.no"},
+		{"example.dk", "example.dk"},
+		{"", ""},
+		{"localhost", ""},
+		{"192.168.1.1", ""},
+		{"not-a-domain", ""},
+		{"*.example.com", "example.com"},
+		{"http://example.com:8080", "example.com"},
+	}
+	for _, c := range cases {
+		if got := extractDomain(c.in); got != c.want {
+			t.Errorf("extractDomain(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestSourceCrawlWorker_persists_registry_website(t *testing.T) {
+	ctx := context.Background()
+
+	sourceID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	pullRunID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	countryID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	companyID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	domainID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+	website := "www.acme.no"
+	regNum := "87654321"
+	since := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := crawlerclient.CrawlResponse{
+			Records: []crawlerclient.CompanyRecord{
+				{
+					Name:               "Acme AS",
+					CountryISO2:        "NO",
+					RegistrationNumber: &regNum,
+					Status:             "active",
+					Website:            &website,
+					SnapshotHash:       "hash1",
+					RawData:            map[string]any{},
+				},
+			},
+			HasMore: false,
+			Total:   1,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	crawler := crawlerclient.New(srv.URL)
+	q := &mockQuerier{}
+
+	source := db.DataSource{
+		ID:                 sourceID,
+		Name:               "brreg",
+		Enabled:            true,
+		CrawlIntervalHours: 24,
+	}
+	pullRun := db.SourcePullRun{ID: pullRunID, SourceID: sourceID}
+	country := db.Country{ID: countryID, IsoAlpha2: "NO"}
+	company := db.Company{ID: companyID, Name: "Acme AS", CountryID: countryID}
+	domain := db.Domain{ID: domainID, Domain: "www.acme.no"}
+
+	sourceUUID := pgtype.UUID{Bytes: sourceID, Valid: true}
+	pullRunUUID := pgtype.UUID{Bytes: pullRunID, Valid: true}
+
+	q.On("GetSourceByName", ctx, "brreg").Return(source, nil)
+	q.On("CreatePullRun", ctx, mock.MatchedBy(func(p db.CreatePullRunParams) bool {
+		return p.SourceID == sourceID
+	})).Return(pullRun, nil)
+	q.On("UpdateSourceCursor", ctx, mock.AnythingOfType("db.UpdateSourceCursorParams")).Return(nil)
+	q.On("GetCountryByISO2", ctx, "NO").Return(country, nil)
+	q.On("UpsertCompanyByRegNumber", ctx, mock.MatchedBy(func(p db.UpsertCompanyByRegNumberParams) bool {
+		return p.Name == "Acme AS"
+	})).Return(company, nil)
+	q.On("UpsertCompanySource", ctx, mock.MatchedBy(func(p db.UpsertCompanySourceParams) bool {
+		return p.CompanyID == companyID && p.SourceID == sourceID && p.PullRunID == pullRunUUID
+	})).Return(nil)
+	q.On("InsertSourceSnapshot", ctx, mock.AnythingOfType("db.InsertSourceSnapshotParams")).Return(nil)
+	// Registry website path: domain upsert + company-domain link.
+	q.On("UpsertDomain", ctx, "www.acme.no").Return(domain, nil)
+	q.On("UpsertCompanyDomain", ctx, mock.MatchedBy(func(p db.UpsertCompanyDomainParams) bool {
+		return p.CompanyID == companyID &&
+			p.DomainID == domainID &&
+			p.Signal == "registry_website" &&
+			p.Status == "active" &&
+			p.Confidence == 90
+	})).Return(db.CompanyDomain{}, nil)
+	q.On("CompletePullRun", ctx, mock.AnythingOfType("db.CompletePullRunParams")).Return(nil)
+
+	_ = sourceUUID
+
+	worker := NewSourceCrawlWorker(q, crawler, nil)
+	job := &river.Job[SourceCrawlArgs]{
+		JobRow: &rivertype.JobRow{ID: 42},
+		Args:   SourceCrawlArgs{SourceName: "brreg", Since: since},
+	}
+
+	err := worker.Work(ctx, job)
+	assert.NoError(t, err)
+	q.AssertExpectations(t)
+	// Domain resolve job should NOT have been enqueued (registry website took the fast path).
+}
