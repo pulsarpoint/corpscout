@@ -75,12 +75,3 @@ func queryString(r *http.Request, key string) *string {
 	return &s
 }
 
-// --- stub handlers for endpoints implemented in later tasks ---
-
-func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-func (h *Handlers) handleCreateReview(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
