@@ -33,7 +33,7 @@ CREATE TABLE source_pull_runs (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id        UUID        NOT NULL REFERENCES data_sources(id),
     river_job_id     BIGINT,
-    started_at       TIMESTAMPTZ NOT NULL,
+    started_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at     TIMESTAMPTZ,
     status           TEXT        NOT NULL DEFAULT 'running'
                      CHECK (status IN ('running','completed','failed','partial')),
@@ -50,7 +50,7 @@ CREATE TABLE source_snapshots (
     id           UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id    UUID       NOT NULL REFERENCES data_sources(id),
     pull_run_id  UUID       NOT NULL REFERENCES source_pull_runs(id),
-    payload_hash VARCHAR(64) NOT NULL,
+    payload_hash TEXT        NOT NULL,
     payload      JSONB      NOT NULL,
     fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (source_id, payload_hash)
@@ -89,7 +89,7 @@ CREATE TABLE company_sources (
     external_id TEXT        NOT NULL,
     pull_run_id UUID        REFERENCES source_pull_runs(id),
     raw_data    JSONB,
-    fetched_at  TIMESTAMPTZ NOT NULL,
+    fetched_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (company_id, source_id)
 );
 
@@ -125,3 +125,15 @@ CREATE TABLE company_domain_reviews (
     review_note       TEXT,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Indexes on FK columns for join/filter performance
+CREATE INDEX ON data_sources(country_id);
+CREATE INDEX ON source_pull_runs(source_id);
+CREATE INDEX ON source_snapshots(source_id);
+CREATE INDEX ON source_snapshots(pull_run_id);
+CREATE INDEX ON companies(country_id);
+CREATE INDEX ON companies(primary_source_id) WHERE primary_source_id IS NOT NULL;
+CREATE INDEX ON company_aliases(company_id);
+CREATE INDEX ON company_sources(pull_run_id) WHERE pull_run_id IS NOT NULL;
+CREATE INDEX ON company_domains(domain_id);
+CREATE INDEX ON company_domain_reviews(company_domain_id);
