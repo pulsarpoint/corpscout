@@ -4,158 +4,166 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-`corpscout` is a standalone OSINT service that discovers companies registered in world countries and finds their associated internet domains. It is **not** part of the broader PulsarPoint scanning platform (`pulsarprotectpro2`, `pulsarprotectrunner2`, `pulsarprotectproweb`); it owns its own slice of data and runs against its own Postgres database (port `5435`, DB `corpscout`).
+`corpscout` is a standalone OSINT service that discovers companies registered in world countries and finds their associated internet domains. It is **not** part of the broader PulsarPoint scanning platform; it owns its own PostgreSQL database (port `5435`, DB `corpscout`).
 
-It uses a **aggregator-first, domain-pipeline** architecture:
-- Company data is ingested from free global aggregators (GLEIF/LEI, OpenCorporates free tier, Wikidata) and purpose-built per-country registry crawlers.
-- Domain association is resolved through a multi-signal pipeline in priority order: registry website field → Wikidata official website → certificate transparency (crt.sh org search) → WHOIS org field → search engine fallback.
-- A scheduler drives continuous updates, re-running source crawlers and re-checking stale domain associations on a configurable cadence.
+The system is split into three services:
+
+| Service | Language | Responsibility |
+|---|---|---|
+| `scheduler/` | Go | Job orchestration, data storage, REST API |
+| `crawler/` | Python + Crawl4AI | Crawling, LLM extraction, domain signal pipeline |
+| `ui/` | React Router v7 | Data browser + operations dashboard |
+
+The **scheduler** is the only service that writes to PostgreSQL. The **crawler** is stateless — receives requests, returns JSON. The **ui** reads everything through the scheduler's REST API.
 
 ## Common commands
 
-All commands are driven by the root `Makefile` and expect `DATABASE_URL` in the environment (see `.env`).
-
 ```bash
-# Stack
-make up            # docker compose up -d --build (postgres + migrate + corpscout)
+# Full stack
+make up            # docker compose up -d --build
 make down
 make logs
-make rebuild       # rebuild just the corpscout worker
 
-# Migrations (golang-migrate against $DATABASE_URL)
-make migrate-up
-make migrate-down  # rolls back one step
+# Scheduler (Go) — run from scheduler/
+make build         # GOWORK=off go build → bin/worker
+make test          # GOWORK=off go test ./...
+make sqlc-generate # regenerate DB code from database/queries/
+make migrate-up    # apply migrations via golang-migrate
+make migrate-down  # roll back one step
 
-# Code generation
-make sqlc-generate # reads database/sqlc.yaml, writes to internal/db/gen
+# Crawler (Python) — run from crawler/
+pip install -r requirements.txt
+uvicorn main:app --reload   # dev server on :8000
 
-# Build
-make build         # builds into ./bin/worker (GOWORK=off required — see below)
-
-# Tests
-make test          # all packages
-GOWORK=off go test ./internal/...
-GOWORK=off go test -run TestScheduler ./internal/scheduler
+# UI (React) — run from ui/
+pnpm install
+pnpm dev           # dev server on :5173 (use :9999 for browser testing via proxy)
+pnpm typecheck
+pnpm build
 ```
 
 ### GOWORK=off is deliberate
 
-Every `go build`/`go test` target passes `GOWORK=off`. This repo lives inside the `ppoint/` monorepo which may contain a parent `go.work`. `corpscout` is a **standalone** module (`github.com/pulsarpoint/corpscout`) and must not be pulled into that workspace. Always preserve `GOWORK=off` in any new build or test invocations.
-
-### Module layout
-
-The Go module lives at `corpscout/` (the repo root of this service). Always run Go tooling from here, or use the Makefile.
+The scheduler Go module (`github.com/pulsarpoint/corpscout/scheduler`) lives inside the `ppoint/` monorepo, which may have a parent `go.work`. Always pass `GOWORK=off` for any Go build or test invocation, or use the Makefile.
 
 ## Architecture
 
-### Layering (top to bottom)
+### Layering
 
 ```
-cmd/worker/main.go                    (entrypoint, flag parsing, signals)
+ui (React Router v7)
+    ↓ REST API
+scheduler (Go)
+    ├── internal/app/           wiring: pgx pool, River client, Chi router
+    ├── River (riverqueue/river) job queue backed by Postgres
+    ├── internal/workers/       SourceCrawlWorker, DomainResolveWorker
+    │       ↓ HTTP
+    └── crawler (Python/FastAPI)
+            ├── sources/        per-source extraction handlers
+            └── domain_resolver.py  domain signal pipeline
     ↓
-internal/app                          Server wiring — builds pgx pool + scheduler
-    ↓
-internal/scheduler                    Job scheduling and worker pool orchestration
-    ↓
-internal/sources/<name>               Per-source crawlers (GLEIF, OpenCorporates, per-country)
-internal/domain/<signal>              Domain resolution signals (certsh, whoisorg, wikidata, search)
-    ↓
-internal/db/gen                       sqlc-generated code (DO NOT EDIT — use make sqlc-generate)
-    ↓
-PostgreSQL (pgx/v5)                   Schema in database/migrations, queries in database/queries
+PostgreSQL
+    ├── application schema      (database/migrations/)
+    └── River schema            (river_job, river_queue, river_leader)
 ```
-
-Supporting packages:
-- `internal/config` — env loading. `CORPSCOUT_DATABASE_URL` is preferred; falls back to `DATABASE_URL`.
-- `internal/logging` — `log/slog` JSON handler setup (mirrors backoffice-v2 pattern).
 
 ### Core interfaces
 
 ```go
-// Every source crawler implements this.
-type SourceAdapter interface {
-    Name() string
-    Crawl(ctx context.Context, since time.Time) ([]CompanyRecord, error)
+// River worker for source crawling
+type SourceCrawlArgs struct {
+    SourceName string    `json:"source_name"`
+    Since      time.Time `json:"since"`
 }
+func (SourceCrawlArgs) Kind() string { return "source_crawl" }
 
-// Every domain signal implements this.
-type DomainSignal interface {
-    Name() string
-    Confidence() int
-    Resolve(ctx context.Context, company CompanyRecord) ([]string, error)
+// River worker for domain resolution
+type DomainResolveArgs struct {
+    CompanyID string `json:"company_id"`
 }
+func (DomainResolveArgs) Kind() string { return "domain_resolve" }
 ```
 
-### Source adapters (pluggable)
+```python
+# Canonical output from every source handler
+class CompanyRecord(BaseModel):
+    name: str
+    country_iso2: str
+    registration_number: str | None = None
+    lei: str | None = None
+    status: str = "active"
+    website: str | None = None
+    raw_data: dict
+```
 
-Each source adapter implements `SourceAdapter`. Current adapters:
-- `sources/gleif` — full LEI (Legal Entity Identifier) database download and delta sync.
-- `sources/opencorporates` — OpenCorporates API free tier (rate-limited).
-- `sources/wikidata` — SPARQL queries for companies and their `official website (P856)` property.
-- `sources/countries/<cc>` — per-country registry crawlers added incrementally (e.g., `uk`, `ee`, `dk`, `no`, `fr`, `nz`).
+### Crawler API
 
-### Domain resolution pipeline
+```
+POST /crawl/{source_name}   { "since": "...", "page": 1 }
+     → { "records": [...], "has_more": bool, "total": int }
 
-For each company, domain signals are tried in priority order and stored with confidence and source metadata:
+POST /resolve/domain        { "company_name": "...", "lei": "...", "country": "GB" }
+     → { "domains": [{ "domain": "...", "signal": "...", "confidence": 60 }] }
+```
 
-1. Website field from registry/aggregator data
-2. Wikidata `P856` official website
-3. crt.sh — certificate transparency search by `O=` (organisation) field
-4. WHOIS — registrant org name lookup
-5. Search engine — DuckDuckGo/Bing as last resort
+### Scheduler REST API
 
-### Scheduler
-
-The scheduler tracks per-source crawl schedules and per-company domain-resolution freshness. It uses a job table in Postgres (not an in-memory queue) so restarts are safe and progress survives crashes.
+```
+GET  /api/v1/stats
+GET  /api/v1/companies          ?page, limit, country, source, status, q
+GET  /api/v1/companies/:id
+GET  /api/v1/domains            ?page, limit, min_confidence, signal
+GET  /api/v1/countries
+GET  /api/v1/sources
+PATCH /api/v1/sources/:name     { "enabled": bool, "crawl_interval_hours": int }
+POST  /api/v1/sources/:name/trigger
+GET  /api/v1/jobs               ?page, limit, status, source
+```
 
 ## Database workflow
 
-Schema lives in `database/migrations/` (numbered `NNNNNN_<name>.up.sql` / `.down.sql`, applied by `golang-migrate`). Queries for sqlc live in `database/queries/`. `database/sqlc.yaml` points the generator at `../internal/db/gen`.
+Schema in `database/migrations/`, queries in `database/queries/`, sqlc config in `database/sqlc.yaml`. Generated code written to `scheduler/internal/db/gen/` — do not edit generated files.
 
 Workflow when adding a query:
-
-1. Add/modify SQL in `database/queries/<file>.sql` with a `-- name: FooBar :one|:many|:exec` annotation.
-2. If schema changes, add a new migration pair under `database/migrations/`.
-3. Run `make sqlc-generate`.
-4. Consume the generated method from `internal/db/gen.Queries` in the relevant service package.
+1. Add SQL with `-- name: FooBar :one|:many|:exec` annotation to `database/queries/`.
+2. Add migration pair if schema changes.
+3. Run `make sqlc-generate` from `scheduler/`.
+4. Consume new method from `scheduler/internal/db/gen.Queries`.
 5. `make migrate-up` to apply locally.
 
 ## Error handling
 
-Follow the project-wide Go error-handling conventions from `AGENTS.md` at the monorepo root.
+Follows the project-wide Go convention from `AGENTS.md` at the monorepo root.
 
 ```
-repository / external client  →  errors.Wrap(err, "context message")
-service / adapter layer        →  wrap and add business context
-scheduler / worker boundary    →  log once with slog.Error, do not re-wrap
-client response / job result   →  store safe message, never expose stack traces
+crawlerclient / db layer   →  errors.Wrap(err, "context")
+River workers              →  log once with slog.Error, return err (River handles retries)
+REST handlers              →  log once, return safe JSON error { "error": "..." }
 ```
 
-- Use `github.com/cockroachdb/errors` for all error wrapping and stack traces.
-- Use `log/slog` (JSON handler via `internal/logging`) for structured logging.
-- Do not log the same error in multiple layers — wrap and return upward; log once at the boundary.
-- Never log secrets, tokens, passwords, API keys, or sensitive response bodies.
-- Never store raw stack traces in job result columns visible to operators.
+- `github.com/cockroachdb/errors` for wrapping and stack traces.
+- `log/slog` JSON handler via `internal/logging`.
+- River workers are the single logging boundary — source adapters and the crawler client wrap and return, never log.
+- Never store stack traces in the database or expose them in API responses.
 
 Example:
 
 ```go
-// repository layer — wrap only
-func (r *gleifRepo) FetchDelta(ctx context.Context, since time.Time) ([]LEIRecord, error) {
-    resp, err := r.client.Get(ctx, since)
+// crawlerclient — wrap only
+func (c *Client) Crawl(ctx context.Context, source string, since time.Time, page int) (*CrawlResponse, error) {
+    resp, err := c.http.Post(ctx, "/crawl/"+source, req)
     if err != nil {
-        return nil, errors.Wrap(err, "fetch GLEIF delta")
+        return nil, errors.Wrap(err, "crawler POST /crawl/"+source)
     }
-    ...
+    return resp, nil
 }
 
-// scheduler boundary — log once
-func (s *Scheduler) runGLEIFJob(ctx context.Context, job Job) {
-    records, err := s.gleif.FetchDelta(ctx, job.Since)
+// River worker — log once, return error for River to handle retries
+func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawlArgs]) error {
+    resp, err := w.client.Crawl(ctx, job.Args.SourceName, job.Args.Since, 1)
     if err != nil {
-        slog.Error("GLEIF delta job failed", "job_id", job.ID, "error", err)
-        s.markFailed(ctx, job.ID, err.Error())
-        return
+        slog.Error("source crawl failed", "source", job.Args.SourceName, "job_id", job.ID, "error", err)
+        return err
     }
     ...
 }
@@ -163,12 +171,20 @@ func (s *Scheduler) runGLEIFJob(ctx context.Context, job Job) {
 
 ## Environment variables
 
-Copy `.env.example` to `.env`. Key variables:
+### scheduler
+- `CORPSCOUT_DATABASE_URL` / `DATABASE_URL` — Postgres DSN. Docker host: `postgres`; locally: `localhost:5435`.
+- `CORPSCOUT_LISTEN_ADDR` — defaults to `:8090`.
+- `CORPSCOUT_CRAWLER_URL` — defaults to `http://crawler:8000`.
+- `CORPSCOUT_CRAWL_CONCURRENCY` — River `source_crawl` MaxWorkers (default `5`).
+- `CORPSCOUT_DOMAIN_CONCURRENCY` — River `domain_resolve` MaxWorkers (default `10`).
 
-- `DATABASE_URL` / `CORPSCOUT_DATABASE_URL` — Postgres DSN. Inside Docker the host is `postgres`; locally `localhost:5435`.
-- `CORPSCOUT_LISTEN_ADDR` — defaults to `:8090` (metrics/health only, no public API).
-- `CORPSCOUT_OPENCORPORATES_API_KEY` — optional; enables higher rate limits on OpenCorporates.
-- `CORPSCOUT_GLEIF_DATA_DIR` — local cache directory for GLEIF bulk files (default `./data/gleif`).
-- `CORPSCOUT_CRAWL_CONCURRENCY` — number of parallel crawler workers (default `5`).
-- `CORPSCOUT_DOMAIN_CONCURRENCY` — number of parallel domain resolution workers (default `10`).
-- `CORPSCOUT_CERTSH_RATE_LIMIT` — requests/second to crt.sh (default `2`).
+### crawler
+- `CRAWLER_LISTEN_ADDR` — defaults to `:8000`.
+- `CRAWLER_OPENAI_API_KEY` — required for LLM extraction fallback.
+- `CRAWLER_LLM_MODEL` — defaults to `gpt-4o-mini`.
+- `CRAWLER_CERTSH_RATE_LIMIT` — req/s to crt.sh (default `2`).
+- `CRAWLER_OPENCORPORATES_API_KEY` — optional; enables higher rate limits.
+
+### ui
+- `BACKEND_URL` — scheduler base URL for server-side loaders (default `http://localhost:8090`).
+- Client-side fetches use relative URLs through the nginx/dev proxy.
