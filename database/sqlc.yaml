@@ -18,4 +18,4 @@ sql:
           - db_type: "jsonb"
             go_type:
               import: "encoding/json"
-              type: "json.RawMessage"
+              type: "RawMessage"
