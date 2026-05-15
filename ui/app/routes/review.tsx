@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 
 export default function ReviewPage() {
   const [items, setItems] = useState<ReviewCandidate[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [page, setPage] = useState(1);
@@ -27,6 +28,7 @@ export default function ReviewPage() {
       } else {
         setItems((prev) => [...prev, ...res.items]);
       }
+      setTotal(res.total);
       setHasMore(res.items.length === 50);
     } catch {
       setError("Failed to load review queue.");
@@ -44,6 +46,7 @@ export default function ReviewPage() {
     try {
       await api.createReview(id, action);
       setItems((prev) => prev.filter((i) => i.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
       if (selectedItem?.id === id) setSelectedItem(null);
       toast.success(`Candidate ${action}.`);
     } catch {
@@ -81,7 +84,7 @@ export default function ReviewPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">Review Queue</h1>
-        <span className="text-sm text-muted-foreground">{items.length} pending</span>
+        <span className="text-sm text-muted-foreground">{total.toLocaleString()} pending</span>
       </div>
 
       {items.length === 0 ? (

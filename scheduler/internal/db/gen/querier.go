@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CompletePullRun(ctx context.Context, arg CompletePullRunParams) error
+	CountCandidatesForReview(ctx context.Context) (int64, error)
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
 	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)

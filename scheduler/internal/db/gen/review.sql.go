@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countCandidatesForReview = `-- name: CountCandidatesForReview :one
+SELECT COUNT(*)::bigint AS total FROM company_domains WHERE status = 'needs_review'
+`
+
+func (q *Queries) CountCandidatesForReview(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countCandidatesForReview)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const createDomainReview = `-- name: CreateDomainReview :one
 INSERT INTO company_domain_reviews (company_domain_id, action, reviewed_by, review_note)
 VALUES ($1, $2, $3, $4)

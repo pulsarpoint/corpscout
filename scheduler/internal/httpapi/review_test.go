@@ -40,6 +40,7 @@ func TestHandleListReview(t *testing.T) {
 	q.On("ListCandidatesForReview", mock.Anything, db.ListCandidatesForReviewParams{
 		Limit: 50, Offset: 0,
 	}).Return(rows, nil)
+	q.On("CountCandidatesForReview", mock.Anything).Return(int64(1), nil)
 
 	r := chi.NewRouter()
 	newTestHandlers(q).RegisterRoutes(r)
@@ -55,6 +56,7 @@ func TestHandleListReview(t *testing.T) {
 	assert.Len(t, items, 1)
 	assert.Equal(t, float64(1), resp["page"])
 	assert.Equal(t, float64(50), resp["limit"])
+	assert.Equal(t, float64(1), resp["total"])
 	q.AssertExpectations(t)
 }
 

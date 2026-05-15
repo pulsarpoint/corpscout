@@ -58,6 +58,11 @@ func (s *stubQuerier) CompletePullRun(ctx context.Context, arg db.CompletePullRu
 	return nil
 }
 
+func (s *stubQuerier) CountCandidatesForReview(ctx context.Context) (int64, error) {
+	ret := s.Called(ctx)
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
 func (s *stubQuerier) CountDomains(ctx context.Context, arg db.CountDomainsParams) (int64, error) {
 	ret := s.Called(ctx, arg)
 	return ret.Get(0).(int64), ret.Error(1)

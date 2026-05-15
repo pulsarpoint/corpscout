@@ -65,12 +65,19 @@ func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	total, err := h.db.CountCandidatesForReview(r.Context())
+	if err != nil {
+		slog.Error("count candidates for review", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	out := make([]reviewCandidateItem, len(items))
 	for i, row := range items {
 		out[i] = toReviewItem(row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": out, "page": page, "limit": limit,
+		"items": out, "page": page, "limit": limit, "total": total,
 	})
 }
 

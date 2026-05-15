@@ -33,6 +33,10 @@ func (m *mockQuerier) CountCompanies(ctx context.Context, arg db.CountCompaniesP
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *mockQuerier) CountCandidatesForReview(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockQuerier) CountDomains(ctx context.Context, arg db.CountDomainsParams) (int64, error) {
 	args := m.Called(ctx, arg)
 	return args.Get(0).(int64), args.Error(1)

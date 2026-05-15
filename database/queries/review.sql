@@ -15,6 +15,9 @@ INSERT INTO company_domain_reviews (company_domain_id, action, reviewed_by, revi
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
+-- name: CountCandidatesForReview :one
+SELECT COUNT(*)::bigint AS total FROM company_domains WHERE status = 'needs_review';
+
 -- name: ListReviewsForClaim :many
 SELECT * FROM company_domain_reviews
 WHERE company_domain_id = $1

@@ -31,6 +31,7 @@ export interface ReviewListResponse {
   items: ReviewCandidate[];
   page: number;
   limit: number;
+  total: number;
 }
 
 export interface Company {
