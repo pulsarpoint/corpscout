@@ -105,6 +105,7 @@ export interface DataSource {
   id: string;
   name: string;
   display_name: string;
+  description: string;
   source_type: string;
   adapter_type: string;
   enabled: boolean;
@@ -140,6 +141,13 @@ export interface PullRunsResponse {
   limit: number;
 }
 
+export interface JobError {
+  at: string;
+  attempt: number;
+  error: string;
+  trace: string;
+}
+
 export interface Job {
   id: number;
   kind: string;
@@ -152,6 +160,15 @@ export interface Job {
   created_at: string;
   scheduled_at: string;
   finalized_at: string | null;
+  last_error: string | null;
+  subject: string | null;
+  errors: JobError[] | null;
+}
+
+export interface JobStat {
+  kind: string;
+  state: string;
+  count: number;
 }
 
 export interface JobsResponse {

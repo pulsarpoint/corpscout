@@ -27,15 +27,31 @@ services:
       - "-database=postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable"
       - "up"
 
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGRST_DB_URI: postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: corpscout_anon
+      PGRST_DB_POOL: "5"
+      PGRST_SERVER_PORT: "3000"
+    restart: unless-stopped
+
   scheduler:
     build: ./scheduler
     depends_on:
       migrate:
         condition: service_completed_successfully
+      postgrest:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable
       CORPSCOUT_CRAWLER_URL: http://crawler:8000
       CORPSCOUT_DOMAIN_CONCURRENCY: "3"
+      CORPSCOUT_POSTGREST_URL: http://postgrest:3000
     ports:
       - "8092:8090"
     restart: unless-stopped
@@ -45,6 +61,8 @@ services:
     environment:
       CRAWLER_OPENAI_API_KEY: ${CRAWLER_OPENAI_API_KEY:-}
       CRAWLER_OPENCORPORATES_API_KEY: ${CRAWLER_OPENCORPORATES_API_KEY:-}
+      COMPANIES_HOUSE_API_KEY: ${COMPANIES_HOUSE_API_KEY:-}
+      CVR_API_TOKEN: ${CVR_API_TOKEN:-}
     ports:
       - "8093:8000"
     restart: unless-stopped

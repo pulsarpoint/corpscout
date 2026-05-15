@@ -19,6 +19,12 @@ INSERT INTO source_snapshots (source_id, pull_run_id, payload_hash, payload)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (source_id, payload_hash) DO NOTHING;
 
+-- name: InterruptStalePullRuns :exec
+UPDATE source_pull_runs
+SET status = 'failed', completed_at = now(),
+    error_message = 'scheduler restarted while run was in progress'
+WHERE status = 'running';
+
 -- name: ListPullRuns :many
 SELECT spr.*, ds.name AS source_name
 FROM source_pull_runs spr

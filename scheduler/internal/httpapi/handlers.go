@@ -42,6 +42,8 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Post("/sources/{name}/trigger", h.handleTriggerSource)
 		r.Post("/sources/{name}/probe", h.handleProbeSource)
 		r.Get("/jobs", h.handleListJobs)
+		r.Get("/jobs/stats", h.handleJobStats)
+		r.Get("/jobs/{id}", h.handleGetJob)
 		r.Get("/pull-runs", h.handleListPullRuns)
 		r.Get("/review", h.handleListReview)
 		r.Post("/review/{id}/reviews", h.handleCreateReview)

@@ -12,11 +12,19 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CVR_API_TOKEN", raising=False)
 
 
-async def test_cvr_returns_empty_when_unconfigured() -> None:
+@respx.mock
+async def test_cvr_works_without_token() -> None:
+    # Token is optional — unauthenticated requests are allowed with lower rate limits
+    payload = [{"vat": 99999999, "name": "Test ApS", "enddate": None, "website": None}]
+    route = respx.get("https://cvrapi.dk/api").mock(return_value=httpx.Response(200, json=payload))
+
     adapter = CVRAdapter()
     resp = await adapter.crawl(since=None, cursor=None, page=1)
-    assert resp.records == []
-    assert resp.has_more is False
+
+    assert route.called
+    params = dict(route.calls[0].request.url.params)
+    assert "token" not in params
+    assert len(resp.records) == 1
 
 
 @respx.mock

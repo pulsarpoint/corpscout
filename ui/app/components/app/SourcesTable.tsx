@@ -42,6 +42,9 @@ export function SourcesTable({ sources, onToggle, onTrigger, triggeringName }: S
               >
                 {s.display_name || s.name}
               </Link>
+              {s.description && (
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-sm line-clamp-2">{s.description}</p>
+              )}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">{s.source_type}</TableCell>
             <TableCell>

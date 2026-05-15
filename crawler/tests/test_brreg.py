@@ -76,7 +76,8 @@ async def test_brreg_status_dissolved_when_bankrupt(adapter: BrregAdapter) -> No
 
 
 @respx.mock
-async def test_brreg_passes_since_filter(adapter: BrregAdapter) -> None:
+async def test_brreg_ignores_since_filter(adapter: BrregAdapter) -> None:
+    # fraRegistreringsdato was removed from the brreg API — verify we never send it
     from datetime import datetime, timezone
 
     captured: dict = {}
@@ -93,7 +94,7 @@ async def test_brreg_passes_since_filter(adapter: BrregAdapter) -> None:
     await adapter.crawl(since=datetime(2024, 3, 1, tzinfo=timezone.utc), cursor=None, page=2)
 
     assert captured["params"]["page"] == "1"  # zero-indexed (page=2 → 1)
-    assert captured["params"]["fraRegistreringsdato"] == "2024-03-01"
+    assert "fraRegistreringsdato" not in captured["params"]
 
 
 @respx.mock

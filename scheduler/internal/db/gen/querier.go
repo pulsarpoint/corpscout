@@ -26,6 +26,7 @@ type Querier interface {
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
 	InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error
+	InterruptStalePullRuns(ctx context.Context) error
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
 	ListCountries(ctx context.Context) ([]Country, error)

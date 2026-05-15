@@ -88,6 +88,8 @@ async def crawl(source_name: str, req: CrawlRequest) -> CrawlResponse:
         return await adapter.crawl(req.since, req.cursor, req.page)
     except Crawl4AIUnconfiguredError as e:
         raise HTTPException(status_code=501, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/resolve/domain", response_model=ResolveResponse)

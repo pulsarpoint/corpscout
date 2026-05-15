@@ -28,8 +28,6 @@ class BrregAdapter(SourceAdapter):
             "size": str(self.page_size),
             "sort": "registreringsdatoEnhetsregisteret,asc",
         }
-        if since is not None:
-            params["fraRegistreringsdato"] = since.date().isoformat()
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})

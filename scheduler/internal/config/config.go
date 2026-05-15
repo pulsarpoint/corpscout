@@ -6,6 +6,7 @@ type Config struct {
 	DatabaseURL       string
 	ListenAddr        string
 	CrawlerURL        string
+	PostgRESTURL      string
 	CrawlConcurrency  int
 	DomainConcurrency int
 }
@@ -15,6 +16,7 @@ func Load() Config {
 		DatabaseURL:       requireEnv("DATABASE_URL", "CORPSCOUT_DATABASE_URL"),
 		ListenAddr:        getEnv("CORPSCOUT_LISTEN_ADDR", ":8090"),
 		CrawlerURL:        getEnv("CORPSCOUT_CRAWLER_URL", "http://localhost:8000"),
+		PostgRESTURL:      getEnv("CORPSCOUT_POSTGREST_URL", "http://localhost:3000"),
 		CrawlConcurrency:  getEnvInt("CORPSCOUT_CRAWL_CONCURRENCY", 5),
 		DomainConcurrency: getEnvInt("CORPSCOUT_DOMAIN_CONCURRENCY", 10),
 	}

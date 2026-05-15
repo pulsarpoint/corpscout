@@ -13,7 +13,7 @@ import (
 )
 
 const getSourceByName = `-- name: GetSourceByName :one
-SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at FROM data_sources WHERE name = $1
+SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description FROM data_sources WHERE name = $1
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource, error) {
@@ -32,12 +32,14 @@ func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource,
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
+		&i.Description,
 	)
 	return i, err
 }
 
 const listSources = `-- name: ListSources :many
-SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at FROM data_sources ORDER BY name
+SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description FROM data_sources ORDER BY name
 `
 
 func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
@@ -62,6 +64,8 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 			&i.Config,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -126,7 +130,7 @@ ON CONFLICT (name) DO UPDATE SET
     crawl_interval_hours = EXCLUDED.crawl_interval_hours,
     config = EXCLUDED.config,
     updated_at = now()
-RETURNING id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at
+RETURNING id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description
 `
 
 type UpsertDataSourceParams struct {
@@ -163,6 +167,8 @@ func (q *Queries) UpsertDataSource(ctx context.Context, arg UpsertDataSourcePara
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
+		&i.Description,
 	)
 	return i, err
 }

@@ -35,7 +35,7 @@ class CompaniesHouseAdapter(SourceAdapter):
     ) -> CrawlResponse:
         api_key = os.getenv("COMPANIES_HOUSE_API_KEY")
         if not api_key:
-            return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
+            raise RuntimeError("COMPANIES_HOUSE_API_KEY is not set — API requires HTTP Basic auth")
 
         effective_page = int(cursor) if cursor else max(page, 1)
         start_index = (effective_page - 1) * self.page_size

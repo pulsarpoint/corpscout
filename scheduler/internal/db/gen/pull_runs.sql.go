@@ -110,6 +110,18 @@ func (q *Queries) InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnap
 	return err
 }
 
+const interruptStalePullRuns = `-- name: InterruptStalePullRuns :exec
+UPDATE source_pull_runs
+SET status = 'failed', completed_at = now(),
+    error_message = 'scheduler restarted while run was in progress'
+WHERE status = 'running'
+`
+
+func (q *Queries) InterruptStalePullRuns(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, interruptStalePullRuns)
+	return err
+}
+
 const listPullRuns = `-- name: ListPullRuns :many
 SELECT spr.id, spr.source_id, spr.river_job_id, spr.started_at, spr.completed_at, spr.status, spr.cursor_start, spr.cursor_end, spr.snapshot_date, spr.records_fetched, spr.records_upserted, spr.error_message, spr.created_at, ds.name AS source_name
 FROM source_pull_runs spr

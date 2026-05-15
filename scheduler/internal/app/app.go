@@ -39,6 +39,10 @@ func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
 	queries := db.New(pool)
 	crawler := crawlerclient.New(cfg.CrawlerURL)
 
+	if err := queries.InterruptStalePullRuns(ctx); err != nil {
+		slog.Warn("startup: could not interrupt stale pull runs", "error", err)
+	}
+
 	riverClient, err := setupRiver(ctx, pool, cfg, queries, crawler)
 	if err != nil {
 		return nil, errors.Wrap(err, "setup river")

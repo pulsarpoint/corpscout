@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import ClassVar
 
@@ -41,12 +42,19 @@ class WikidataAdapter(SourceAdapter):
         query = _SPARQL_TEMPLATE.format(limit=self.page_size + 1, offset=offset)
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(
-                self.endpoint,
-                params={"query": query, "format": "json"},
-                headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
-            )
-            resp.raise_for_status()
+            for attempt in range(3):
+                resp = await client.get(
+                    self.endpoint,
+                    params={"query": query, "format": "json"},
+                    headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
+                )
+                if resp.status_code == 429:
+                    await asyncio.sleep(30 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                break
+            else:
+                raise RuntimeError("Wikidata SPARQL rate limit exceeded after retries")
             data = resp.json()
 
         bindings = (data.get("results") or {}).get("bindings") or []
@@ -73,6 +81,7 @@ class WikidataAdapter(SourceAdapter):
                 CompanyRecord(
                     name=label,
                     country_iso2=country,
+                    registration_number=qid,  # QID is a stable identifier for wikidata entities
                     website=website,
                     raw_data=raw,
                     snapshot_hash=compute_hash(raw),

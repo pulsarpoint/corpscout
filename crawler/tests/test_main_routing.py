@@ -60,12 +60,9 @@ def test_crawl4ai_generic_returns_501_when_unconfigured(client: TestClient) -> N
     assert resp.status_code == 501
 
 
-def test_companies_house_returns_empty_when_unconfigured(client: TestClient) -> None:
+def test_companies_house_returns_error_when_unconfigured(client: TestClient) -> None:
     resp = client.post("/crawl/companies_house", json={"page": 1})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["records"] == []
-    assert body["has_more"] is False
+    assert resp.status_code == 500
 
 
 def test_registered_adapter_is_dispatched(client: TestClient) -> None:

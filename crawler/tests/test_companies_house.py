@@ -14,12 +14,10 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("COMPANIES_HOUSE_API_KEY", raising=False)
 
 
-async def test_companies_house_returns_empty_when_unconfigured() -> None:
+async def test_companies_house_raises_when_unconfigured() -> None:
     adapter = CompaniesHouseAdapter()
-    resp = await adapter.crawl(since=None, cursor=None, page=1)
-    assert resp.records == []
-    assert resp.has_more is False
-    assert resp.total == 0
+    with pytest.raises(RuntimeError, match="COMPANIES_HOUSE_API_KEY"):
+        await adapter.crawl(since=None, cursor=None, page=1)
 
 
 @respx.mock

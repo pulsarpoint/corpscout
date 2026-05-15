@@ -146,6 +146,9 @@ export default function SourceDetailPage() {
               ? <Badge className="bg-green-100 text-green-800 border-green-200" variant="outline">Enabled</Badge>
               : <Badge variant="outline" className="text-muted-foreground">Disabled</Badge>}
           </CardTitle>
+          {source.description && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{source.description}</p>
+          )}
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>

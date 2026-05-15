@@ -8,6 +8,8 @@ import type {
   SourceProbeResult,
   PullRunsResponse,
   JobsResponse,
+  JobStat,
+  Job,
   Country,
 } from "~/types/api";
 
@@ -103,15 +105,20 @@ export const api = {
     return get<PullRunsResponse>(`/pull-runs?${qs.toString()}`);
   },
 
-  getJobs: (params: { page?: number; limit?: number; status?: string; source?: string }) => {
+  getJobs: (params: { page?: number; limit?: number; status?: string; source?: string; kind?: string }) => {
     const qs = new URLSearchParams();
     if (params.page) qs.set("page", String(params.page));
     if (params.limit) qs.set("limit", String(params.limit));
     if (params.status) qs.set("status", params.status);
     if (params.source) qs.set("source", params.source);
+    if (params.kind) qs.set("kind", params.kind);
     const q = qs.toString();
     return get<JobsResponse>(`/jobs${q ? `?${q}` : ""}`);
   },
+
+  getJobStats: () => get<JobStat[]>("/jobs/stats"),
+
+  getJob: (id: number) => get<Job>(`/jobs/${id}`),
 
   getCountries: () => get<Country[]>("/countries"),
 };
