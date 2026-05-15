@@ -22,7 +22,7 @@ type CompanyRecord struct {
 	Status             string                 `json:"status"`
 	Website            *string                `json:"website,omitempty"`
 	Aliases            []string               `json:"aliases,omitempty"`
-	RawData            map[string]interface{} `json:"raw_data,omitempty"`
+	RawData            map[string]any `json:"raw_data,omitempty"`
 	SnapshotHash       string                 `json:"snapshot_hash"`
 }
 
@@ -39,7 +39,7 @@ type DomainCandidate struct {
 	Domain     string                 `json:"domain"`
 	Signal     string                 `json:"signal"`
 	Confidence int                    `json:"confidence"`
-	Evidence   map[string]interface{} `json:"evidence,omitempty"`
+	Evidence   map[string]any `json:"evidence,omitempty"`
 }
 
 // ResolveResponse is returned by POST /resolve/domain.
@@ -73,7 +73,7 @@ func (c *Client) BaseURL() string {
 func (c *Client) Crawl(ctx context.Context, source string, since time.Time, cursor *string, page int) (*CrawlResponse, error) {
 	const context = "crawler POST /crawl/"
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"page": page,
 	}
 	if !since.IsZero() {
@@ -96,7 +96,7 @@ func (c *Client) Crawl(ctx context.Context, source string, since time.Time, curs
 func (c *Client) ResolveDomain(ctx context.Context, companyName, lei, country string) (*ResolveResponse, error) {
 	const context = "crawler POST /resolve/domain"
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"company_name": companyName,
 		"country":      country,
 	}
@@ -113,7 +113,7 @@ func (c *Client) ResolveDomain(ctx context.Context, companyName, lei, country st
 
 // postJSON sends a POST request with a JSON body and decodes the JSON response into dest.
 // On non-200 status codes it returns an error containing the status code and response body.
-func (c *Client) postJSON(ctx context.Context, path string, body interface{}, dest interface{}) error {
+func (c *Client) postJSON(ctx context.Context, path string, body any, dest any) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return errors.Wrap(err, "marshal request body")

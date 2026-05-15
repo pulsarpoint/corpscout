@@ -19,7 +19,7 @@ func TestCrawl_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/crawl/test_source", r.URL.Path)
 
-		var body map[string]interface{}
+		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, float64(1), body["page"])
 		// since and cursor should be present when provided
@@ -34,7 +34,7 @@ func TestCrawl_Success(t *testing.T) {
 					Status:             "active",
 					SnapshotHash:       "abc123",
 					Aliases:            []string{"Acme"},
-					RawData:            map[string]interface{}{"source_id": "123"},
+					RawData:            map[string]any{"source_id": "123"},
 				},
 			},
 			HasMore:    false,
@@ -67,7 +67,7 @@ func TestCrawl_Success(t *testing.T) {
 
 func TestCrawl_OmitsSinceAndCursorWhenZeroNil(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]interface{}
+		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		// since should be absent when zero time
 		assert.NotContains(t, body, "since")
@@ -116,7 +116,7 @@ func TestResolveDomain_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/resolve/domain", r.URL.Path)
 
-		var body map[string]interface{}
+		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, "Acme Corp", body["company_name"])
 		assert.Equal(t, "US", body["country"])
@@ -128,7 +128,7 @@ func TestResolveDomain_Success(t *testing.T) {
 					Domain:     "acme.com",
 					Signal:     "homepage",
 					Confidence: 90,
-					Evidence:   map[string]interface{}{"matched": "acme corp"},
+					Evidence:   map[string]any{"matched": "acme corp"},
 				},
 			},
 		}
@@ -149,7 +149,7 @@ func TestResolveDomain_Success(t *testing.T) {
 
 func TestResolveDomain_OmitsLEIWhenEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]interface{}
+		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		// lei should be absent when empty string
 		assert.NotContains(t, body, "lei")
