@@ -75,6 +75,9 @@ func (h *Handlers) handleGetCompany(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if domains == nil {
+		domains = []db.ListDomainsForCompanyRow{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": company.ID, "lei": company.Lei, "name": company.Name,
 		"country_id": company.CountryID, "registration_number": company.RegistrationNumber,

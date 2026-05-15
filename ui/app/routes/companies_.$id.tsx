@@ -26,7 +26,7 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     if (!id) return;
     api.getCompany(id)
-      .then(setCompany)
+      .then((data) => setCompany({ ...data, domains: data.domains ?? [] }))
       .catch(() => setError("Company not found."))
       .finally(() => setLoading(false));
   }, [id]);
