@@ -17,11 +17,15 @@ func TestGetStats_returns_counts(t *testing.T) {
 	q := &stubQuerier{}
 
 	q.On("GetStats", mock.Anything).Return(db.GetStatsRow{
-		TotalCompanies: 100,
-		TotalDomains:   200,
-		ActiveDomains:  150,
-		PendingReview:  10,
-		EnabledSources: 5,
+		TotalCompanies:         100,
+		TotalDomains:           200,
+		ActiveDomains:          150,
+		PendingReview:          10,
+		EnabledSources:         5,
+		PullRunsCompletedToday: 3,
+		PullRunsFailedToday:    1,
+		RecordsUpserted24h:     5000,
+		RecordsUpserted7d:      35000,
 	}, nil)
 
 	r := routerForHandlers(q)
@@ -40,6 +44,10 @@ func TestGetStats_returns_counts(t *testing.T) {
 	assert.Equal(t, float64(150), body["active_domains"])
 	assert.Equal(t, float64(10), body["pending_review"])
 	assert.Equal(t, float64(5), body["enabled_sources"])
+	assert.Equal(t, float64(3), body["pull_runs_completed_today"])
+	assert.Equal(t, float64(1), body["pull_runs_failed_today"])
+	assert.Equal(t, float64(5000), body["records_upserted_24h"])
+	assert.Equal(t, float64(35000), body["records_upserted_7d"])
 
 	q.AssertExpectations(t)
 }

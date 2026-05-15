@@ -13,10 +13,14 @@ func (h *Handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"total_companies": stats.TotalCompanies,
-		"total_domains":   stats.TotalDomains,
-		"active_domains":  stats.ActiveDomains,
-		"pending_review":  stats.PendingReview,
-		"enabled_sources": stats.EnabledSources,
+		"total_companies":           stats.TotalCompanies,
+		"total_domains":             stats.TotalDomains,
+		"active_domains":            stats.ActiveDomains,
+		"pending_review":            stats.PendingReview,
+		"enabled_sources":           stats.EnabledSources,
+		"pull_runs_completed_today": stats.PullRunsCompletedToday,
+		"pull_runs_failed_today":    stats.PullRunsFailedToday,
+		"records_upserted_24h":      stats.RecordsUpserted24h,
+		"records_upserted_7d":       stats.RecordsUpserted7d,
 	})
 }

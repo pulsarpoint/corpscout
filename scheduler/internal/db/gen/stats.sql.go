@@ -15,15 +15,27 @@ SELECT
   (SELECT COUNT(*) FROM domains)::bigint                                     AS total_domains,
   (SELECT COUNT(*) FROM company_domains WHERE status = 'active')::bigint     AS active_domains,
   (SELECT COUNT(*) FROM company_domains WHERE status = 'needs_review')::bigint AS pending_review,
-  (SELECT COUNT(*) FROM data_sources WHERE enabled = true)::bigint           AS enabled_sources
+  (SELECT COUNT(*) FROM data_sources WHERE enabled = true)::bigint           AS enabled_sources,
+  (SELECT COUNT(*) FROM source_pull_runs
+   WHERE status = 'completed' AND completed_at >= now() - interval '24 hours')::bigint AS pull_runs_completed_today,
+  (SELECT COUNT(*) FROM source_pull_runs
+   WHERE status = 'failed' AND completed_at >= now() - interval '24 hours')::bigint AS pull_runs_failed_today,
+  (SELECT COALESCE(SUM(records_upserted), 0) FROM source_pull_runs
+   WHERE completed_at >= now() - interval '24 hours')::bigint AS records_upserted_24h,
+  (SELECT COALESCE(SUM(records_upserted), 0) FROM source_pull_runs
+   WHERE completed_at >= now() - interval '7 days')::bigint AS records_upserted_7d
 `
 
 type GetStatsRow struct {
-	TotalCompanies int64 `json:"total_companies"`
-	TotalDomains   int64 `json:"total_domains"`
-	ActiveDomains  int64 `json:"active_domains"`
-	PendingReview  int64 `json:"pending_review"`
-	EnabledSources int64 `json:"enabled_sources"`
+	TotalCompanies         int64 `json:"total_companies"`
+	TotalDomains           int64 `json:"total_domains"`
+	ActiveDomains          int64 `json:"active_domains"`
+	PendingReview          int64 `json:"pending_review"`
+	EnabledSources         int64 `json:"enabled_sources"`
+	PullRunsCompletedToday int64 `json:"pull_runs_completed_today"`
+	PullRunsFailedToday    int64 `json:"pull_runs_failed_today"`
+	RecordsUpserted24h     int64 `json:"records_upserted_24h"`
+	RecordsUpserted7d      int64 `json:"records_upserted_7d"`
 }
 
 func (q *Queries) GetStats(ctx context.Context) (GetStatsRow, error) {
@@ -35,6 +47,10 @@ func (q *Queries) GetStats(ctx context.Context) (GetStatsRow, error) {
 		&i.ActiveDomains,
 		&i.PendingReview,
 		&i.EnabledSources,
+		&i.PullRunsCompletedToday,
+		&i.PullRunsFailedToday,
+		&i.RecordsUpserted24h,
+		&i.RecordsUpserted7d,
 	)
 	return i, err
 }
