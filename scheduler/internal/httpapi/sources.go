@@ -67,7 +67,10 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
 		return
 	}
-	since := time.Now().Add(-time.Duration(source.CrawlIntervalHours) * time.Hour)
+	var since time.Time
+	if source.LastCrawledAt.Valid {
+		since = source.LastCrawledAt.Time
+	}
 	if _, err := h.rv.Insert(r.Context(), workers.SourceCrawlArgs{
 		SourceName: name, Since: since,
 	}, &river.InsertOpts{Queue: "source_crawl"}); err != nil {
