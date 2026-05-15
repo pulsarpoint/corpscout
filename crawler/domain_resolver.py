@@ -14,6 +14,30 @@ logger = logging.getLogger("corpscout.resolver")
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
+# Per-service locks serialise concurrent resolver calls so the asyncio.sleep
+# rate-limiting delays actually gate all callers, not just sequential ones
+# within a single task.  Without these, N concurrent domain_resolve workers
+# all reach the external API simultaneously and trigger rate-limit errors.
+_CERTSH_LOCK: asyncio.Lock | None = None
+_WIKIDATA_LOCK: asyncio.Lock | None = None
+_SEARCH_LOCK: asyncio.Lock | None = None
+
+
+def _get_lock(ref: str) -> asyncio.Lock:
+    """Return (creating lazily) the named module-level lock."""
+    global _CERTSH_LOCK, _WIKIDATA_LOCK, _SEARCH_LOCK  # noqa: PLW0603
+    if ref == "certsh":
+        if _CERTSH_LOCK is None:
+            _CERTSH_LOCK = asyncio.Lock()
+        return _CERTSH_LOCK
+    if ref == "wikidata":
+        if _WIKIDATA_LOCK is None:
+            _WIKIDATA_LOCK = asyncio.Lock()
+        return _WIKIDATA_LOCK
+    if _SEARCH_LOCK is None:
+        _SEARCH_LOCK = asyncio.Lock()
+    return _SEARCH_LOCK
+
 _WIKIDATA_TEMPLATE_BY_NAME = """
 SELECT ?company ?website WHERE {{
   ?company wdt:P856 ?website .
@@ -67,127 +91,131 @@ async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCand
 
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for query in queries:
-            try:
-                resp = await client.get(
-                    "https://query.wikidata.org/sparql",
-                    params={"query": query, "format": "json"},
-                    headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
-                )
-                resp.raise_for_status()
-            except httpx.HTTPError as e:
-                logger.warning("wikidata signal failed: %s", e)
-                continue
-            data = resp.json()
-            for binding in (data.get("results") or {}).get("bindings") or []:
-                company_uri = (binding.get("company") or {}).get("value", "")
-                website = (binding.get("website") or {}).get("value", "")
-                domain = _safe_domain(website)
-                if not domain or domain in seen:
-                    continue
-                seen.add(domain)
-                candidates.append(
-                    DomainCandidate(
-                        domain=domain,
-                        signal="wikidata",
-                        confidence=85,
-                        evidence={"wikidata_uri": company_uri, "website": website},
+    async with _get_lock("wikidata"):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for query in queries:
+                try:
+                    resp = await client.get(
+                        "https://query.wikidata.org/sparql",
+                        params={"query": query, "format": "json"},
+                        headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
                     )
-                )
-            if candidates:
-                # Returned the LEI-based or name-based hits; we are done.
-                break
+                    resp.raise_for_status()
+                except httpx.HTTPError as e:
+                    logger.warning("wikidata signal failed: %s", e)
+                    await asyncio.sleep(1.0)
+                    continue
+                data = resp.json()
+                for binding in (data.get("results") or {}).get("bindings") or []:
+                    company_uri = (binding.get("company") or {}).get("value", "")
+                    website = (binding.get("website") or {}).get("value", "")
+                    domain = _safe_domain(website)
+                    if not domain or domain in seen:
+                        continue
+                    seen.add(domain)
+                    candidates.append(
+                        DomainCandidate(
+                            domain=domain,
+                            signal="wikidata",
+                            confidence=85,
+                            evidence={"wikidata_uri": company_uri, "website": website},
+                        )
+                    )
+                await asyncio.sleep(1.0)  # honour Wikidata ~1 req/s
+                if candidates:
+                    break
     return candidates
 
 
 async def certsh_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            resp = await client.get(
-                "https://crt.sh/",
-                params={"q": company_name, "output": "json"},
-                headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
-            )
-            resp.raise_for_status()
-            entries = resp.json()
-        except (httpx.HTTPError, ValueError) as e:
-            logger.warning("crt.sh signal failed: %s", e)
-            return candidates
-
-    if not isinstance(entries, list):
-        return candidates
-
-    for entry in entries:
-        name_value = entry.get("name_value") or ""
-        for raw in str(name_value).splitlines():
-            domain = _safe_domain(raw.strip())
-            if not domain or domain in seen:
-                continue
-            seen.add(domain)
-            candidates.append(
-                DomainCandidate(
-                    domain=domain,
-                    signal="certsh",
-                    confidence=60,
-                    evidence={
-                        "cert_id": entry.get("id"),
-                        "issuer": entry.get("issuer_name", ""),
-                    },
+    async with _get_lock("certsh"):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.get(
+                    "https://crt.sh/",
+                    params={"q": company_name, "output": "json"},
+                    headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
                 )
-            )
+                resp.raise_for_status()
+                entries = resp.json()
+            except (httpx.HTTPError, ValueError) as e:
+                logger.warning("crt.sh signal failed: %s", e)
+                await asyncio.sleep(0.5)
+                return candidates
 
-    await asyncio.sleep(0.5)  # honour 2 req/s
+        if isinstance(entries, list):
+            for entry in entries:
+                name_value = entry.get("name_value") or ""
+                for raw in str(name_value).splitlines():
+                    domain = _safe_domain(raw.strip())
+                    if not domain or domain in seen:
+                        continue
+                    seen.add(domain)
+                    candidates.append(
+                        DomainCandidate(
+                            domain=domain,
+                            signal="certsh",
+                            confidence=60,
+                            evidence={
+                                "cert_id": entry.get("id"),
+                                "issuer": entry.get("issuer_name", ""),
+                            },
+                        )
+                    )
+
+        await asyncio.sleep(0.5)  # honour 2 req/s; sleep inside lock so it gates all callers
     return candidates
 
 
 async def duckduckgo_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            resp = await client.get(
-                "https://api.duckduckgo.com/",
-                params={
-                    "q": f"{company_name} official site",
-                    "format": "json",
-                    "no_redirect": "1",
-                    "no_html": "1",
-                },
-                headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
+    async with _get_lock("search"):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={
+                        "q": f"{company_name} official site",
+                        "format": "json",
+                        "no_redirect": "1",
+                        "no_html": "1",
+                    },
+                    headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except (httpx.HTTPError, ValueError) as e:
+                logger.warning("duckduckgo signal failed: %s", e)
+                await asyncio.sleep(1.0)
+                return candidates
+
+        abstract_url = data.get("AbstractURL")
+        urls: list[str] = []
+        if abstract_url:
+            urls.append(abstract_url)
+        for result in data.get("Results") or []:
+            first = result.get("FirstURL")
+            if first:
+                urls.append(first)
+
+        for url in urls:
+            domain = _safe_domain(url)
+            if not domain or domain in seen:
+                continue
+            seen.add(domain)
+            candidates.append(
+                DomainCandidate(
+                    domain=domain,
+                    signal="search",
+                    confidence=30,
+                    evidence={"source": "duckduckgo", "abstract_url": abstract_url},
+                )
             )
-            resp.raise_for_status()
-            data = resp.json()
-        except (httpx.HTTPError, ValueError) as e:
-            logger.warning("duckduckgo signal failed: %s", e)
-            return candidates
 
-    abstract_url = data.get("AbstractURL")
-    urls: list[str] = []
-    if abstract_url:
-        urls.append(abstract_url)
-    for result in data.get("Results") or []:
-        first = result.get("FirstURL")
-        if first:
-            urls.append(first)
-
-    for url in urls:
-        domain = _safe_domain(url)
-        if not domain or domain in seen:
-            continue
-        seen.add(domain)
-        candidates.append(
-            DomainCandidate(
-                domain=domain,
-                signal="search",
-                confidence=30,
-                evidence={"source": "duckduckgo", "abstract_url": abstract_url},
-            )
-        )
-
-    await asyncio.sleep(1.0)  # honour 1 req/s
+        await asyncio.sleep(1.0)  # honour 1 req/s; sleep inside lock so it gates all callers
     return candidates
 
 
