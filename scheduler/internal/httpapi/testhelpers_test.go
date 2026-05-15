@@ -83,7 +83,8 @@ func (s *stubQuerier) GetCountryByISO2(ctx context.Context, isoAlpha2 string) (d
 }
 
 func (s *stubQuerier) GetSourceByName(ctx context.Context, name string) (db.DataSource, error) {
-	return db.DataSource{}, nil
+	ret := s.Called(ctx, name)
+	return ret.Get(0).(db.DataSource), ret.Error(1)
 }
 
 func (s *stubQuerier) GetStats(ctx context.Context) (db.GetStatsRow, error) {
@@ -107,7 +108,11 @@ func (s *stubQuerier) ListReviewsForClaim(ctx context.Context, companyDomainID u
 }
 
 func (s *stubQuerier) ListSources(ctx context.Context) ([]db.DataSource, error) {
-	return nil, nil
+	ret := s.Called(ctx)
+	if v, ok := ret.Get(0).([]db.DataSource); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
 }
 
 func (s *stubQuerier) UpdateCompanyDomainStatus(ctx context.Context, arg db.UpdateCompanyDomainStatusParams) error {
@@ -119,11 +124,13 @@ func (s *stubQuerier) UpdateSourceCursor(ctx context.Context, arg db.UpdateSourc
 }
 
 func (s *stubQuerier) UpdateSourceEnabled(ctx context.Context, arg db.UpdateSourceEnabledParams) error {
-	return nil
+	ret := s.Called(ctx, arg)
+	return ret.Error(0)
 }
 
 func (s *stubQuerier) UpdateSourceInterval(ctx context.Context, arg db.UpdateSourceIntervalParams) error {
-	return nil
+	ret := s.Called(ctx, arg)
+	return ret.Error(0)
 }
 
 func (s *stubQuerier) UpsertCompanyAlias(ctx context.Context, arg db.UpsertCompanyAliasParams) error {

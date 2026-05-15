@@ -85,17 +85,6 @@ func (h *Handlers) handleListDomains(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not implemented")
 }
 
-func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
 
 func (h *Handlers) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not implemented")
