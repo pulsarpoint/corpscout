@@ -55,7 +55,7 @@ func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Get("/health", httpapi.HandleHealth)
-	httpapi.NewHandlers(queries, riverClient, pool, crawler).RegisterRoutes(r)
+	httpapi.NewHandlers(queries, riverClient, pool, crawler, cfg.PostgRESTURL).RegisterRoutes(r)
 
 	go scheduleSources(ctx, queries, riverClient)
 

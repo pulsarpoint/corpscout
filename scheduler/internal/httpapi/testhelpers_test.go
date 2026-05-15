@@ -173,6 +173,10 @@ func (s *stubQuerier) UpsertCompanyDomain(ctx context.Context, arg db.UpsertComp
 	return db.CompanyDomain{}, nil
 }
 
+func (s *stubQuerier) InterruptStalePullRuns(ctx context.Context) error {
+	return nil
+}
+
 func (s *stubQuerier) UpsertCompanySource(ctx context.Context, arg db.UpsertCompanySourceParams) error {
 	return nil
 }
@@ -189,7 +193,7 @@ func (s *stubQuerier) UpsertDomain(ctx context.Context, domain string) (db.Domai
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
 func newTestHandlers(q db.Querier) *httpapi.Handlers {
-	return httpapi.NewHandlers(q, nil, nil, nil)
+	return httpapi.NewHandlers(q, nil, nil, nil, "")
 }
 
 // ensure stubQuerier satisfies the interface at compile time

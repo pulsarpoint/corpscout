@@ -185,6 +185,10 @@ func (m *mockQuerier) UpsertDomain(ctx context.Context, domain string) (db.Domai
 	return args.Get(0).(db.Domain), args.Error(1)
 }
 
+func (m *mockQuerier) InterruptStalePullRuns(ctx context.Context) error {
+	return nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

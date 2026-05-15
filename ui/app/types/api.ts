@@ -182,3 +182,43 @@ export interface Country {
   name: string;
   iso_alpha2: string;
 }
+
+// PostgREST view types
+
+export interface VCompany {
+  id: string;
+  name: string;
+  registration_number: string | null;
+  lei: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  country_id: string;
+  country_name: string;
+  country_iso2: string;
+  primary_source: string | null;
+  primary_source_display_name: string | null;
+  domain_count: number;
+}
+
+export interface VCompanySource {
+  company_id: string;
+  external_id: string | null;
+  fetched_at: string | null;
+  source_id: string;
+  source_name: string;
+  source_display_name: string;
+  source_type: string;
+}
+
+export interface VDomain {
+  id: string;
+  domain: string;
+  first_seen_at: string | null;
+  last_verified_at: string | null;
+  company_count: number;
+  max_confidence: number | null;
+  primary_company_name: string | null;
+  primary_company_id: string | null;
+  primary_signal: string | null;
+}

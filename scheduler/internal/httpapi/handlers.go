@@ -17,19 +17,25 @@ import (
 
 // Handlers holds shared dependencies for all REST API handlers.
 type Handlers struct {
-	db      db.Querier
-	rv      *river.Client[pgx.Tx]
-	pool    *pgxpool.Pool
-	crawler *crawlerclient.Client
+	db           db.Querier
+	rv           *river.Client[pgx.Tx]
+	pool         *pgxpool.Pool
+	crawler      *crawlerclient.Client
+	postgrestURL string
 }
 
 // NewHandlers constructs Handlers. pool, rv and crawler may be nil in tests.
-func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client) *Handlers {
-	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler}
+func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, postgrestURL string) *Handlers {
+	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, postgrestURL: postgrestURL}
 }
 
 // RegisterRoutes mounts all /api/v1 routes on the router.
 func (h *Handlers) RegisterRoutes(r chi.Router) {
+	if h.postgrestURL != "" {
+		proxy := newPostgRESTProxy(h.postgrestURL)
+		r.HandleFunc("/api/v1/db/*", proxy)
+		r.HandleFunc("/api/v1/db", proxy)
+	}
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/stats", h.handleStats)
 		r.Get("/companies", h.handleListCompanies)
