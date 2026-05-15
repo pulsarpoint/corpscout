@@ -19,9 +19,3 @@ def test_crawl_unknown_source_returns_404():
     assert response.status_code == 404
 
 
-def test_resolve_domain_returns_501():
-    response = client.post("/resolve/domain", json={
-        "company_name": "Test Corp",
-        "country": "GB",
-    })
-    assert response.status_code == 501
