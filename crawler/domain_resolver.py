@@ -131,7 +131,7 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
     async with _get_lock("certsh"):
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 resp = await client.get(
                     "https://crt.sh/",
@@ -173,7 +173,7 @@ async def duckduckgo_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
     async with _get_lock("search"):
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 resp = await client.get(
                     "https://api.duckduckgo.com/",

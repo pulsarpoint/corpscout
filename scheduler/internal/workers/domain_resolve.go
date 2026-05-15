@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
@@ -43,6 +44,12 @@ func NewDomainResolveWorker(q db.Querier, crawler *crawlerclient.Client) *Domain
 		db:      q,
 		crawler: crawler,
 	}
+}
+
+// Timeout gives each domain resolve job 5 minutes to account for per-service
+// rate-limiting locks serialising concurrent resolver calls in the crawler.
+func (w *DomainResolveWorker) Timeout(*river.Job[DomainResolveArgs]) time.Duration {
+	return 5 * time.Minute
 }
 
 // Work executes a domain resolve job.
