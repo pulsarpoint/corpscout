@@ -43,6 +43,7 @@ services:
     build: ./crawler
     environment:
       CRAWLER_OPENAI_API_KEY: ${CRAWLER_OPENAI_API_KEY:-}
+      CRAWLER_OPENCORPORATES_API_KEY: ${CRAWLER_OPENCORPORATES_API_KEY:-}
     ports:
       - "8093:8000"
     restart: unless-stopped

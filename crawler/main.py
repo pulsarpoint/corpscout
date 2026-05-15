@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import logging
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 import httpx as _httpx
 from pydantic import BaseModel
+
+_logger = logging.getLogger("corpscout.crawler")
 
 from adapters import registry
 from adapters.api.gleif import GLEIFAdapter
@@ -25,10 +29,15 @@ resolver = DomainResolver()
 
 @app.exception_handler(_httpx.HTTPError)
 async def _upstream_http_error(request: Request, exc: _httpx.HTTPError) -> JSONResponse:
-    status = getattr(getattr(exc, "response", None), "status_code", None)
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    # Log with URL redacted to avoid leaking API tokens from query params.
+    req = getattr(exc, "request", None)
+    safe_url = str(req.url.copy_with(params={})) if req is not None else "unknown"
+    _logger.error("upstream request failed: %s %s (status=%s)", type(exc).__name__, safe_url, status)
     return JSONResponse(
         status_code=502,
-        content={"error": "upstream_failed", "detail": str(exc), "upstream_status": status},
+        content={"error": "upstream_failed", "upstream_status": status},
     )
 
 

@@ -130,7 +130,7 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
             candidates.append(
                 DomainCandidate(
                     domain=domain,
-                    signal="crtsh",
+                    signal="certsh",
                     confidence=60,
                     evidence={
                         "cert_id": entry.get("id"),
@@ -181,7 +181,7 @@ async def duckduckgo_signal(company_name: str) -> list[DomainCandidate]:
         candidates.append(
             DomainCandidate(
                 domain=domain,
-                signal="duckduckgo",
+                signal="search",
                 confidence=30,
                 evidence={"source": "duckduckgo", "abstract_url": abstract_url},
             )

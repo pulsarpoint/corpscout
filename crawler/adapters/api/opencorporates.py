@@ -37,7 +37,7 @@ class OpenCorporatesAdapter(SourceAdapter):
             "per_page": str(self.page_size),
             "page": str(int(cursor) if cursor else max(page, 1)),
         }
-        api_key = os.getenv("OPENCORPORATES_API_KEY")
+        api_key = os.getenv("CRAWLER_OPENCORPORATES_API_KEY")
         if api_key:
             params["api_token"] = api_key
 

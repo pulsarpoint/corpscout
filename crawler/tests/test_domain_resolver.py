@@ -85,7 +85,7 @@ async def test_certsh_signal_filters_and_extracts_domains() -> None:
     assert "localhost" not in domains
     assert "10.0.0.1" not in domains
     for c in results:
-        assert c.signal == "crtsh"
+        assert c.signal == "certsh"
         assert c.confidence == 60
 
 
@@ -107,7 +107,7 @@ async def test_duckduckgo_signal_extracts_domains() -> None:
     assert "shop.acme.example.com" in domains
     assert "news.example.org" in domains
     for c in results:
-        assert c.signal == "duckduckgo"
+        assert c.signal == "search"
         assert c.confidence == 30
 
 
@@ -163,8 +163,8 @@ async def test_resolver_falls_through_to_other_signals() -> None:
     candidates = await resolver.resolve("Acme Inc", lei=None, country="US")
 
     signals = [c.signal for c in candidates]
-    assert "crtsh" in signals
-    assert "duckduckgo" in signals
+    assert "certsh" in signals
+    assert "search" in signals
     assert "wikidata" not in signals
 
 

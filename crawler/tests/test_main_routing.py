@@ -28,7 +28,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("COMPANIES_HOUSE_API_KEY", raising=False)
     monkeypatch.delenv("CVR_API_TOKEN", raising=False)
     monkeypatch.delenv("CRAWLER_OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENCORPORATES_API_KEY", raising=False)
+    monkeypatch.delenv("CRAWLER_OPENCORPORATES_API_KEY", raising=False)
     return TestClient(main.app)
 
 

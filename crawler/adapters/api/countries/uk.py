@@ -67,7 +67,7 @@ class CompaniesHouseAdapter(SourceAdapter):
         total = int(data.get("total_results") or 0)
         start = int(data.get("start_index") or start_index)
         has_more = (start + len(items)) < total
-        next_cursor = str(page + 1) if has_more else None
+        next_cursor = str(effective_page + 1) if has_more else None
 
         return CrawlResponse(
             records=records,

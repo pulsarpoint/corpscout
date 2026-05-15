@@ -9,7 +9,7 @@ from adapters.api.opencorporates import OpenCorporatesAdapter
 
 @pytest.fixture(autouse=True)
 def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENCORPORATES_API_KEY", raising=False)
+    monkeypatch.delenv("CRAWLER_OPENCORPORATES_API_KEY", raising=False)
 
 
 @respx.mock
@@ -56,7 +56,7 @@ async def test_oc_maps_active_record() -> None:
 
 @respx.mock
 async def test_oc_passes_api_token_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENCORPORATES_API_KEY", "secret")
+    monkeypatch.setenv("CRAWLER_OPENCORPORATES_API_KEY", "secret")
     respx.get("https://api.opencorporates.com/v0.4/companies/search").mock(
         return_value=httpx.Response(
             200,
