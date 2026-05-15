@@ -14,8 +14,7 @@ UPDATE source_pull_runs
 SET status = 'failed', completed_at = now(), error_message = $2
 WHERE id = $1;
 
--- name: InsertSourceSnapshot :one
+-- name: InsertSourceSnapshot :exec
 INSERT INTO source_snapshots (source_id, pull_run_id, payload_hash, payload)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (source_id, payload_hash) DO NOTHING
-RETURNING *;
+ON CONFLICT (source_id, payload_hash) DO NOTHING;
