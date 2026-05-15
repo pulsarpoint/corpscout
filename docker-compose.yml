@@ -49,5 +49,14 @@ services:
       - "8093:8000"
     restart: unless-stopped
 
+  ui:
+    build: ./ui
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8094:80"
+    restart: unless-stopped
+
 volumes:
   postgres_data:

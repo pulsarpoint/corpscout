@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@react-router/node':
+        specifier: ^7.15.1
+        version: 7.15.1(react-router@7.15.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(typescript@5.9.3)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -17,6 +20,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      isbot:
+        specifier: ^5
+        version: 5.1.40
       lucide-react:
         specifier: ^0.513.0
         version: 0.513.0(react@19.2.6)

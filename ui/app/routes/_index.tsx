@@ -1,5 +1,10 @@
-import { redirect } from "react-router";
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
 
-export function loader() {
-  return redirect("/review");
+export default function Index() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    navigate("/review", { replace: true });
+  }, [navigate]);
+  return null;
 }
