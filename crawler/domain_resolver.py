@@ -44,7 +44,9 @@ def _safe_domain(url: str) -> str | None:
     if not host:
         return None
     host = host.split("@")[-1].split(":")[0].lower().strip()
-    host = host.removeprefix("*.")
+    host = host.rstrip(".")
+    while host.startswith("*."):
+        host = host[2:]
     if not host or host == "localhost":
         return None
     try:
