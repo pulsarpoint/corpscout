@@ -45,7 +45,10 @@ def compute_hash(payload: dict[str, Any]) -> str:
     Keys are sorted, separators are tight, and non-ASCII is preserved so
     that two semantically-equal payloads always hash to the same value.
     """
-    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    try:
+        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    except TypeError as exc:
+        raise TypeError(f"compute_hash: payload is not JSON-serialisable — {exc}") from exc
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -56,9 +59,6 @@ class SourceAdapter(ABC):
     """
 
     source_name: ClassVar[str]
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

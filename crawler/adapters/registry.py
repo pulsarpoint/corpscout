@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 from .base import SourceAdapter
 
 
@@ -9,7 +7,7 @@ class AdapterRegistry:
     """In-process registry of source adapters keyed by ``source_name``."""
 
     def __init__(self) -> None:
-        self._by_name: Dict[str, SourceAdapter] = {}
+        self._by_name: dict[str, SourceAdapter] = {}
 
     def register(self, adapter: SourceAdapter) -> None:
         name = adapter.source_name
