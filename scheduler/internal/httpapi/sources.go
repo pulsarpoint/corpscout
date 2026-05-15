@@ -13,6 +13,29 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
+// sourceView wraps DataSource for JSON output so that the JSONB config field
+// is emitted as a JSON object instead of a base64 string (the default for []byte).
+type sourceView struct {
+	db.DataSource
+	Config json.RawMessage `json:"config"`
+}
+
+func toSourceView(s db.DataSource) sourceView {
+	cfg := json.RawMessage(s.Config)
+	if len(cfg) == 0 {
+		cfg = json.RawMessage("null")
+	}
+	return sourceView{DataSource: s, Config: cfg}
+}
+
+func toSourceViews(sources []db.DataSource) []sourceView {
+	out := make([]sourceView, len(sources))
+	for i, s := range sources {
+		out[i] = toSourceView(s)
+	}
+	return out
+}
+
 func (h *Handlers) handleProbeSource(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
@@ -58,7 +81,7 @@ func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, source)
+	writeJSON(w, http.StatusOK, toSourceView(source))
 }
 
 func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +91,7 @@ func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, sources)
+	writeJSON(w, http.StatusOK, toSourceViews(sources))
 }
 
 type patchSourceRequest struct {
