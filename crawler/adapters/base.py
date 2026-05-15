@@ -1,4 +1,11 @@
 from __future__ import annotations
+
+import hashlib
+import json
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any, ClassVar
+
 from pydantic import BaseModel
 
 
@@ -11,7 +18,7 @@ class CompanyRecord(BaseModel):
     website: str | None = None
     aliases: list[str] = []
     raw_data: dict
-    snapshot_hash: str
+    snapshot_hash: str  # SHA-256 of canonical raw_data JSON
 
 
 class CrawlResponse(BaseModel):
@@ -30,3 +37,40 @@ class DomainCandidate(BaseModel):
 
 class ResolveResponse(BaseModel):
     candidates: list[DomainCandidate]
+
+
+def compute_hash(payload: dict[str, Any]) -> str:
+    """SHA-256 of a canonical JSON encoding of payload.
+
+    Keys are sorted, separators are tight, and non-ASCII is preserved so
+    that two semantically-equal payloads always hash to the same value.
+    """
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+class SourceAdapter(ABC):
+    """Common interface for every corpscout source.
+
+    Subclasses must set ``source_name`` and implement ``crawl``.
+    """
+
+    source_name: ClassVar[str]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        if not getattr(self, "source_name", None):
+            raise TypeError(f"{type(self).__name__} must define class attribute source_name")
+
+    @abstractmethod
+    async def crawl(
+        self,
+        since: datetime | None,
+        cursor: str | None,
+        page: int,
+    ) -> CrawlResponse:
+        """Fetch one page of records. Must be deterministic for a given input."""
+        raise NotImplementedError
