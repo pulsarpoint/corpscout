@@ -20,12 +20,12 @@ WHERE ($1::text IS NULL OR status = $1)
 `
 
 type CountCompaniesParams struct {
-	Column1 string    `json:"column_1"`
-	Column2 uuid.UUID `json:"column_2"`
+	Status    *string     `json:"status"`
+	CountryID pgtype.UUID `json:"country_id"`
 }
 
 func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCompanies, arg.Column1, arg.Column2)
+	row := q.db.QueryRow(ctx, countCompanies, arg.Status, arg.CountryID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -57,22 +57,22 @@ SELECT id, lei, name, country_id, registration_number, status, primary_source_id
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
 ORDER BY name
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $3
 `
 
 type ListCompaniesParams struct {
-	Column1 string    `json:"column_1"`
-	Column2 uuid.UUID `json:"column_2"`
-	Limit   int32     `json:"limit"`
-	Offset  int32     `json:"offset"`
+	Status    *string     `json:"status"`
+	CountryID pgtype.UUID `json:"country_id"`
+	Offset    int32       `json:"offset"`
+	Limit     int32       `json:"limit"`
 }
 
 func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error) {
 	rows, err := q.db.Query(ctx, listCompanies,
-		arg.Column1,
-		arg.Column2,
-		arg.Limit,
+		arg.Status,
+		arg.CountryID,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

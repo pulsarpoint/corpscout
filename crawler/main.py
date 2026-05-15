@@ -31,5 +31,4 @@ async def crawl(source_name: str, req: CrawlRequest):
 
 @app.post("/resolve/domain", response_model=ResolveResponse)
 async def resolve_domain(req: ResolveRequest):
-    # Domain resolver implemented in Plan 2
-    return ResolveResponse(candidates=[])
+    raise HTTPException(status_code=501, detail="domain resolver not implemented")

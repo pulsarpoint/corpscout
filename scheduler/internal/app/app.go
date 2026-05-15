@@ -57,9 +57,12 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.pool.Close()
-	if err := s.river.Stop(ctx); err != nil {
-		return err
+	if err := s.http.Shutdown(ctx); err != nil {
+		return errors.Wrap(err, "http shutdown")
 	}
-	return s.http.Shutdown(ctx)
+	if err := s.river.Stop(ctx); err != nil {
+		return errors.Wrap(err, "river stop")
+	}
+	s.pool.Close()
+	return nil
 }

@@ -3,7 +3,7 @@ package workers
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -24,8 +24,7 @@ type SourceCrawlWorker struct {
 
 // Work executes a source crawl job.
 func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawlArgs]) error {
-	slog.Info("source crawl job received", "source", job.Args.SourceName, "since", job.Args.Since, "job_id", job.ID)
-	return nil
+	return fmt.Errorf("source_crawl worker not implemented")
 }
 
 // DomainResolveArgs is the job argument for a domain resolution task.
@@ -42,6 +41,5 @@ type DomainResolveWorker struct {
 
 // Work executes a domain resolve job.
 func (w *DomainResolveWorker) Work(ctx context.Context, job *river.Job[DomainResolveArgs]) error {
-	slog.Info("domain resolve job received", "company_id", job.Args.CompanyID, "job_id", job.ID)
-	return nil
+	return fmt.Errorf("domain_resolve worker not implemented")
 }

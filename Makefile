@@ -23,4 +23,4 @@ sqlc-generate:
 
 test:
 	cd scheduler && GOWORK=off go test ./...
-	cd crawler && python -m pytest tests/ -v
+	cd crawler && .venv/bin/python -m pytest tests/ -v

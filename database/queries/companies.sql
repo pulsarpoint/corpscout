@@ -37,12 +37,12 @@ SELECT * FROM companies WHERE id = $1;
 
 -- name: ListCompanies :many
 SELECT * FROM companies
-WHERE ($1::text IS NULL OR status = $1)
-  AND ($2::uuid IS NULL OR country_id = $2)
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('country_id')::uuid IS NULL OR country_id = sqlc.narg('country_id'))
 ORDER BY name
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountCompanies :one
 SELECT COUNT(*) FROM companies
-WHERE ($1::text IS NULL OR status = $1)
-  AND ($2::uuid IS NULL OR country_id = $2);
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('country_id')::uuid IS NULL OR country_id = sqlc.narg('country_id'));
