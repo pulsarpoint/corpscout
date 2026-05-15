@@ -11,7 +11,7 @@ The system is split into three services:
 | Service | Language | Responsibility |
 |---|---|---|
 | `scheduler/` | Go | Job orchestration, data storage, REST API |
-| `crawler/` | Python + Crawl4AI | Crawling, LLM extraction, domain signal pipeline |
+| `crawler/` | Python | Crawling (API adapters + Crawl4AI fallback), domain signal pipeline |
 | `ui/` | React Router v7 | Data browser + operations dashboard |
 
 The **scheduler** is the only service that writes to PostgreSQL. The **crawler** is stateless — receives requests, returns JSON. The **ui** reads everything through the scheduler's REST API.
@@ -93,8 +93,19 @@ class CompanyRecord(BaseModel):
     lei: str | None = None
     status: str = "active"
     website: str | None = None
+    aliases: list[str] = []        # trading names, former names, normalized variants
     raw_data: dict
+    snapshot_hash: str             # SHA-256 of raw_data JSON
 ```
+
+### Two crawler paths
+
+Crawl4AI is **not the default**. Each `data_sources` row declares `adapter_type`:
+
+- `api` — direct HTTP with `httpx`, deterministic JSON/XML parsing. Used for all structured sources (GLEIF, Companies House, Brreg, CVR, OpenCorporates, etc.). Fast, cheap, no LLM.
+- `crawl4ai` — Playwright + LLM extraction via Crawl4AI. Fallback only for JS-heavy or unstructured HTML sources with no API.
+
+`CRAWLER_OPENAI_API_KEY` is only required when at least one source uses `adapter_type = crawl4ai`.
 
 ### Crawler API
 
