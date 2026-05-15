@@ -13,10 +13,7 @@ import (
 
 func (h *Handlers) handleListCompanies(w http.ResponseWriter, r *http.Request) {
 	page := queryInt(r, "page", 1)
-	limit := queryInt(r, "limit", 50)
-	if limit > 200 {
-		limit = 200
-	}
+	limit := min(queryInt(r, "limit", 50), 200)
 	offset := int32((page - 1) * limit)
 
 	var countryID pgtype.UUID
