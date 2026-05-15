@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -19,14 +18,14 @@ RETURNING id, company_domain_id, action, reviewed_by, review_note, created_at
 `
 
 type CreateDomainReviewParams struct {
-	CompanyDomainID uuid.UUID      `json:"company_domain_id"`
-	Action          string         `json:"action"`
-	ReviewedBy      string         `json:"reviewed_by"`
-	ReviewNote      sql.NullString `json:"review_note"`
+	CompanyDomainID uuid.UUID `json:"company_domain_id"`
+	Action          string    `json:"action"`
+	ReviewedBy      string    `json:"reviewed_by"`
+	ReviewNote      *string   `json:"review_note"`
 }
 
 func (q *Queries) CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error) {
-	row := q.db.QueryRowContext(ctx, createDomainReview,
+	row := q.db.QueryRow(ctx, createDomainReview,
 		arg.CompanyDomainID,
 		arg.Action,
 		arg.ReviewedBy,
@@ -51,7 +50,7 @@ ORDER BY created_at DESC
 `
 
 func (q *Queries) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error) {
-	rows, err := q.db.QueryContext(ctx, listReviewsForClaim, companyDomainID)
+	rows, err := q.db.Query(ctx, listReviewsForClaim, companyDomainID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,9 +69,6 @@ func (q *Queries) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -114,7 +114,7 @@ POST /crawl/{source_name}   { "since": "...", "page": 1 }
      → { "records": [...], "has_more": bool, "total": int }
 
 POST /resolve/domain        { "company_name": "...", "lei": "...", "country": "GB" }
-     → { "domains": [{ "domain": "...", "signal": "...", "confidence": 60 }] }
+     → { "candidates": [{ "domain": "...", "signal": "...", "confidence": 60, "evidence": {} }] }
 ```
 
 ### Scheduler REST API

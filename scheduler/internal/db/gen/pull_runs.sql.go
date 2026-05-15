@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 
 	"github.com/google/uuid"
@@ -21,14 +20,14 @@ WHERE id = $1
 `
 
 type CompletePullRunParams struct {
-	ID              uuid.UUID      `json:"id"`
-	CursorEnd       sql.NullString `json:"cursor_end"`
-	RecordsFetched  int32          `json:"records_fetched"`
-	RecordsUpserted int32          `json:"records_upserted"`
+	ID              uuid.UUID `json:"id"`
+	CursorEnd       *string   `json:"cursor_end"`
+	RecordsFetched  int32     `json:"records_fetched"`
+	RecordsUpserted int32     `json:"records_upserted"`
 }
 
 func (q *Queries) CompletePullRun(ctx context.Context, arg CompletePullRunParams) error {
-	_, err := q.db.ExecContext(ctx, completePullRun,
+	_, err := q.db.Exec(ctx, completePullRun,
 		arg.ID,
 		arg.CursorEnd,
 		arg.RecordsFetched,
@@ -44,13 +43,13 @@ RETURNING id, source_id, river_job_id, started_at, completed_at, status, cursor_
 `
 
 type CreatePullRunParams struct {
-	SourceID    uuid.UUID      `json:"source_id"`
-	RiverJobID  sql.NullInt64  `json:"river_job_id"`
-	CursorStart sql.NullString `json:"cursor_start"`
+	SourceID    uuid.UUID `json:"source_id"`
+	RiverJobID  *int64    `json:"river_job_id"`
+	CursorStart *string   `json:"cursor_start"`
 }
 
 func (q *Queries) CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error) {
-	row := q.db.QueryRowContext(ctx, createPullRun, arg.SourceID, arg.RiverJobID, arg.CursorStart)
+	row := q.db.QueryRow(ctx, createPullRun, arg.SourceID, arg.RiverJobID, arg.CursorStart)
 	var i SourcePullRun
 	err := row.Scan(
 		&i.ID,
@@ -77,12 +76,12 @@ WHERE id = $1
 `
 
 type FailPullRunParams struct {
-	ID           uuid.UUID      `json:"id"`
-	ErrorMessage sql.NullString `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+	ErrorMessage *string   `json:"error_message"`
 }
 
 func (q *Queries) FailPullRun(ctx context.Context, arg FailPullRunParams) error {
-	_, err := q.db.ExecContext(ctx, failPullRun, arg.ID, arg.ErrorMessage)
+	_, err := q.db.Exec(ctx, failPullRun, arg.ID, arg.ErrorMessage)
 	return err
 }
 
@@ -100,7 +99,7 @@ type InsertSourceSnapshotParams struct {
 }
 
 func (q *Queries) InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error {
-	_, err := q.db.ExecContext(ctx, insertSourceSnapshot,
+	_, err := q.db.Exec(ctx, insertSourceSnapshot,
 		arg.SourceID,
 		arg.PullRunID,
 		arg.PayloadHash,

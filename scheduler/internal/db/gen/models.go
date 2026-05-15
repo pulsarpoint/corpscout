@@ -5,114 +5,113 @@
 package db
 
 import (
-	"database/sql"
 	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Company struct {
-	ID                 uuid.UUID      `json:"id"`
-	Lei                sql.NullString `json:"lei"`
-	Name               string         `json:"name"`
-	CountryID          uuid.UUID      `json:"country_id"`
-	RegistrationNumber sql.NullString `json:"registration_number"`
-	Status             string         `json:"status"`
-	PrimarySourceID    uuid.NullUUID  `json:"primary_source_id"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ID                 uuid.UUID   `json:"id"`
+	Lei                *string     `json:"lei"`
+	Name               string      `json:"name"`
+	CountryID          uuid.UUID   `json:"country_id"`
+	RegistrationNumber *string     `json:"registration_number"`
+	Status             string      `json:"status"`
+	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
 type CompanyAlias struct {
-	ID        uuid.UUID     `json:"id"`
-	CompanyID uuid.UUID     `json:"company_id"`
-	Alias     string        `json:"alias"`
-	AliasType string        `json:"alias_type"`
-	SourceID  uuid.NullUUID `json:"source_id"`
-	CreatedAt time.Time     `json:"created_at"`
+	ID        uuid.UUID   `json:"id"`
+	CompanyID uuid.UUID   `json:"company_id"`
+	Alias     string      `json:"alias"`
+	AliasType string      `json:"alias_type"`
+	SourceID  pgtype.UUID `json:"source_id"`
+	CreatedAt time.Time   `json:"created_at"`
 }
 
 type CompanyDomain struct {
-	ID               uuid.UUID             `json:"id"`
-	CompanyID        uuid.UUID             `json:"company_id"`
-	DomainID         uuid.UUID             `json:"domain_id"`
-	RelationshipType string                `json:"relationship_type"`
-	Status           string                `json:"status"`
-	Signal           string                `json:"signal"`
-	Confidence       int16                 `json:"confidence"`
-	Evidence         pqtype.NullRawMessage `json:"evidence"`
-	FirstSeenAt      time.Time             `json:"first_seen_at"`
-	LastSeenAt       time.Time             `json:"last_seen_at"`
+	ID               uuid.UUID `json:"id"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
+	FirstSeenAt      time.Time `json:"first_seen_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
 }
 
 type CompanyDomainReview struct {
-	ID              uuid.UUID      `json:"id"`
-	CompanyDomainID uuid.UUID      `json:"company_domain_id"`
-	Action          string         `json:"action"`
-	ReviewedBy      string         `json:"reviewed_by"`
-	ReviewNote      sql.NullString `json:"review_note"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID              uuid.UUID `json:"id"`
+	CompanyDomainID uuid.UUID `json:"company_domain_id"`
+	Action          string    `json:"action"`
+	ReviewedBy      string    `json:"reviewed_by"`
+	ReviewNote      *string   `json:"review_note"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type CompanySource struct {
-	CompanyID  uuid.UUID             `json:"company_id"`
-	SourceID   uuid.UUID             `json:"source_id"`
-	ExternalID string                `json:"external_id"`
-	PullRunID  uuid.NullUUID         `json:"pull_run_id"`
-	RawData    pqtype.NullRawMessage `json:"raw_data"`
-	FetchedAt  time.Time             `json:"fetched_at"`
+	CompanyID  uuid.UUID   `json:"company_id"`
+	SourceID   uuid.UUID   `json:"source_id"`
+	ExternalID string      `json:"external_id"`
+	PullRunID  pgtype.UUID `json:"pull_run_id"`
+	RawData    []byte      `json:"raw_data"`
+	FetchedAt  time.Time   `json:"fetched_at"`
 }
 
 type Country struct {
-	ID                uuid.UUID      `json:"id"`
-	IsoAlpha2         string         `json:"iso_alpha2"`
-	IsoAlpha3         string         `json:"iso_alpha3"`
-	Name              string         `json:"name"`
-	HasPublicRegistry bool           `json:"has_public_registry"`
-	RegistryUrl       sql.NullString `json:"registry_url"`
-	RegistryNotes     sql.NullString `json:"registry_notes"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
+	ID                uuid.UUID `json:"id"`
+	IsoAlpha2         string    `json:"iso_alpha2"`
+	IsoAlpha3         string    `json:"iso_alpha3"`
+	Name              string    `json:"name"`
+	HasPublicRegistry bool      `json:"has_public_registry"`
+	RegistryUrl       *string   `json:"registry_url"`
+	RegistryNotes     *string   `json:"registry_notes"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type DataSource struct {
-	ID                 uuid.UUID             `json:"id"`
-	Name               string                `json:"name"`
-	SourceType         string                `json:"source_type"`
-	AdapterType        string                `json:"adapter_type"`
-	CountryID          uuid.NullUUID         `json:"country_id"`
-	Enabled            bool                  `json:"enabled"`
-	CrawlIntervalHours int32                 `json:"crawl_interval_hours"`
-	LastCrawledAt      sql.NullTime          `json:"last_crawled_at"`
-	LastCursor         sql.NullString        `json:"last_cursor"`
-	Config             pqtype.NullRawMessage `json:"config"`
-	CreatedAt          time.Time             `json:"created_at"`
-	UpdatedAt          time.Time             `json:"updated_at"`
+	ID                 uuid.UUID          `json:"id"`
+	Name               string             `json:"name"`
+	SourceType         string             `json:"source_type"`
+	AdapterType        string             `json:"adapter_type"`
+	CountryID          pgtype.UUID        `json:"country_id"`
+	Enabled            bool               `json:"enabled"`
+	CrawlIntervalHours int32              `json:"crawl_interval_hours"`
+	LastCrawledAt      pgtype.Timestamptz `json:"last_crawled_at"`
+	LastCursor         *string            `json:"last_cursor"`
+	Config             []byte             `json:"config"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
 }
 
 type Domain struct {
-	ID             uuid.UUID    `json:"id"`
-	Domain         string       `json:"domain"`
-	FirstSeenAt    time.Time    `json:"first_seen_at"`
-	LastVerifiedAt sql.NullTime `json:"last_verified_at"`
+	ID             uuid.UUID          `json:"id"`
+	Domain         string             `json:"domain"`
+	FirstSeenAt    time.Time          `json:"first_seen_at"`
+	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
 }
 
 type SourcePullRun struct {
-	ID              uuid.UUID      `json:"id"`
-	SourceID        uuid.UUID      `json:"source_id"`
-	RiverJobID      sql.NullInt64  `json:"river_job_id"`
-	StartedAt       time.Time      `json:"started_at"`
-	CompletedAt     sql.NullTime   `json:"completed_at"`
-	Status          string         `json:"status"`
-	CursorStart     sql.NullString `json:"cursor_start"`
-	CursorEnd       sql.NullString `json:"cursor_end"`
-	SnapshotDate    sql.NullTime   `json:"snapshot_date"`
-	RecordsFetched  int32          `json:"records_fetched"`
-	RecordsUpserted int32          `json:"records_upserted"`
-	ErrorMessage    sql.NullString `json:"error_message"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID              uuid.UUID          `json:"id"`
+	SourceID        uuid.UUID          `json:"source_id"`
+	RiverJobID      *int64             `json:"river_job_id"`
+	StartedAt       time.Time          `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	Status          string             `json:"status"`
+	CursorStart     *string            `json:"cursor_start"`
+	CursorEnd       *string            `json:"cursor_end"`
+	SnapshotDate    pgtype.Date        `json:"snapshot_date"`
+	RecordsFetched  int32              `json:"records_fetched"`
+	RecordsUpserted int32              `json:"records_upserted"`
+	ErrorMessage    *string            `json:"error_message"`
+	CreatedAt       time.Time          `json:"created_at"`
 }
 
 type SourceSnapshot struct {

@@ -7,10 +7,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getSourceByName = `-- name: GetSourceByName :one
@@ -18,7 +17,7 @@ SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource, error) {
-	row := q.db.QueryRowContext(ctx, getSourceByName, name)
+	row := q.db.QueryRow(ctx, getSourceByName, name)
 	var i DataSource
 	err := row.Scan(
 		&i.ID,
@@ -42,7 +41,7 @@ SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_
 `
 
 func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
-	rows, err := q.db.QueryContext(ctx, listSources)
+	rows, err := q.db.Query(ctx, listSources)
 	if err != nil {
 		return nil, err
 	}
@@ -68,9 +67,6 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -84,13 +80,13 @@ WHERE id = $1
 `
 
 type UpdateSourceCursorParams struct {
-	ID            uuid.UUID      `json:"id"`
-	LastCursor    sql.NullString `json:"last_cursor"`
-	LastCrawledAt sql.NullTime   `json:"last_crawled_at"`
+	ID            uuid.UUID          `json:"id"`
+	LastCursor    *string            `json:"last_cursor"`
+	LastCrawledAt pgtype.Timestamptz `json:"last_crawled_at"`
 }
 
 func (q *Queries) UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error {
-	_, err := q.db.ExecContext(ctx, updateSourceCursor, arg.ID, arg.LastCursor, arg.LastCrawledAt)
+	_, err := q.db.Exec(ctx, updateSourceCursor, arg.ID, arg.LastCursor, arg.LastCrawledAt)
 	return err
 }
 
@@ -104,7 +100,7 @@ type UpdateSourceEnabledParams struct {
 }
 
 func (q *Queries) UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error {
-	_, err := q.db.ExecContext(ctx, updateSourceEnabled, arg.Name, arg.Enabled)
+	_, err := q.db.Exec(ctx, updateSourceEnabled, arg.Name, arg.Enabled)
 	return err
 }
 
@@ -120,17 +116,17 @@ RETURNING id, name, source_type, adapter_type, country_id, enabled, crawl_interv
 `
 
 type UpsertDataSourceParams struct {
-	Name               string                `json:"name"`
-	SourceType         string                `json:"source_type"`
-	AdapterType        string                `json:"adapter_type"`
-	CountryID          uuid.NullUUID         `json:"country_id"`
-	Enabled            bool                  `json:"enabled"`
-	CrawlIntervalHours int32                 `json:"crawl_interval_hours"`
-	Config             pqtype.NullRawMessage `json:"config"`
+	Name               string      `json:"name"`
+	SourceType         string      `json:"source_type"`
+	AdapterType        string      `json:"adapter_type"`
+	CountryID          pgtype.UUID `json:"country_id"`
+	Enabled            bool        `json:"enabled"`
+	CrawlIntervalHours int32       `json:"crawl_interval_hours"`
+	Config             []byte      `json:"config"`
 }
 
 func (q *Queries) UpsertDataSource(ctx context.Context, arg UpsertDataSourceParams) (DataSource, error) {
-	row := q.db.QueryRowContext(ctx, upsertDataSource,
+	row := q.db.QueryRow(ctx, upsertDataSource,
 		arg.Name,
 		arg.SourceType,
 		arg.AdapterType,

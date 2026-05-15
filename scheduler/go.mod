@@ -9,7 +9,6 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/riverqueue/river v0.14.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.14.0
-	github.com/sqlc-dev/pqtype v0.3.0
 )
 
 require (

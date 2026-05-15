@@ -7,11 +7,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countCompanies = `-- name: CountCompanies :one
@@ -26,7 +25,7 @@ type CountCompaniesParams struct {
 }
 
 func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countCompanies, arg.Column1, arg.Column2)
+	row := q.db.QueryRow(ctx, countCompanies, arg.Column1, arg.Column2)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -37,7 +36,7 @@ SELECT id, lei, name, country_id, registration_number, status, primary_source_id
 `
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
-	row := q.db.QueryRowContext(ctx, getCompany, id)
+	row := q.db.QueryRow(ctx, getCompany, id)
 	var i Company
 	err := row.Scan(
 		&i.ID,
@@ -69,7 +68,7 @@ type ListCompaniesParams struct {
 }
 
 func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error) {
-	rows, err := q.db.QueryContext(ctx, listCompanies,
+	rows, err := q.db.Query(ctx, listCompanies,
 		arg.Column1,
 		arg.Column2,
 		arg.Limit,
@@ -97,9 +96,6 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -113,14 +109,14 @@ ON CONFLICT (company_id, alias, alias_type) DO NOTHING
 `
 
 type UpsertCompanyAliasParams struct {
-	CompanyID uuid.UUID     `json:"company_id"`
-	Alias     string        `json:"alias"`
-	AliasType string        `json:"alias_type"`
-	SourceID  uuid.NullUUID `json:"source_id"`
+	CompanyID uuid.UUID   `json:"company_id"`
+	Alias     string      `json:"alias"`
+	AliasType string      `json:"alias_type"`
+	SourceID  pgtype.UUID `json:"source_id"`
 }
 
 func (q *Queries) UpsertCompanyAlias(ctx context.Context, arg UpsertCompanyAliasParams) error {
-	_, err := q.db.ExecContext(ctx, upsertCompanyAlias,
+	_, err := q.db.Exec(ctx, upsertCompanyAlias,
 		arg.CompanyID,
 		arg.Alias,
 		arg.AliasType,
@@ -140,16 +136,16 @@ RETURNING id, lei, name, country_id, registration_number, status, primary_source
 `
 
 type UpsertCompanyByLEIParams struct {
-	Lei                sql.NullString `json:"lei"`
-	Name               string         `json:"name"`
-	CountryID          uuid.UUID      `json:"country_id"`
-	RegistrationNumber sql.NullString `json:"registration_number"`
-	Status             string         `json:"status"`
-	PrimarySourceID    uuid.NullUUID  `json:"primary_source_id"`
+	Lei                *string     `json:"lei"`
+	Name               string      `json:"name"`
+	CountryID          uuid.UUID   `json:"country_id"`
+	RegistrationNumber *string     `json:"registration_number"`
+	Status             string      `json:"status"`
+	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
 }
 
 func (q *Queries) UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEIParams) (Company, error) {
-	row := q.db.QueryRowContext(ctx, upsertCompanyByLEI,
+	row := q.db.QueryRow(ctx, upsertCompanyByLEI,
 		arg.Lei,
 		arg.Name,
 		arg.CountryID,
@@ -185,15 +181,15 @@ RETURNING id, lei, name, country_id, registration_number, status, primary_source
 `
 
 type UpsertCompanyByRegNumberParams struct {
-	Name               string         `json:"name"`
-	CountryID          uuid.UUID      `json:"country_id"`
-	RegistrationNumber sql.NullString `json:"registration_number"`
-	Status             string         `json:"status"`
-	PrimarySourceID    uuid.NullUUID  `json:"primary_source_id"`
+	Name               string      `json:"name"`
+	CountryID          uuid.UUID   `json:"country_id"`
+	RegistrationNumber *string     `json:"registration_number"`
+	Status             string      `json:"status"`
+	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
 }
 
 func (q *Queries) UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompanyByRegNumberParams) (Company, error) {
-	row := q.db.QueryRowContext(ctx, upsertCompanyByRegNumber,
+	row := q.db.QueryRow(ctx, upsertCompanyByRegNumber,
 		arg.Name,
 		arg.CountryID,
 		arg.RegistrationNumber,
@@ -226,16 +222,16 @@ ON CONFLICT (company_id, source_id) DO UPDATE SET
 `
 
 type UpsertCompanySourceParams struct {
-	CompanyID  uuid.UUID             `json:"company_id"`
-	SourceID   uuid.UUID             `json:"source_id"`
-	ExternalID string                `json:"external_id"`
-	PullRunID  uuid.NullUUID         `json:"pull_run_id"`
-	RawData    pqtype.NullRawMessage `json:"raw_data"`
-	FetchedAt  time.Time             `json:"fetched_at"`
+	CompanyID  uuid.UUID   `json:"company_id"`
+	SourceID   uuid.UUID   `json:"source_id"`
+	ExternalID string      `json:"external_id"`
+	PullRunID  pgtype.UUID `json:"pull_run_id"`
+	RawData    []byte      `json:"raw_data"`
+	FetchedAt  time.Time   `json:"fetched_at"`
 }
 
 func (q *Queries) UpsertCompanySource(ctx context.Context, arg UpsertCompanySourceParams) error {
-	_, err := q.db.ExecContext(ctx, upsertCompanySource,
+	_, err := q.db.Exec(ctx, upsertCompanySource,
 		arg.CompanyID,
 		arg.SourceID,
 		arg.ExternalID,

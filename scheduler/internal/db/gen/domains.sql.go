@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
 )
 
 const listCandidatesForReview = `-- name: ListCandidatesForReview :many
@@ -29,22 +28,22 @@ type ListCandidatesForReviewParams struct {
 }
 
 type ListCandidatesForReviewRow struct {
-	ID               uuid.UUID             `json:"id"`
-	CompanyID        uuid.UUID             `json:"company_id"`
-	DomainID         uuid.UUID             `json:"domain_id"`
-	RelationshipType string                `json:"relationship_type"`
-	Status           string                `json:"status"`
-	Signal           string                `json:"signal"`
-	Confidence       int16                 `json:"confidence"`
-	Evidence         pqtype.NullRawMessage `json:"evidence"`
-	FirstSeenAt      time.Time             `json:"first_seen_at"`
-	LastSeenAt       time.Time             `json:"last_seen_at"`
-	CompanyName      string                `json:"company_name"`
-	Domain           string                `json:"domain"`
+	ID               uuid.UUID `json:"id"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
+	FirstSeenAt      time.Time `json:"first_seen_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+	CompanyName      string    `json:"company_name"`
+	Domain           string    `json:"domain"`
 }
 
 func (q *Queries) ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error) {
-	rows, err := q.db.QueryContext(ctx, listCandidatesForReview, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listCandidatesForReview, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -70,9 +69,6 @@ func (q *Queries) ListCandidatesForReview(ctx context.Context, arg ListCandidate
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -88,21 +84,21 @@ ORDER BY cd.confidence DESC
 `
 
 type ListDomainsForCompanyRow struct {
-	Domain           string                `json:"domain"`
-	ID               uuid.UUID             `json:"id"`
-	CompanyID        uuid.UUID             `json:"company_id"`
-	DomainID         uuid.UUID             `json:"domain_id"`
-	RelationshipType string                `json:"relationship_type"`
-	Status           string                `json:"status"`
-	Signal           string                `json:"signal"`
-	Confidence       int16                 `json:"confidence"`
-	Evidence         pqtype.NullRawMessage `json:"evidence"`
-	FirstSeenAt      time.Time             `json:"first_seen_at"`
-	LastSeenAt       time.Time             `json:"last_seen_at"`
+	Domain           string    `json:"domain"`
+	ID               uuid.UUID `json:"id"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
+	FirstSeenAt      time.Time `json:"first_seen_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
 }
 
 func (q *Queries) ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDomainsForCompany, companyID)
+	rows, err := q.db.Query(ctx, listDomainsForCompany, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -127,9 +123,6 @@ func (q *Queries) ListDomainsForCompany(ctx context.Context, companyID uuid.UUID
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -147,7 +140,7 @@ type UpdateCompanyDomainStatusParams struct {
 }
 
 func (q *Queries) UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error {
-	_, err := q.db.ExecContext(ctx, updateCompanyDomainStatus, arg.ID, arg.Status, arg.RelationshipType)
+	_, err := q.db.Exec(ctx, updateCompanyDomainStatus, arg.ID, arg.Status, arg.RelationshipType)
 	return err
 }
 
@@ -162,17 +155,17 @@ RETURNING id, company_id, domain_id, relationship_type, status, signal, confiden
 `
 
 type UpsertCompanyDomainParams struct {
-	CompanyID        uuid.UUID             `json:"company_id"`
-	DomainID         uuid.UUID             `json:"domain_id"`
-	RelationshipType string                `json:"relationship_type"`
-	Status           string                `json:"status"`
-	Signal           string                `json:"signal"`
-	Confidence       int16                 `json:"confidence"`
-	Evidence         pqtype.NullRawMessage `json:"evidence"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
 }
 
 func (q *Queries) UpsertCompanyDomain(ctx context.Context, arg UpsertCompanyDomainParams) (CompanyDomain, error) {
-	row := q.db.QueryRowContext(ctx, upsertCompanyDomain,
+	row := q.db.QueryRow(ctx, upsertCompanyDomain,
 		arg.CompanyID,
 		arg.DomainID,
 		arg.RelationshipType,
@@ -205,7 +198,7 @@ RETURNING id, domain, first_seen_at, last_verified_at
 `
 
 func (q *Queries) UpsertDomain(ctx context.Context, domain string) (Domain, error) {
-	row := q.db.QueryRowContext(ctx, upsertDomain, domain)
+	row := q.db.QueryRow(ctx, upsertDomain, domain)
 	var i Domain
 	err := row.Scan(
 		&i.ID,
