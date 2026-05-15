@@ -9,7 +9,7 @@ from typing import ClassVar
 
 import httpx
 
-from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
+from ...base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
@@ -65,6 +65,28 @@ def _parse_csv_zip(raw: bytes) -> CrawlResponse:
             continue
 
         rec = dict(row)
+
+        locations = []
+        street = _get_field(rec, "tänav, maja ja korteri nr", "tänav", "aadress", "Aadress")
+        city = _get_field(rec, "linn/vald", "linn", "vald", "asustusüksus")
+        postal = _get_field(rec, "postiindeks", "Postiindeks", "indeks")
+        county = _get_field(rec, "maakond", "Maakond")
+        if street or city:
+            locations.append(CompanyLocation(
+                location_type="registered_address",
+                address_line1=street or None,
+                city=city or None,
+                region=county or None,
+                postal_code=postal or None,
+                country="Estonia",
+                country_code="EE",
+            ))
+
+        industries = []
+        emtak = _get_field(rec, "põhitegevusala tekst", "emtak2008_tekstina", "emtak_tekst", "tegevusala")
+        if emtak:
+            industries.append(emtak)
+
         records.append(
             CompanyRecord(
                 name=name,
@@ -73,6 +95,8 @@ def _parse_csv_zip(raw: bytes) -> CrawlResponse:
                 status=status,
                 raw_data=rec,
                 snapshot_hash=compute_hash(rec),
+                locations=locations,
+                industries=industries,
             )
         )
 

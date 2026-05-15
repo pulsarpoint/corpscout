@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import httpx
 
-from ..base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
+from ..base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
@@ -53,6 +53,34 @@ class OpenCorporatesAdapter(SourceAdapter):
             company = wrapper.get("company") or {}
             jurisdiction = (company.get("jurisdiction_code") or "").lower()
             country = jurisdiction.upper() if len(jurisdiction) == 2 else jurisdiction[:2].upper()
+
+            locations = []
+            addr = company.get("registered_address") or {}
+            if addr:
+                locations.append(CompanyLocation(
+                    location_type="registered_address",
+                    address_line1=addr.get("street_address"),
+                    city=addr.get("locality"),
+                    region=addr.get("region"),
+                    postal_code=addr.get("postal_code"),
+                    country=addr.get("country"),
+                    country_code=country or None,
+                ))
+
+            founded_year: int | None = None
+            inc_date = company.get("incorporation_date")
+            if inc_date:
+                try:
+                    founded_year = int(str(inc_date)[:4])
+                except (ValueError, TypeError):
+                    pass
+
+            industries = []
+            for code_entry in (company.get("industry_codes") or []):
+                desc = (code_entry.get("industry_code") or {}).get("description") or code_entry.get("description")
+                if desc:
+                    industries.append(str(desc))
+
             records.append(
                 CompanyRecord(
                     name=str(company.get("name") or ""),
@@ -61,6 +89,9 @@ class OpenCorporatesAdapter(SourceAdapter):
                     status=_map_status(company.get("current_status"), bool(company.get("inactive"))),
                     raw_data=company,
                     snapshot_hash=compute_hash(company),
+                    locations=locations,
+                    founded_year=founded_year,
+                    industries=industries,
                 )
             )
 
