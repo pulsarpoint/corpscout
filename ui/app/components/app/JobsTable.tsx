@@ -32,6 +32,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
           <TableHead>State</TableHead>
           <TableHead>Queue</TableHead>
           <TableHead>Attempt</TableHead>
+          <TableHead>Scheduled</TableHead>
           <TableHead>Created</TableHead>
           <TableHead>Finalized</TableHead>
         </TableRow>
@@ -48,6 +49,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
             </TableCell>
             <TableCell className="text-sm">{j.queue}</TableCell>
             <TableCell className="text-sm">{j.attempt}/{j.max_attempts}</TableCell>
+            <TableCell className="text-sm">{j.scheduled_at ? formatDate(j.scheduled_at) : "—"}</TableCell>
             <TableCell className="text-sm">{formatDate(j.created_at)}</TableCell>
             <TableCell className="text-sm">{j.finalized_at ? formatDate(j.finalized_at) : "—"}</TableCell>
           </TableRow>

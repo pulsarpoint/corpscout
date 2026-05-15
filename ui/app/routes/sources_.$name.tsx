@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { ChevronLeft, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
+import { ChevronLeft, CheckCircle2, XCircle, Clock, Loader2, Pencil, Check, X } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "~/lib/api";
 import type { DataSource, PullRun, Job } from "~/types/api";
 import { timeAgo, formatDate } from "~/lib/utils";
@@ -9,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { JobsTable } from "~/components/app/JobsTable";
 import {
   Table,
   TableBody,
@@ -28,24 +30,6 @@ function statusBadge(status: string) {
   return <Badge variant="outline"><Clock className="size-3 mr-1" />{status}</Badge>;
 }
 
-function jobStateBadge(state: string) {
-  const colors: Record<string, string> = {
-    completed: "bg-green-100 text-green-800 border-green-200",
-    failed: "bg-red-100 text-red-800 border-red-200",
-    running: "bg-blue-100 text-blue-800 border-blue-200",
-    available: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    scheduled: "bg-gray-100 text-gray-700 border-gray-200",
-    retryable: "bg-orange-100 text-orange-800 border-orange-200",
-    cancelled: "bg-gray-100 text-gray-500 border-gray-200",
-    discarded: "bg-gray-100 text-gray-500 border-gray-200",
-  };
-  return (
-    <Badge className={colors[state] ?? "bg-gray-100 text-gray-700"} variant="outline">
-      {state}
-    </Badge>
-  );
-}
-
 const PULL_RUNS_PAGE_SIZE = 15;
 const JOBS_PAGE_SIZE = 10;
 
@@ -55,6 +39,10 @@ export default function SourceDetailPage() {
   const [source, setSource] = useState<DataSource>();
   const [sourceLoading, setSourceLoading] = useState(true);
   const [sourceError, setSourceError] = useState<string>();
+
+  const [editingInterval, setEditingInterval] = useState(false);
+  const [intervalValue, setIntervalValue] = useState(0);
+  const [savingInterval, setSavingInterval] = useState(false);
 
   const [pullRuns, setPullRuns] = useState<PullRun[]>([]);
   const [pullRunsPage, setPullRunsPage] = useState(1);
@@ -69,7 +57,7 @@ export default function SourceDetailPage() {
   useEffect(() => {
     if (!name) return;
     api.getSource(name)
-      .then(setSource)
+      .then((s) => { setSource(s); setIntervalValue(s.crawl_interval_hours); })
       .catch(() => setSourceError("Source not found."))
       .finally(() => setSourceLoading(false));
   }, [name]);
@@ -95,6 +83,28 @@ export default function SourceDetailPage() {
       })
       .finally(() => setJobsLoading(false));
   }, [name, jobsPage]);
+
+  async function saveInterval() {
+    if (!name || !source) return;
+    const hours = Math.max(1, Math.round(intervalValue));
+    setSavingInterval(true);
+    try {
+      await api.patchSource(name, { crawl_interval_hours: hours });
+      setSource({ ...source, crawl_interval_hours: hours });
+      setIntervalValue(hours);
+      setEditingInterval(false);
+      toast.success(`Crawl interval updated to ${hours}h.`);
+    } catch {
+      toast.error("Failed to update crawl interval.");
+    } finally {
+      setSavingInterval(false);
+    }
+  }
+
+  function cancelInterval() {
+    setIntervalValue(source?.crawl_interval_hours ?? 0);
+    setEditingInterval(false);
+  }
 
   if (sourceLoading) return <Skeleton className="h-64 w-full" />;
   if (sourceError || !source) return <Alert variant="destructive"><AlertDescription>{sourceError}</AlertDescription></Alert>;
@@ -132,7 +142,49 @@ export default function SourceDetailPage() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Crawl interval</p>
-            <p className="mt-1 text-sm font-medium">{source.crawl_interval_hours}h</p>
+            <div className="mt-1 flex items-center gap-2">
+              {editingInterval ? (
+                <>
+                  <input
+                    type="number"
+                    min={1}
+                    className="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={intervalValue}
+                    onChange={(e) => setIntervalValue(Number(e.target.value))}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveInterval(); if (e.key === "Escape") cancelInterval(); }}
+                    autoFocus
+                  />
+                  <span className="text-sm text-muted-foreground">h</span>
+                  <button
+                    onClick={saveInterval}
+                    disabled={savingInterval}
+                    className="text-green-600 hover:text-green-700 disabled:opacity-50"
+                    aria-label="Save"
+                  >
+                    <Check className="size-4" />
+                  </button>
+                  <button
+                    onClick={cancelInterval}
+                    disabled={savingInterval}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    aria-label="Cancel"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm font-medium">{source.crawl_interval_hours}h</span>
+                  <button
+                    onClick={() => setEditingInterval(true)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Edit interval"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Last crawled</p>
@@ -180,23 +232,9 @@ export default function SourceDetailPage() {
               </TableBody>
             </Table>
             <div className="flex items-center justify-between mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pullRunsPage === 1}
-                onClick={() => setPullRunsPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
+              <Button size="sm" variant="outline" disabled={pullRunsPage === 1} onClick={() => setPullRunsPage((p) => p - 1)}>Previous</Button>
               <span className="text-sm text-muted-foreground">Page {pullRunsPage}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!pullRunsHasMore}
-                onClick={() => setPullRunsPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+              <Button size="sm" variant="outline" disabled={!pullRunsHasMore} onClick={() => setPullRunsPage((p) => p + 1)}>Next</Button>
             </div>
           </>
         )}
@@ -210,50 +248,11 @@ export default function SourceDetailPage() {
           <p className="text-sm text-muted-foreground">No jobs found.</p>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Kind</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead className="text-right">Attempt</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Finalized</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {jobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell className="font-mono text-xs">{job.id}</TableCell>
-                    <TableCell className="text-sm">{job.kind}</TableCell>
-                    <TableCell>{jobStateBadge(job.state)}</TableCell>
-                    <TableCell className="text-right text-sm">{job.attempt}/{job.max_attempts}</TableCell>
-                    <TableCell className="text-sm">{timeAgo(job.created_at)}</TableCell>
-                    <TableCell className="text-sm">
-                      {job.finalized_at ? timeAgo(job.finalized_at) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <JobsTable jobs={jobs} />
             <div className="flex items-center justify-between mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={jobsPage === 1}
-                onClick={() => setJobsPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
+              <Button size="sm" variant="outline" disabled={jobsPage === 1} onClick={() => setJobsPage((p) => p - 1)}>Previous</Button>
               <span className="text-sm text-muted-foreground">Page {jobsPage}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!jobsHasMore}
-                onClick={() => setJobsPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+              <Button size="sm" variant="outline" disabled={!jobsHasMore} onClick={() => setJobsPage((p) => p + 1)}>Next</Button>
             </div>
           </>
         )}
