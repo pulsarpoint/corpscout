@@ -13,6 +13,16 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
+func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	source, err := h.db.GetSourceByName(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, source)
+}
+
 func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
 	sources, err := h.db.ListSources(r.Context())
 	if err != nil {

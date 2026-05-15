@@ -1,0 +1,96 @@
+<h2>Navigation Layout</h2>
+<p class="subtitle">Corpscout has 6 sections: Dashboard, Companies, Domains, Sources, Jobs, and Review Queue. Which layout structure feels right?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Fixed Sidebar</h3>
+      <p>Vertical icon + label nav on the left. Standard ops-tool feel. Works well for 6 sections — each section gets a clear home.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Preview</div>
+        <div class="mockup-body" style="display:flex;gap:0;padding:0;min-height:140px">
+          <div style="width:140px;background:#1e293b;color:#94a3b8;padding:12px 8px;font-size:11px;border-right:1px solid #334155;flex-shrink:0">
+            <div style="color:#f8fafc;font-weight:700;margin-bottom:16px;padding:0 4px;font-size:12px">◉ CorpScout</div>
+            <div style="padding:6px 8px;border-radius:4px;background:#334155;color:#f8fafc;margin-bottom:2px">⊞ Dashboard</div>
+            <div style="padding:6px 8px;border-radius:4px;color:#94a3b8;margin-bottom:2px">🏢 Companies</div>
+            <div style="padding:6px 8px;border-radius:4px;color:#94a3b8;margin-bottom:2px">🌐 Domains</div>
+            <div style="padding:6px 8px;border-radius:4px;color:#94a3b8;margin-bottom:2px">⚙ Sources</div>
+            <div style="padding:6px 8px;border-radius:4px;color:#94a3b8;margin-bottom:2px">📋 Jobs</div>
+            <div style="padding:6px 8px;border-radius:4px;color:#94a3b8">✓ Review</div>
+          </div>
+          <div style="flex:1;padding:16px;background:#f8fafc">
+            <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px">Dashboard</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">16,847 companies</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">997 domains</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">5 sources</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Top Tabs</h3>
+      <p>Horizontal tab bar below a header. Compact, keeps full page width for content. Common in data-heavy tools like Grafana or Kibana.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Preview</div>
+        <div class="mockup-body" style="padding:0;min-height:140px">
+          <div style="background:#1e293b;color:#f8fafc;padding:8px 16px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px">
+            ◉ CorpScout
+            <span style="margin-left:auto;color:#94a3b8;font-weight:400;font-size:11px">16,847 companies · 997 domains</span>
+          </div>
+          <div style="background:#0f172a;display:flex;gap:0;border-bottom:1px solid #334155">
+            <div style="padding:8px 16px;color:#60a5fa;border-bottom:2px solid #60a5fa;font-size:11px">Dashboard</div>
+            <div style="padding:8px 16px;color:#94a3b8;font-size:11px">Companies</div>
+            <div style="padding:8px 16px;color:#94a3b8;font-size:11px">Domains</div>
+            <div style="padding:8px 16px;color:#94a3b8;font-size:11px">Sources</div>
+            <div style="padding:8px 16px;color:#94a3b8;font-size:11px">Jobs</div>
+            <div style="padding:8px 16px;color:#94a3b8;font-size:11px">Review <span style="background:#ef4444;color:white;border-radius:9px;padding:1px 6px;font-size:9px">0</span></div>
+          </div>
+          <div style="padding:16px;background:#f8fafc">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">16,847 companies</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">997 domains</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">5 sources</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Collapsible Sidebar</h3>
+      <p>Icon-only sidebar that expands on hover/toggle. Minimalist — icons give fast access, labels visible when needed. Good for keyboard-heavy use.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Preview (collapsed)</div>
+        <div class="mockup-body" style="display:flex;gap:0;padding:0;min-height:140px">
+          <div style="width:44px;background:#1e293b;color:#94a3b8;padding:10px 4px;font-size:16px;border-right:1px solid #334155;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div style="color:#f8fafc;margin-bottom:12px;font-size:14px">◉</div>
+            <div style="padding:6px;border-radius:4px;background:#334155;color:#f8fafc;margin-bottom:2px">⊞</div>
+            <div style="padding:6px;border-radius:4px;color:#94a3b8;margin-bottom:2px">🏢</div>
+            <div style="padding:6px;border-radius:4px;color:#94a3b8;margin-bottom:2px">🌐</div>
+            <div style="padding:6px;border-radius:4px;color:#94a3b8;margin-bottom:2px">⚙</div>
+            <div style="padding:6px;border-radius:4px;color:#94a3b8;margin-bottom:2px">📋</div>
+            <div style="padding:6px;border-radius:4px;color:#94a3b8">✓</div>
+          </div>
+          <div style="flex:1;padding:16px;background:#f8fafc">
+            <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:8px">Dashboard</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">16,847 companies</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">997 domains</div>
+              <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:11px;color:#64748b">5 sources</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

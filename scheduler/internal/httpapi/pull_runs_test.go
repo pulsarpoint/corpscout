@@ -16,7 +16,7 @@ import (
 func TestListPullRuns_returns_items(t *testing.T) {
 	q := &stubQuerier{}
 
-	q.On("ListPullRuns", mock.Anything, db.ListPullRunsParams{Limit: 20, Offset: 0}).Return(
+	q.On("ListPullRuns", mock.Anything, db.ListPullRunsParams{SourceName: nil, Limit: 20, Offset: 0}).Return(
 		[]db.ListPullRunsRow{
 			{SourceName: "brreg", Status: "completed", RecordsFetched: 100, RecordsUpserted: 80},
 		},
@@ -39,7 +39,7 @@ func TestListPullRuns_returns_items(t *testing.T) {
 func TestListPullRuns_empty_returns_empty_slice(t *testing.T) {
 	q := &stubQuerier{}
 
-	q.On("ListPullRuns", mock.Anything, db.ListPullRunsParams{Limit: 20, Offset: 0}).Return(
+	q.On("ListPullRuns", mock.Anything, db.ListPullRunsParams{SourceName: nil, Limit: 20, Offset: 0}).Return(
 		[]db.ListPullRunsRow{},
 		nil,
 	)

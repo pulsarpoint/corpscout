@@ -13,7 +13,9 @@ func (h *Handlers) handleListPullRuns(w http.ResponseWriter, r *http.Request) {
 	offset := int32((page - 1) * limit)
 
 	runs, err := h.db.ListPullRuns(r.Context(), db.ListPullRunsParams{
-		Limit: int32(limit), Offset: offset,
+		SourceName: queryString(r, "source"),
+		Limit:      int32(limit),
+		Offset:     offset,
 	})
 	if err != nil {
 		slog.Error("list pull runs", "error", err)

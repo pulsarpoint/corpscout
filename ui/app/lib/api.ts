@@ -85,14 +85,19 @@ export const api = {
 
   getSources: () => get<DataSource[]>("/sources"),
 
+  getSource: (name: string) => get<DataSource>(`/sources/${name}`),
+
   patchSource: (name: string, body: { enabled?: boolean; crawl_interval_hours?: number }) =>
     patch<{ status: string }>(`/sources/${name}`, body),
 
   triggerSource: (name: string) =>
     post<{ status: string }>(`/sources/${name}/trigger`, {}),
 
-  getPullRuns: (page = 1, limit = 20) =>
-    get<PullRunsResponse>(`/pull-runs?page=${page}&limit=${limit}`),
+  getPullRuns: (page = 1, limit = 20, source?: string) => {
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (source) qs.set("source", source);
+    return get<PullRunsResponse>(`/pull-runs?${qs.toString()}`);
+  },
 
   getJobs: (params: { page?: number; limit?: number; status?: string; source?: string }) => {
     const qs = new URLSearchParams();

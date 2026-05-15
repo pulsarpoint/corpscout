@@ -1,0 +1,139 @@
+<h2>Review Queue — Interaction Style</h2>
+<p class="subtitle">Each item is a domain candidate: company + domain + signal (registry_website, wikidata, certsh…) + confidence score. Reviewer picks Approve / Reject / Supersede.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Table with inline actions</h3>
+      <p>All candidates in a dense table. Each row has 3 action buttons. Fast to scan many items at once. Good for bulk reviewing.</p>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-header">Preview</div>
+        <div class="mockup-body" style="padding:0;overflow:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:#f1f5f9;border-bottom:1px solid #e2e8f0">
+                <th style="padding:6px 10px;text-align:left;color:#64748b;font-weight:600">Company</th>
+                <th style="padding:6px 10px;text-align:left;color:#64748b;font-weight:600">Domain</th>
+                <th style="padding:6px 10px;text-align:left;color:#64748b;font-weight:600">Signal</th>
+                <th style="padding:6px 10px;text-align:left;color:#64748b;font-weight:600">Conf.</th>
+                <th style="padding:6px 10px;text-align:left;color:#64748b;font-weight:600">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:6px 10px;color:#1e293b;font-weight:500">Equinor ASA</td>
+                <td style="padding:6px 10px;color:#2563eb;font-family:monospace">equinor.com</td>
+                <td style="padding:6px 10px"><span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px">registry</span></td>
+                <td style="padding:6px 10px;color:#166534;font-weight:600">90</td>
+                <td style="padding:6px 10px;display:flex;gap:4px">
+                  <button style="background:#22c55e;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✓ Approve</button>
+                  <button style="background:#ef4444;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✗ Reject</button>
+                  <button style="background:#94a3b8;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">↷</button>
+                </td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:6px 10px;color:#1e293b;font-weight:500">DNB Bank ASA</td>
+                <td style="padding:6px 10px;color:#2563eb;font-family:monospace">dnb.no</td>
+                <td style="padding:6px 10px"><span style="background:#dbeafe;color:#1e40af;padding:2px 6px;border-radius:4px;font-size:10px">wikidata</span></td>
+                <td style="padding:6px 10px;color:#1e40af;font-weight:600">75</td>
+                <td style="padding:6px 10px;display:flex;gap:4px">
+                  <button style="background:#22c55e;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✓ Approve</button>
+                  <button style="background:#ef4444;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✗ Reject</button>
+                  <button style="background:#94a3b8;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">↷</button>
+                </td>
+              </tr>
+              <tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:6px 10px;color:#1e293b;font-weight:500">Telenor Group</td>
+                <td style="padding:6px 10px;color:#2563eb;font-family:monospace">telenor.com</td>
+                <td style="padding:6px 10px"><span style="background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;font-size:10px">certsh</span></td>
+                <td style="padding:6px 10px;color:#854d0e;font-weight:600">60</td>
+                <td style="padding:6px 10px;display:flex;gap:4px">
+                  <button style="background:#22c55e;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✓ Approve</button>
+                  <button style="background:#ef4444;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">✗ Reject</button>
+                  <button style="background:#94a3b8;color:white;border:none;border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer">↷</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Card stack with keyboard shortcuts</h3>
+      <p>One candidate at a time, Tinder-style. Shows full evidence JSON. <kbd style="background:#f1f5f9;border:1px solid #cbd5e1;padding:1px 5px;border-radius:3px;font-size:10px">A</kbd> approve, <kbd style="background:#f1f5f9;border:1px solid #cbd5e1;padding:1px 5px;border-radius:3px;font-size:10px">R</kbd> reject, <kbd style="background:#f1f5f9;border:1px solid #cbd5e1;padding:1px 5px;border-radius:3px;font-size:10px">S</kbd> supersede. Good when evidence needs attention.</p>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-header">Preview</div>
+        <div class="mockup-body">
+          <div style="max-width:360px;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:0 auto">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#1e293b">Equinor ASA</div>
+                <div style="font-size:11px;color:#64748b">Norway · Oil &amp; Gas · NO 923 609 016</div>
+              </div>
+              <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:12px;font-size:10px">registry · 90</span>
+            </div>
+            <div style="font-size:16px;font-family:monospace;color:#2563eb;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;margin-bottom:10px;text-align:center">equinor.com</div>
+            <div style="font-size:10px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;margin-bottom:12px;font-family:monospace">{"source":"brreg","raw_url":"https://equinor.com"}</div>
+            <div style="display:flex;gap:8px">
+              <button style="flex:1;background:#22c55e;color:white;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:600;cursor:pointer">✓ Approve [A]</button>
+              <button style="flex:1;background:#ef4444;color:white;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:600;cursor:pointer">✗ Reject [R]</button>
+              <button style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:12px;cursor:pointer">↷ [S]</button>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:8px;font-size:10px;color:#94a3b8">1 of 247 pending</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Split pane</h3>
+      <p>Table on left, selected item detail on right. Click a row to see full evidence. Action buttons in the detail panel. Best of both: scan speed + context.</p>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-header">Preview</div>
+        <div class="mockup-body" style="padding:0;display:flex;min-height:150px">
+          <div style="width:55%;border-right:1px solid #e2e8f0;overflow:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:10px">
+              <thead><tr style="background:#f1f5f9"><th style="padding:5px 8px;text-align:left;color:#64748b">Company</th><th style="padding:5px 8px;text-align:left;color:#64748b">Domain</th><th style="padding:5px 8px;text-align:left;color:#64748b">Conf</th></tr></thead>
+              <tbody>
+                <tr style="background:#eff6ff;border-bottom:1px solid #e2e8f0">
+                  <td style="padding:5px 8px;font-weight:600;color:#1e293b">Equinor ASA</td>
+                  <td style="padding:5px 8px;color:#2563eb;font-family:monospace">equinor.com</td>
+                  <td style="padding:5px 8px;color:#166534;font-weight:600">90</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:5px 8px;color:#1e293b">DNB Bank ASA</td>
+                  <td style="padding:5px 8px;color:#2563eb;font-family:monospace">dnb.no</td>
+                  <td style="padding:5px 8px;color:#1e40af;font-weight:600">75</td>
+                </tr>
+                <tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:5px 8px;color:#1e293b">Telenor Group</td>
+                  <td style="padding:5px 8px;color:#2563eb;font-family:monospace">telenor.com</td>
+                  <td style="padding:5px 8px;color:#854d0e;font-weight:600">60</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1;padding:12px;background:#fafafa">
+            <div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:4px">Equinor ASA</div>
+            <div style="font-size:10px;color:#64748b;margin-bottom:8px">Norway · registry_website · confidence 90</div>
+            <div style="font-size:14px;font-family:monospace;color:#2563eb;background:white;border:1px solid #e2e8f0;border-radius:4px;padding:6px;margin-bottom:8px">equinor.com</div>
+            <div style="font-size:9px;color:#64748b;font-family:monospace;background:white;border:1px solid #e2e8f0;padding:6px;border-radius:4px;margin-bottom:8px">{"source":"brreg","raw_url":"https://equinor.com"}</div>
+            <div style="display:flex;gap:4px">
+              <button style="flex:1;background:#22c55e;color:white;border:none;border-radius:4px;padding:5px;font-size:10px;cursor:pointer">✓ Approve</button>
+              <button style="flex:1;background:#ef4444;color:white;border:none;border-radius:4px;padding:5px;font-size:10px;cursor:pointer">✗ Reject</button>
+              <button style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:4px;padding:5px;font-size:10px;cursor:pointer">↷</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

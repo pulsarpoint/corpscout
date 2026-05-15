@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { DataSource } from "~/types/api";
 import { timeAgo } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -34,7 +35,14 @@ export function SourcesTable({ sources, onToggle, onTrigger, triggeringName }: S
       <TableBody>
         {sources.map((s) => (
           <TableRow key={s.name}>
-            <TableCell className="font-medium">{s.display_name || s.name}</TableCell>
+            <TableCell className="font-medium">
+              <Link
+                to={`/sources/${s.name}`}
+                className="hover:underline text-foreground"
+              >
+                {s.display_name || s.name}
+              </Link>
+            </TableCell>
             <TableCell className="text-sm text-muted-foreground">{s.source_type}</TableCell>
             <TableCell>
               <Switch

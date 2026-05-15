@@ -23,5 +23,6 @@ ON CONFLICT (source_id, payload_hash) DO NOTHING;
 SELECT spr.*, ds.name AS source_name
 FROM source_pull_runs spr
 JOIN data_sources ds ON ds.id = spr.source_id
+WHERE (sqlc.narg('source_name')::text IS NULL OR ds.name = sqlc.narg('source_name')::text)
 ORDER BY spr.started_at DESC
-LIMIT $1 OFFSET $2;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');

@@ -1,0 +1,6 @@
+{"type":"server-started","port":59735,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:59735","screen_dir":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/content","state_dir":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/state"}
+{"type":"screen-added","file":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/content/layout.html"}
+{"type":"screen-added","file":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/content/waiting.html"}
+{"type":"screen-added","file":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/content/review-layout.html"}
+{"type":"screen-added","file":"/Users/graovic/pulsarpoint/ppoint/corpscout/.superpowers/brainstorm/33481-1778852310/content/waiting-2.html"}
+{"type":"server-stopped","reason":"idle timeout"}

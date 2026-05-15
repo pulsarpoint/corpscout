@@ -114,13 +114,15 @@ const listPullRuns = `-- name: ListPullRuns :many
 SELECT spr.id, spr.source_id, spr.river_job_id, spr.started_at, spr.completed_at, spr.status, spr.cursor_start, spr.cursor_end, spr.snapshot_date, spr.records_fetched, spr.records_upserted, spr.error_message, spr.created_at, ds.name AS source_name
 FROM source_pull_runs spr
 JOIN data_sources ds ON ds.id = spr.source_id
+WHERE ($1::text IS NULL OR ds.name = $1::text)
 ORDER BY spr.started_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $3 OFFSET $2
 `
 
 type ListPullRunsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	SourceName *string `json:"source_name"`
+	Offset     int32   `json:"offset"`
+	Limit      int32   `json:"limit"`
 }
 
 type ListPullRunsRow struct {
@@ -141,7 +143,7 @@ type ListPullRunsRow struct {
 }
 
 func (q *Queries) ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error) {
-	rows, err := q.db.Query(ctx, listPullRuns, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listPullRuns, arg.SourceName, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
