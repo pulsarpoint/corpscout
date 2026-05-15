@@ -177,6 +177,45 @@ func (s *stubQuerier) InterruptStalePullRuns(ctx context.Context) error {
 	return nil
 }
 
+func (s *stubQuerier) GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]db.CompanyEmail, error) {
+	return nil, nil
+}
+func (s *stubQuerier) GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]db.CompanyIndustry, error) {
+	return nil, nil
+}
+func (s *stubQuerier) GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]db.CompanyLocation, error) {
+	return nil, nil
+}
+func (s *stubQuerier) GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]db.CompanyMarket, error) {
+	return nil, nil
+}
+func (s *stubQuerier) GetCompanyPhones(ctx context.Context, companyID uuid.UUID) ([]db.CompanyPhone, error) {
+	return nil, nil
+}
+func (s *stubQuerier) GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]db.CompanyService, error) {
+	return nil, nil
+}
+func (s *stubQuerier) UpdateCompanyEnrichment(ctx context.Context, arg db.UpdateCompanyEnrichmentParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+func (s *stubQuerier) UpsertCompanyEmail(ctx context.Context, arg db.UpsertCompanyEmailParams) (db.CompanyEmail, error) {
+	return db.CompanyEmail{}, nil
+}
+func (s *stubQuerier) UpsertCompanyIndustry(ctx context.Context, arg db.UpsertCompanyIndustryParams) (db.CompanyIndustry, error) {
+	return db.CompanyIndustry{}, nil
+}
+func (s *stubQuerier) UpsertCompanyLocation(ctx context.Context, arg db.UpsertCompanyLocationParams) (db.CompanyLocation, error) {
+	return db.CompanyLocation{}, nil
+}
+func (s *stubQuerier) UpsertCompanyMarket(ctx context.Context, arg db.UpsertCompanyMarketParams) (db.CompanyMarket, error) {
+	return db.CompanyMarket{}, nil
+}
+func (s *stubQuerier) UpsertCompanyPhone(ctx context.Context, arg db.UpsertCompanyPhoneParams) (db.CompanyPhone, error) {
+	return db.CompanyPhone{}, nil
+}
+func (s *stubQuerier) UpsertCompanyService(ctx context.Context, arg db.UpsertCompanyServiceParams) (db.CompanyService, error) {
+	return db.CompanyService{}, nil
+}
 func (s *stubQuerier) UpsertCompanySource(ctx context.Context, arg db.UpsertCompanySourceParams) error {
 	return nil
 }

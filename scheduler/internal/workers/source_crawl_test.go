@@ -189,6 +189,46 @@ func (m *mockQuerier) InterruptStalePullRuns(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockQuerier) GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]db.CompanyEmail, error) {
+	return nil, nil
+}
+func (m *mockQuerier) GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]db.CompanyIndustry, error) {
+	return nil, nil
+}
+func (m *mockQuerier) GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]db.CompanyLocation, error) {
+	return nil, nil
+}
+func (m *mockQuerier) GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]db.CompanyMarket, error) {
+	return nil, nil
+}
+func (m *mockQuerier) GetCompanyPhones(ctx context.Context, companyID uuid.UUID) ([]db.CompanyPhone, error) {
+	return nil, nil
+}
+func (m *mockQuerier) GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]db.CompanyService, error) {
+	return nil, nil
+}
+func (m *mockQuerier) UpdateCompanyEnrichment(ctx context.Context, arg db.UpdateCompanyEnrichmentParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+func (m *mockQuerier) UpsertCompanyEmail(ctx context.Context, arg db.UpsertCompanyEmailParams) (db.CompanyEmail, error) {
+	return db.CompanyEmail{}, nil
+}
+func (m *mockQuerier) UpsertCompanyIndustry(ctx context.Context, arg db.UpsertCompanyIndustryParams) (db.CompanyIndustry, error) {
+	return db.CompanyIndustry{}, nil
+}
+func (m *mockQuerier) UpsertCompanyLocation(ctx context.Context, arg db.UpsertCompanyLocationParams) (db.CompanyLocation, error) {
+	return db.CompanyLocation{}, nil
+}
+func (m *mockQuerier) UpsertCompanyMarket(ctx context.Context, arg db.UpsertCompanyMarketParams) (db.CompanyMarket, error) {
+	return db.CompanyMarket{}, nil
+}
+func (m *mockQuerier) UpsertCompanyPhone(ctx context.Context, arg db.UpsertCompanyPhoneParams) (db.CompanyPhone, error) {
+	return db.CompanyPhone{}, nil
+}
+func (m *mockQuerier) UpsertCompanyService(ctx context.Context, arg db.UpsertCompanyServiceParams) (db.CompanyService, error) {
+	return db.CompanyService{}, nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

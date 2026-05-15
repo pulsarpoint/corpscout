@@ -188,9 +188,16 @@ export interface Country {
 export interface VCompany {
   id: string;
   name: string;
+  short_name: string | null;
   registration_number: string | null;
   lei: string | null;
   status: string;
+  website: string | null;
+  short_description: string | null;
+  founded_year: number | null;
+  employee_estimate: Record<string, unknown>;
+  revenue_estimate: Record<string, unknown>;
+  ownership: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   country_id: string;
@@ -199,6 +206,83 @@ export interface VCompany {
   primary_source: string | null;
   primary_source_display_name: string | null;
   domain_count: number;
+  headquarters_location: string | null;
+}
+
+export interface VCompanyLocation {
+  id: string;
+  company_id: string;
+  location_type: "headquarters" | "registered_address" | "office";
+  label: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  region: string | null;
+  postal_code: string | null;
+  country: string | null;
+  country_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  source: string;
+  confidence: number | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VCompanyPhone {
+  id: string;
+  company_id: string;
+  phone: string;
+  description: string | null;
+  purpose: string;
+  source: string;
+  confidence: number | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VCompanyEmail {
+  id: string;
+  company_id: string;
+  email: string;
+  description: string | null;
+  purpose: string;
+  name: string | null;
+  source: string;
+  confidence: number | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VCompanyIndustry {
+  id: string;
+  company_id: string;
+  industry: string;
+  source: string;
+  confidence: number | null;
+  created_at: string;
+}
+
+export interface VCompanyMarket {
+  id: string;
+  company_id: string;
+  market: string;
+  source: string;
+  confidence: number | null;
+  created_at: string;
+}
+
+export interface VCompanyService {
+  id: string;
+  company_id: string;
+  service: string;
+  description: string | null;
+  source: string;
+  confidence: number | null;
+  created_at: string;
 }
 
 export interface VCompanySource {

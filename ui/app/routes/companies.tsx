@@ -67,6 +67,14 @@ const columns: ColumnDef<VCompany, unknown>[] = [
     ),
   },
   {
+    accessorKey: "headquarters_location",
+    header: "HQ",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">{row.original.headquarters_location ?? "—"}</span>
+    ),
+  },
+  {
     accessorKey: "created_at",
     header: "Added",
     enableSorting: true,

@@ -21,6 +21,12 @@ type Querier interface {
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
+	GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]CompanyIndustry, error)
+	GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]CompanyLocation, error)
+	GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]CompanyMarket, error)
+	GetCompanyPhones(ctx context.Context, companyID uuid.UUID) ([]CompanyPhone, error)
+	GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]CompanyService, error)
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
@@ -36,6 +42,8 @@ type Querier interface {
 	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
+	// ── enrichment update ─────────────────────────────────────────────────────────
+	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
 	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
 	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error
@@ -43,6 +51,18 @@ type Querier interface {
 	UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEIParams) (Company, error)
 	UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompanyByRegNumberParams) (Company, error)
 	UpsertCompanyDomain(ctx context.Context, arg UpsertCompanyDomainParams) (CompanyDomain, error)
+	// ── emails ────────────────────────────────────────────────────────────────────
+	UpsertCompanyEmail(ctx context.Context, arg UpsertCompanyEmailParams) (CompanyEmail, error)
+	// ── industries ────────────────────────────────────────────────────────────────
+	UpsertCompanyIndustry(ctx context.Context, arg UpsertCompanyIndustryParams) (CompanyIndustry, error)
+	// ── locations ─────────────────────────────────────────────────────────────────
+	UpsertCompanyLocation(ctx context.Context, arg UpsertCompanyLocationParams) (CompanyLocation, error)
+	// ── markets ───────────────────────────────────────────────────────────────────
+	UpsertCompanyMarket(ctx context.Context, arg UpsertCompanyMarketParams) (CompanyMarket, error)
+	// ── phones ────────────────────────────────────────────────────────────────────
+	UpsertCompanyPhone(ctx context.Context, arg UpsertCompanyPhoneParams) (CompanyPhone, error)
+	// ── services ──────────────────────────────────────────────────────────────────
+	UpsertCompanyService(ctx context.Context, arg UpsertCompanyServiceParams) (CompanyService, error)
 	UpsertCompanySource(ctx context.Context, arg UpsertCompanySourceParams) error
 	UpsertDataSource(ctx context.Context, arg UpsertDataSourceParams) (DataSource, error)
 	UpsertDomain(ctx context.Context, domain string) (Domain, error)

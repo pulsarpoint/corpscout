@@ -13,15 +13,23 @@ import (
 )
 
 type Company struct {
-	ID                 uuid.UUID   `json:"id"`
-	Lei                *string     `json:"lei"`
-	Name               string      `json:"name"`
-	CountryID          uuid.UUID   `json:"country_id"`
-	RegistrationNumber *string     `json:"registration_number"`
-	Status             string      `json:"status"`
-	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
-	CreatedAt          time.Time   `json:"created_at"`
-	UpdatedAt          time.Time   `json:"updated_at"`
+	ID                 uuid.UUID       `json:"id"`
+	Lei                *string         `json:"lei"`
+	Name               string          `json:"name"`
+	CountryID          uuid.UUID       `json:"country_id"`
+	RegistrationNumber *string         `json:"registration_number"`
+	Status             string          `json:"status"`
+	PrimarySourceID    pgtype.UUID     `json:"primary_source_id"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+	ShortName          *string         `json:"short_name"`
+	ShortDescription   *string         `json:"short_description"`
+	Description        *string         `json:"description"`
+	Website            *string         `json:"website"`
+	FoundedYear        *int32          `json:"founded_year"`
+	EmployeeEstimate   json.RawMessage `json:"employee_estimate"`
+	RevenueEstimate    json.RawMessage `json:"revenue_estimate"`
+	Ownership          json.RawMessage `json:"ownership"`
 }
 
 type CompanyAlias struct {
@@ -53,6 +61,91 @@ type CompanyDomainReview struct {
 	ReviewedBy      string    `json:"reviewed_by"`
 	ReviewNote      *string   `json:"review_note"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+type CompanyEmail struct {
+	ID          uuid.UUID          `json:"id"`
+	CompanyID   uuid.UUID          `json:"company_id"`
+	Email       string             `json:"email"`
+	Description *string            `json:"description"`
+	Purpose     string             `json:"purpose"`
+	Name        *string            `json:"name"`
+	Source      string             `json:"source"`
+	Confidence  *float32           `json:"confidence"`
+	Evidence    json.RawMessage    `json:"evidence"`
+	Metadata    json.RawMessage    `json:"metadata"`
+	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+type CompanyIndustry struct {
+	ID         uuid.UUID       `json:"id"`
+	CompanyID  uuid.UUID       `json:"company_id"`
+	Industry   string          `json:"industry"`
+	Source     string          `json:"source"`
+	Confidence *float32        `json:"confidence"`
+	Evidence   json.RawMessage `json:"evidence"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type CompanyLocation struct {
+	ID           uuid.UUID          `json:"id"`
+	CompanyID    uuid.UUID          `json:"company_id"`
+	LocationType string             `json:"location_type"`
+	Label        *string            `json:"label"`
+	AddressLine1 *string            `json:"address_line1"`
+	AddressLine2 *string            `json:"address_line2"`
+	City         *string            `json:"city"`
+	Region       *string            `json:"region"`
+	PostalCode   *string            `json:"postal_code"`
+	Country      *string            `json:"country"`
+	CountryCode  *string            `json:"country_code"`
+	Latitude     *float64           `json:"latitude"`
+	Longitude    *float64           `json:"longitude"`
+	GeoMetadata  json.RawMessage    `json:"geo_metadata"`
+	Source       string             `json:"source"`
+	Confidence   *float32           `json:"confidence"`
+	Evidence     json.RawMessage    `json:"evidence"`
+	RemovedAt    pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+type CompanyMarket struct {
+	ID         uuid.UUID       `json:"id"`
+	CompanyID  uuid.UUID       `json:"company_id"`
+	Market     string          `json:"market"`
+	Source     string          `json:"source"`
+	Confidence *float32        `json:"confidence"`
+	Evidence   json.RawMessage `json:"evidence"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type CompanyPhone struct {
+	ID          uuid.UUID          `json:"id"`
+	CompanyID   uuid.UUID          `json:"company_id"`
+	Phone       string             `json:"phone"`
+	Description *string            `json:"description"`
+	Purpose     string             `json:"purpose"`
+	Source      string             `json:"source"`
+	Confidence  *float32           `json:"confidence"`
+	Evidence    json.RawMessage    `json:"evidence"`
+	Metadata    json.RawMessage    `json:"metadata"`
+	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+type CompanyService struct {
+	ID          uuid.UUID       `json:"id"`
+	CompanyID   uuid.UUID       `json:"company_id"`
+	Service     string          `json:"service"`
+	Description *string         `json:"description"`
+	Source      string          `json:"source"`
+	Confidence  *float32        `json:"confidence"`
+	Evidence    json.RawMessage `json:"evidence"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
 type CompanySource struct {
@@ -123,4 +216,149 @@ type SourceSnapshot struct {
 	PayloadHash string          `json:"payload_hash"`
 	Payload     json.RawMessage `json:"payload"`
 	FetchedAt   time.Time       `json:"fetched_at"`
+}
+
+type VCompany struct {
+	ID                       uuid.UUID       `json:"id"`
+	Name                     string          `json:"name"`
+	ShortName                *string         `json:"short_name"`
+	RegistrationNumber       *string         `json:"registration_number"`
+	Lei                      *string         `json:"lei"`
+	Status                   string          `json:"status"`
+	Website                  *string         `json:"website"`
+	ShortDescription         *string         `json:"short_description"`
+	FoundedYear              *int32          `json:"founded_year"`
+	EmployeeEstimate         json.RawMessage `json:"employee_estimate"`
+	RevenueEstimate          json.RawMessage `json:"revenue_estimate"`
+	Ownership                json.RawMessage `json:"ownership"`
+	CreatedAt                time.Time       `json:"created_at"`
+	UpdatedAt                time.Time       `json:"updated_at"`
+	CountryID                uuid.UUID       `json:"country_id"`
+	CountryName              string          `json:"country_name"`
+	CountryIso2              string          `json:"country_iso2"`
+	PrimarySource            *string         `json:"primary_source"`
+	PrimarySourceDisplayName *string         `json:"primary_source_display_name"`
+	DomainCount              int32           `json:"domain_count"`
+	HeadquartersLocation     interface{}     `json:"headquarters_location"`
+}
+
+type VCompanyDomain struct {
+	ID               uuid.UUID `json:"id"`
+	CompanyID        uuid.UUID `json:"company_id"`
+	DomainID         uuid.UUID `json:"domain_id"`
+	Domain           string    `json:"domain"`
+	RelationshipType string    `json:"relationship_type"`
+	Status           string    `json:"status"`
+	Signal           string    `json:"signal"`
+	Confidence       int16     `json:"confidence"`
+	Evidence         []byte    `json:"evidence"`
+	FirstSeenAt      time.Time `json:"first_seen_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+}
+
+type VCompanyEmail struct {
+	ID          uuid.UUID          `json:"id"`
+	CompanyID   uuid.UUID          `json:"company_id"`
+	Email       string             `json:"email"`
+	Description *string            `json:"description"`
+	Purpose     string             `json:"purpose"`
+	Name        *string            `json:"name"`
+	Source      string             `json:"source"`
+	Confidence  *float32           `json:"confidence"`
+	Evidence    json.RawMessage    `json:"evidence"`
+	Metadata    json.RawMessage    `json:"metadata"`
+	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+type VCompanyIndustry struct {
+	ID         uuid.UUID       `json:"id"`
+	CompanyID  uuid.UUID       `json:"company_id"`
+	Industry   string          `json:"industry"`
+	Source     string          `json:"source"`
+	Confidence *float32        `json:"confidence"`
+	Evidence   json.RawMessage `json:"evidence"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type VCompanyLocation struct {
+	ID           uuid.UUID          `json:"id"`
+	CompanyID    uuid.UUID          `json:"company_id"`
+	LocationType string             `json:"location_type"`
+	Label        *string            `json:"label"`
+	AddressLine1 *string            `json:"address_line1"`
+	AddressLine2 *string            `json:"address_line2"`
+	City         *string            `json:"city"`
+	Region       *string            `json:"region"`
+	PostalCode   *string            `json:"postal_code"`
+	Country      *string            `json:"country"`
+	CountryCode  *string            `json:"country_code"`
+	Latitude     *float64           `json:"latitude"`
+	Longitude    *float64           `json:"longitude"`
+	GeoMetadata  json.RawMessage    `json:"geo_metadata"`
+	Source       string             `json:"source"`
+	Confidence   *float32           `json:"confidence"`
+	Evidence     json.RawMessage    `json:"evidence"`
+	RemovedAt    pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+type VCompanyMarket struct {
+	ID         uuid.UUID       `json:"id"`
+	CompanyID  uuid.UUID       `json:"company_id"`
+	Market     string          `json:"market"`
+	Source     string          `json:"source"`
+	Confidence *float32        `json:"confidence"`
+	Evidence   json.RawMessage `json:"evidence"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type VCompanyPhone struct {
+	ID          uuid.UUID          `json:"id"`
+	CompanyID   uuid.UUID          `json:"company_id"`
+	Phone       string             `json:"phone"`
+	Description *string            `json:"description"`
+	Purpose     string             `json:"purpose"`
+	Source      string             `json:"source"`
+	Confidence  *float32           `json:"confidence"`
+	Evidence    json.RawMessage    `json:"evidence"`
+	Metadata    json.RawMessage    `json:"metadata"`
+	RemovedAt   pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+type VCompanyService struct {
+	ID          uuid.UUID       `json:"id"`
+	CompanyID   uuid.UUID       `json:"company_id"`
+	Service     string          `json:"service"`
+	Description *string         `json:"description"`
+	Source      string          `json:"source"`
+	Confidence  *float32        `json:"confidence"`
+	Evidence    json.RawMessage `json:"evidence"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type VCompanySource struct {
+	CompanyID         uuid.UUID `json:"company_id"`
+	ExternalID        string    `json:"external_id"`
+	FetchedAt         time.Time `json:"fetched_at"`
+	SourceID          uuid.UUID `json:"source_id"`
+	SourceName        string    `json:"source_name"`
+	SourceDisplayName string    `json:"source_display_name"`
+	SourceType        string    `json:"source_type"`
+}
+
+type VDomain struct {
+	ID                 uuid.UUID          `json:"id"`
+	Domain             string             `json:"domain"`
+	FirstSeenAt        time.Time          `json:"first_seen_at"`
+	LastVerifiedAt     pgtype.Timestamptz `json:"last_verified_at"`
+	CompanyCount       int32              `json:"company_count"`
+	MaxConfidence      interface{}        `json:"max_confidence"`
+	PrimaryCompanyName string             `json:"primary_company_name"`
+	PrimaryCompanyID   uuid.UUID          `json:"primary_company_id"`
+	PrimarySignal      string             `json:"primary_signal"`
 }
