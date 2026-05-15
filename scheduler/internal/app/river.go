@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
 func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*river.Client[pgx.Tx], error) {
@@ -26,14 +27,16 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*ri
 		slog.Info("river migration applied", "version", v.Version, "direction", "up")
 	}
 
-	workers := river.NewWorkers()
+	w := river.NewWorkers()
+	river.AddWorker(w, &workers.SourceCrawlWorker{})
+	river.AddWorker(w, &workers.DomainResolveWorker{})
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
 			"source_crawl":   {MaxWorkers: cfg.CrawlConcurrency},
 			"domain_resolve": {MaxWorkers: cfg.DomainConcurrency},
 		},
-		Workers: workers,
+		Workers: w,
 	}
 
 	return river.NewClient(riverpgxv5.New(pool), riverCfg)
