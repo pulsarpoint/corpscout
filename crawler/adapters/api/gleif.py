@@ -25,8 +25,9 @@ class GLEIFAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
+        effective_page = int(cursor) if cursor is not None else max(page, 1)
         params: dict[str, Any] = {
-            "page[number]": str(max(page, 1)),
+            "page[number]": str(effective_page),
             "page[size]": str(self.page_size),
         }
         if since is not None:

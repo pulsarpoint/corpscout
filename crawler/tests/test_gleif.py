@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 import respx
@@ -153,3 +151,32 @@ async def test_gleif_has_more_false_at_last_page(adapter: GLEIFAdapter) -> None:
     resp = await adapter.crawl(since=None, cursor=None, page=1)
     assert resp.has_more is False
     assert resp.next_cursor is None
+
+
+@respx.mock
+async def test_gleif_cursor_overrides_page(adapter: GLEIFAdapter) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "data": [],
+                "meta": {
+                    "pagination": {
+                        "total": 0,
+                        "currentPage": 5,
+                        "lastPage": 5,
+                        "nextPage": None,
+                        "perPage": 200,
+                    }
+                },
+            },
+        )
+
+    respx.get("https://api.gleif.org/api/v1/lei-records").mock(side_effect=handler)
+
+    await adapter.crawl(since=None, cursor="5", page=1)
+
+    assert captured["params"]["page[number]"] == "5"
