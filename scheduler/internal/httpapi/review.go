@@ -4,12 +4,52 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
+
+// reviewCandidateItem is a JSON-safe version of ListCandidatesForReviewRow.
+// sqlc emits Evidence as []byte (base64 in JSON) for JOIN queries; this type
+// casts it to json.RawMessage so the frontend receives a proper JSON object.
+type reviewCandidateItem struct {
+	ID               uuid.UUID       `json:"id"`
+	CompanyID        uuid.UUID       `json:"company_id"`
+	DomainID         uuid.UUID       `json:"domain_id"`
+	RelationshipType string          `json:"relationship_type"`
+	Status           string          `json:"status"`
+	Signal           string          `json:"signal"`
+	Confidence       int16           `json:"confidence"`
+	Evidence         json.RawMessage `json:"evidence"`
+	FirstSeenAt      time.Time       `json:"first_seen_at"`
+	LastSeenAt       time.Time       `json:"last_seen_at"`
+	CompanyName      string          `json:"company_name"`
+	Domain           string          `json:"domain"`
+}
+
+func toReviewItem(r db.ListCandidatesForReviewRow) reviewCandidateItem {
+	ev := json.RawMessage(r.Evidence)
+	if len(ev) == 0 {
+		ev = json.RawMessage("null")
+	}
+	return reviewCandidateItem{
+		ID:               r.ID,
+		CompanyID:        r.CompanyID,
+		DomainID:         r.DomainID,
+		RelationshipType: r.RelationshipType,
+		Status:           r.Status,
+		Signal:           r.Signal,
+		Confidence:       r.Confidence,
+		Evidence:         ev,
+		FirstSeenAt:      r.FirstSeenAt,
+		LastSeenAt:       r.LastSeenAt,
+		CompanyName:      r.CompanyName,
+		Domain:           r.Domain,
+	}
+}
 
 func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 	page := queryInt(r, "page", 1)
@@ -25,11 +65,12 @@ func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	if items == nil {
-		items = []db.ListCandidatesForReviewRow{}
+	out := make([]reviewCandidateItem, len(items))
+	for i, row := range items {
+		out[i] = toReviewItem(row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": items, "page": page, "limit": limit,
+		"items": out, "page": page, "limit": limit,
 	})
 }
 

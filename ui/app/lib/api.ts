@@ -48,7 +48,7 @@ export const api = {
     get<ReviewListResponse>(`/review?page=${page}&limit=${limit}`),
 
   createReview: (id: string, action: "approved" | "rejected" | "superseded") =>
-    post<unknown>(`/review/${id}/reviews`, { action, reviewed_by: "" }),
+    post<unknown>(`/review/${id}/reviews`, { action, reviewed_by: "ops" }),
 
   getCompanies: (params: {
     page?: number;
