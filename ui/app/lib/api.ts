@@ -5,6 +5,7 @@ import type {
   CompanyDetail,
   DomainListResponse,
   DataSource,
+  SourceProbeResult,
   PullRunsResponse,
   JobsResponse,
   Country,
@@ -92,6 +93,9 @@ export const api = {
 
   triggerSource: (name: string) =>
     post<{ status: string }>(`/sources/${name}/trigger`, {}),
+
+  probeSource: (name: string) =>
+    post<SourceProbeResult>(`/sources/${name}/probe`, {}),
 
   getPullRuns: (page = 1, limit = 20, source?: string) => {
     const qs = new URLSearchParams({ page: String(page), limit: String(limit) });

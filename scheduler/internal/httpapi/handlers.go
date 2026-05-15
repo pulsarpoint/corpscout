@@ -12,18 +12,20 @@ import (
 	"github.com/riverqueue/river"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 )
 
 // Handlers holds shared dependencies for all REST API handlers.
 type Handlers struct {
-	db   db.Querier
-	rv   *river.Client[pgx.Tx]
-	pool *pgxpool.Pool
+	db      db.Querier
+	rv      *river.Client[pgx.Tx]
+	pool    *pgxpool.Pool
+	crawler *crawlerclient.Client
 }
 
-// NewHandlers constructs Handlers. pool and rv may be nil in tests.
-func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool) *Handlers {
-	return &Handlers{db: q, rv: rv, pool: pool}
+// NewHandlers constructs Handlers. pool, rv and crawler may be nil in tests.
+func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client) *Handlers {
+	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler}
 }
 
 // RegisterRoutes mounts all /api/v1 routes on the router.
@@ -38,6 +40,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/sources/{name}", h.handleGetSource)
 		r.Patch("/sources/{name}", h.handlePatchSource)
 		r.Post("/sources/{name}/trigger", h.handleTriggerSource)
+		r.Post("/sources/{name}/probe", h.handleProbeSource)
 		r.Get("/jobs", h.handleListJobs)
 		r.Get("/pull-runs", h.handleListPullRuns)
 		r.Get("/review", h.handleListReview)

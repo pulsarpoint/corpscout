@@ -189,7 +189,7 @@ func (s *stubQuerier) UpsertDomain(ctx context.Context, domain string) (db.Domai
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
 func newTestHandlers(q db.Querier) *httpapi.Handlers {
-	return httpapi.NewHandlers(q, nil, nil)
+	return httpapi.NewHandlers(q, nil, nil, nil)
 }
 
 // ensure stubQuerier satisfies the interface at compile time

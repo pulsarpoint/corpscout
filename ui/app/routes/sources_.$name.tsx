@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { ChevronLeft, CheckCircle2, XCircle, Clock, Loader2, Pencil, Check, X } from "lucide-react";
+import {
+  ChevronLeft, CheckCircle2, XCircle, Clock, Loader2,
+  Pencil, Check, X, ExternalLink, FlaskConical, ChevronDown, ChevronUp,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api } from "~/lib/api";
-import type { DataSource, PullRun, Job } from "~/types/api";
+import type { DataSource, PullRun, Job, SourceProbeResult } from "~/types/api";
 import { timeAgo, formatDate } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -12,12 +15,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { JobsTable } from "~/components/app/JobsTable";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "~/components/ui/table";
 
 function statusBadge(status: string) {
@@ -43,6 +41,10 @@ export default function SourceDetailPage() {
   const [editingInterval, setEditingInterval] = useState(false);
   const [intervalValue, setIntervalValue] = useState(0);
   const [savingInterval, setSavingInterval] = useState(false);
+
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<SourceProbeResult>();
+  const [probeExpanded, setProbeExpanded] = useState(false);
 
   const [pullRuns, setPullRuns] = useState<PullRun[]>([]);
   const [pullRunsPage, setPullRunsPage] = useState(1);
@@ -106,8 +108,25 @@ export default function SourceDetailPage() {
     setEditingInterval(false);
   }
 
+  async function runProbe() {
+    if (!name) return;
+    setProbing(true);
+    setProbeResult(undefined);
+    setProbeExpanded(true);
+    try {
+      const result = await api.probeSource(name);
+      setProbeResult(result);
+    } catch {
+      toast.error("Probe request failed — check crawler connectivity.");
+    } finally {
+      setProbing(false);
+    }
+  }
+
   if (sourceLoading) return <Skeleton className="h-64 w-full" />;
   if (sourceError || !source) return <Alert variant="destructive"><AlertDescription>{sourceError}</AlertDescription></Alert>;
+
+  const cfg = source.config;
 
   return (
     <div className="space-y-6">
@@ -118,6 +137,7 @@ export default function SourceDetailPage() {
         </Link>
       </div>
 
+      {/* Info card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
@@ -155,46 +175,124 @@ export default function SourceDetailPage() {
                     autoFocus
                   />
                   <span className="text-sm text-muted-foreground">h</span>
-                  <button
-                    onClick={saveInterval}
-                    disabled={savingInterval}
-                    className="text-green-600 hover:text-green-700 disabled:opacity-50"
-                    aria-label="Save"
-                  >
-                    <Check className="size-4" />
-                  </button>
-                  <button
-                    onClick={cancelInterval}
-                    disabled={savingInterval}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-50"
-                    aria-label="Cancel"
-                  >
-                    <X className="size-4" />
-                  </button>
+                  <button onClick={saveInterval} disabled={savingInterval} className="text-green-600 hover:text-green-700 disabled:opacity-50" aria-label="Save"><Check className="size-4" /></button>
+                  <button onClick={cancelInterval} disabled={savingInterval} className="text-muted-foreground hover:text-foreground disabled:opacity-50" aria-label="Cancel"><X className="size-4" /></button>
                 </>
               ) : (
                 <>
                   <span className="text-sm font-medium">{source.crawl_interval_hours}h</span>
-                  <button
-                    onClick={() => setEditingInterval(true)}
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label="Edit interval"
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
+                  <button onClick={() => setEditingInterval(true)} className="text-muted-foreground hover:text-foreground" aria-label="Edit interval"><Pencil className="size-3.5" /></button>
                 </>
               )}
             </div>
           </div>
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Last crawled</p>
-            <p className="mt-1 text-sm">
-              {source.last_crawled_at ? timeAgo(source.last_crawled_at) : "Never"}
-            </p>
+            <p className="mt-1 text-sm">{source.last_crawled_at ? timeAgo(source.last_crawled_at) : "Never"}</p>
           </div>
         </CardContent>
       </Card>
 
+      {/* API details card */}
+      {cfg && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>API Details</span>
+              <Button size="sm" variant="outline" onClick={runProbe} disabled={probing}>
+                {probing
+                  ? <><Loader2 className="size-3.5 mr-1.5 animate-spin" />Probing…</>
+                  : <><FlaskConical className="size-3.5 mr-1.5" />Probe API</>}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Endpoint URL</p>
+                <p className="mt-1 font-mono text-sm break-all">{cfg.api_url}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Protocol</p>
+                <p className="mt-1 text-sm font-medium">{cfg.protocol}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Page size</p>
+                <p className="mt-1 text-sm font-medium">{cfg.page_size} records / request</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Auth</p>
+                <p className="mt-1 text-sm">
+                  {cfg.auth_env
+                    ? <span className="font-mono text-amber-700 dark:text-amber-400">{cfg.auth_env}</span>
+                    : <span className="text-muted-foreground">None required</span>}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Fields extracted</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {cfg.fields.map((f) => (
+                    <Badge key={f} variant="outline" className="text-xs font-mono">{f}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Documentation</p>
+                <a
+                  href={cfg.docs_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  {cfg.docs_url} <ExternalLink className="size-3" />
+                </a>
+              </div>
+            </div>
+            {cfg.notes && (
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                {cfg.notes}
+              </div>
+            )}
+
+            {/* Probe result */}
+            {probeResult && (
+              <div className="rounded-md border">
+                <button
+                  className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
+                  onClick={() => setProbeExpanded((v) => !v)}
+                >
+                  <span className="flex items-center gap-2">
+                    {probeResult.error
+                      ? <XCircle className="size-4 text-red-500" />
+                      : <CheckCircle2 className="size-4 text-green-500" />}
+                    Probe result — {probeResult.duration_ms}ms
+                    {!probeResult.error && (
+                      <span className="text-muted-foreground font-normal">
+                        · {probeResult.records_count} records · total {probeResult.total === -1 ? "unknown" : probeResult.total}
+                        {probeResult.has_more ? " · more available" : ""}
+                      </span>
+                    )}
+                  </span>
+                  {probeExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+                {probeExpanded && (
+                  <div className="border-t px-3 py-2">
+                    {probeResult.error ? (
+                      <p className="text-sm text-red-600 font-mono whitespace-pre-wrap">{probeResult.error}</p>
+                    ) : (
+                      <pre className="text-xs font-mono overflow-auto max-h-96 whitespace-pre-wrap">
+                        {JSON.stringify(probeResult.sample ?? {}, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pull run history */}
       <div>
         <h2 className="mb-3 text-base font-semibold">Pull Run History</h2>
         {pullRunsLoading ? (
@@ -221,12 +319,8 @@ export default function SourceDetailPage() {
                     <TableCell>{statusBadge(run.status)}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{run.records_fetched}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{run.records_upserted}</TableCell>
-                    <TableCell className="text-sm">
-                      {run.completed_at ? formatDate(run.completed_at) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-red-600 max-w-xs truncate">
-                      {run.error_message ?? ""}
-                    </TableCell>
+                    <TableCell className="text-sm">{run.completed_at ? formatDate(run.completed_at) : "—"}</TableCell>
+                    <TableCell className="text-sm text-red-600 max-w-xs truncate">{run.error_message ?? ""}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -240,6 +334,7 @@ export default function SourceDetailPage() {
         )}
       </div>
 
+      {/* Recent jobs */}
       <div>
         <h2 className="mb-3 text-base font-semibold">Recent Jobs</h2>
         {jobsLoading ? (

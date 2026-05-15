@@ -91,6 +91,16 @@ export interface DomainListResponse {
   limit: number;
 }
 
+export interface SourceConfig {
+  api_url: string;
+  docs_url: string;
+  protocol: string;
+  page_size: number;
+  fields: string[];
+  auth_env: string | null;
+  notes: string;
+}
+
 export interface DataSource {
   id: string;
   name: string;
@@ -100,6 +110,16 @@ export interface DataSource {
   enabled: boolean;
   crawl_interval_hours: number;
   last_crawled_at: string | null;
+  config: SourceConfig | null;
+}
+
+export interface SourceProbeResult {
+  records_count: number;
+  total: number;
+  has_more: boolean;
+  sample: Record<string, unknown> | null;
+  error: string | null;
+  duration_ms: number;
 }
 
 export interface PullRun {

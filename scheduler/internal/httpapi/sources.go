@@ -13,6 +13,44 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
+func (h *Handlers) handleProbeSource(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+	if h.crawler == nil {
+		writeError(w, http.StatusServiceUnavailable, "crawler not available")
+		return
+	}
+	start := time.Now()
+	resp, err := h.crawler.Crawl(r.Context(), name, time.Time{}, nil, 1)
+	durationMs := time.Since(start).Milliseconds()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"records_count": 0,
+			"total":         0,
+			"has_more":      false,
+			"sample":        nil,
+			"error":         err.Error(),
+			"duration_ms":   durationMs,
+		})
+		return
+	}
+	var sample any
+	if len(resp.Records) > 0 {
+		sample = resp.Records[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"records_count": len(resp.Records),
+		"total":         resp.Total,
+		"has_more":      resp.HasMore,
+		"sample":        sample,
+		"error":         nil,
+		"duration_ms":   durationMs,
+	})
+}
+
 func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	source, err := h.db.GetSourceByName(r.Context(), name)
