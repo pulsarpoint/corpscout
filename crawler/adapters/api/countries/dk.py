@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import httpx
 
-from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
+from ...base import CompanyEmail, CompanyLocation, CompanyPhone, CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
@@ -43,6 +43,36 @@ class CVRAdapter(SourceAdapter):
         for item in results:
             enddate = item.get("enddate")
             status = "dissolved" if enddate else "active"
+
+            locations = []
+            street = item.get("address")
+            city = item.get("city")
+            zipcode = item.get("zipcode")
+            if street or city:
+                locations.append(CompanyLocation(
+                    location_type="registered_address",
+                    address_line1=street,
+                    city=city,
+                    postal_code=str(zipcode) if zipcode else None,
+                    country="Denmark",
+                    country_code="DK",
+                ))
+
+            phones = []
+            phone = item.get("phone")
+            if phone:
+                phones.append(CompanyPhone(phone=str(phone), purpose="main"))
+
+            emails = []
+            email = item.get("email")
+            if email:
+                emails.append(CompanyEmail(email=str(email), purpose="general"))
+
+            industries = []
+            industry_desc = item.get("industrydesc")
+            if industry_desc:
+                industries.append(str(industry_desc))
+
             records.append(
                 CompanyRecord(
                     name=str(item.get("name") or ""),
@@ -52,6 +82,10 @@ class CVRAdapter(SourceAdapter):
                     website=item.get("website"),
                     raw_data=item,
                     snapshot_hash=compute_hash(item),
+                    locations=locations,
+                    phones=phones,
+                    emails=emails,
+                    industries=industries,
                 )
             )
 

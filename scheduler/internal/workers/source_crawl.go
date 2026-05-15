@@ -150,6 +150,12 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 					"source", sourceName, "company", rec.Name, "error", err)
 			}
 
+			// Upsert enrichment (locations, phones, emails, industries, etc.)
+			if err := w.upsertEnrichment(ctx, company.ID, rec, sourceName); err != nil {
+				slog.Error("source crawl: upsert enrichment failed",
+					"source", sourceName, "company", rec.Name, "error", err)
+			}
+
 			// Upsert aliases.
 			for _, alias := range rec.Aliases {
 				if alias == "" {
@@ -259,6 +265,90 @@ func (w *SourceCrawlWorker) upsertCompany(ctx context.Context, rec crawlerclient
 		})
 	}
 	return db.Company{}, errNoIdentifier
+}
+
+// upsertEnrichment persists profile data extracted from the raw API response:
+// website, founded year, employee estimate, locations, phones, emails, and industries.
+func (w *SourceCrawlWorker) upsertEnrichment(ctx context.Context, companyID uuid.UUID, rec crawlerclient.CompanyRecord, sourceName string) error {
+	// Update scalar enrichment fields (COALESCE — only overwrites nulls).
+	var empJSON []byte
+	if len(rec.EmployeeEstimate) > 0 {
+		empJSON = mustJSON(rec.EmployeeEstimate)
+	}
+	if _, err := w.db.UpdateCompanyEnrichment(ctx, db.UpdateCompanyEnrichmentParams{
+		ID:               companyID,
+		Website:          rec.Website,
+		FoundedYear:      rec.FoundedYear,
+		EmployeeEstimate: empJSON,
+	}); err != nil {
+		return errors.Wrap(err, "update company enrichment")
+	}
+
+	evidence := json.RawMessage(mustJSON(map[string]any{"source": sourceName}))
+
+	for _, loc := range rec.Locations {
+		if _, err := w.db.UpsertCompanyLocation(ctx, db.UpsertCompanyLocationParams{
+			CompanyID:    companyID,
+			LocationType: loc.LocationType,
+			AddressLine1: loc.AddressLine1,
+			AddressLine2: loc.AddressLine2,
+			City:         loc.City,
+			Region:       loc.Region,
+			PostalCode:   loc.PostalCode,
+			Country:      loc.Country,
+			CountryCode:  loc.CountryCode,
+			Source:       sourceName,
+			Evidence:     evidence,
+		}); err != nil {
+			slog.Warn("source crawl: upsert location failed", "source", sourceName, "company_id", companyID, "error", err)
+		}
+	}
+
+	for _, ph := range rec.Phones {
+		if ph.Phone == "" {
+			continue
+		}
+		if _, err := w.db.UpsertCompanyPhone(ctx, db.UpsertCompanyPhoneParams{
+			CompanyID: companyID,
+			Phone:     ph.Phone,
+			Purpose:   ph.Purpose,
+			Source:    sourceName,
+			Evidence:  evidence,
+		}); err != nil {
+			slog.Warn("source crawl: upsert phone failed", "source", sourceName, "company_id", companyID, "error", err)
+		}
+	}
+
+	for _, em := range rec.Emails {
+		if em.Email == "" {
+			continue
+		}
+		if _, err := w.db.UpsertCompanyEmail(ctx, db.UpsertCompanyEmailParams{
+			CompanyID: companyID,
+			Email:     em.Email,
+			Purpose:   em.Purpose,
+			Source:    sourceName,
+			Evidence:  evidence,
+		}); err != nil {
+			slog.Warn("source crawl: upsert email failed", "source", sourceName, "company_id", companyID, "error", err)
+		}
+	}
+
+	for _, ind := range rec.Industries {
+		if ind == "" {
+			continue
+		}
+		if _, err := w.db.UpsertCompanyIndustry(ctx, db.UpsertCompanyIndustryParams{
+			CompanyID: companyID,
+			Industry:  ind,
+			Source:    sourceName,
+			Evidence:  evidence,
+		}); err != nil {
+			slog.Warn("source crawl: upsert industry failed", "source", sourceName, "company_id", companyID, "error", err)
+		}
+	}
+
+	return nil
 }
 
 // companyExternalID returns the best available external identifier for a company record.

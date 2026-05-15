@@ -13,17 +13,50 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// CompanyLocation mirrors the Python CompanyLocation model.
+type CompanyLocation struct {
+	LocationType string  `json:"location_type"`
+	AddressLine1 *string `json:"address_line1,omitempty"`
+	AddressLine2 *string `json:"address_line2,omitempty"`
+	City         *string `json:"city,omitempty"`
+	Region       *string `json:"region,omitempty"`
+	PostalCode   *string `json:"postal_code,omitempty"`
+	Country      *string `json:"country,omitempty"`
+	CountryCode  *string `json:"country_code,omitempty"`
+	Source       string  `json:"source"`
+}
+
+// CompanyPhone mirrors the Python CompanyPhone model.
+type CompanyPhone struct {
+	Phone   string `json:"phone"`
+	Purpose string `json:"purpose"`
+	Source  string `json:"source"`
+}
+
+// CompanyEmail mirrors the Python CompanyEmail model.
+type CompanyEmail struct {
+	Email   string `json:"email"`
+	Purpose string `json:"purpose"`
+	Source  string `json:"source"`
+}
+
 // CompanyRecord mirrors the Python CompanyRecord data model returned by the crawler.
 type CompanyRecord struct {
-	Name               string                 `json:"name"`
-	CountryISO2        string                 `json:"country_iso2"`
-	RegistrationNumber *string                `json:"registration_number,omitempty"`
-	LEI                *string                `json:"lei,omitempty"`
-	Status             string                 `json:"status"`
-	Website            *string                `json:"website,omitempty"`
-	Aliases            []string               `json:"aliases,omitempty"`
-	RawData            map[string]any `json:"raw_data,omitempty"`
-	SnapshotHash       string                 `json:"snapshot_hash"`
+	Name               string           `json:"name"`
+	CountryISO2        string           `json:"country_iso2"`
+	RegistrationNumber *string          `json:"registration_number,omitempty"`
+	LEI                *string          `json:"lei,omitempty"`
+	Status             string           `json:"status"`
+	Website            *string          `json:"website,omitempty"`
+	Aliases            []string         `json:"aliases,omitempty"`
+	RawData            map[string]any   `json:"raw_data,omitempty"`
+	SnapshotHash       string           `json:"snapshot_hash"`
+	Locations          []CompanyLocation `json:"locations,omitempty"`
+	Phones             []CompanyPhone    `json:"phones,omitempty"`
+	Emails             []CompanyEmail    `json:"emails,omitempty"`
+	Industries         []string          `json:"industries,omitempty"`
+	FoundedYear        *int32            `json:"founded_year,omitempty"`
+	EmployeeEstimate   map[string]any    `json:"employee_estimate,omitempty"`
 }
 
 // CrawlResponse is returned by POST /crawl/{source_name}.

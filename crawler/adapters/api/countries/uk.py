@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import httpx
 
-from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
+from ...base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
@@ -53,6 +53,33 @@ class CompaniesHouseAdapter(SourceAdapter):
         items = data.get("items") or []
         records: list[CompanyRecord] = []
         for item in items:
+            locations = []
+            addr = item.get("registered_office_address") or {}
+            if addr:
+                locations.append(CompanyLocation(
+                    location_type="registered_address",
+                    address_line1=addr.get("address_line_1"),
+                    address_line2=addr.get("address_line_2"),
+                    city=addr.get("locality"),
+                    region=addr.get("region"),
+                    postal_code=addr.get("postal_code"),
+                    country=addr.get("country"),
+                    country_code="GB",
+                ))
+
+            founded_year: int | None = None
+            date_of_creation = item.get("date_of_creation")
+            if date_of_creation:
+                try:
+                    founded_year = int(str(date_of_creation)[:4])
+                except (ValueError, TypeError):
+                    pass
+
+            industries = []
+            for sic in (item.get("sic_codes") or []):
+                if sic:
+                    industries.append(str(sic))
+
             records.append(
                 CompanyRecord(
                     name=str(item.get("company_name") or ""),
@@ -61,6 +88,9 @@ class CompaniesHouseAdapter(SourceAdapter):
                     status=_map_status(item.get("company_status")),
                     raw_data=item,
                     snapshot_hash=compute_hash(item),
+                    locations=locations,
+                    founded_year=founded_year,
+                    industries=industries,
                 )
             )
 

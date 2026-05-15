@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 import httpx
 
-from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
+from ...base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
@@ -41,6 +41,38 @@ class BrregAdapter(SourceAdapter):
             under_avvikling = bool(item.get("underAvvikling"))
             status = "dissolved" if (konkurs or under_avvikling) else "active"
 
+            locations = []
+            addr = item.get("forretningsadresse") or {}
+            if addr:
+                addr_lines = addr.get("adresse") or []
+                locations.append(CompanyLocation(
+                    location_type="registered_address",
+                    address_line1=addr_lines[0] if addr_lines else None,
+                    address_line2=addr_lines[1] if len(addr_lines) > 1 else None,
+                    city=addr.get("poststed"),
+                    postal_code=str(addr.get("postnummer")) if addr.get("postnummer") else None,
+                    country="Norway",
+                    country_code=addr.get("landkode") or "NO",
+                ))
+
+            industries = []
+            for code_key in ("naeringskode1", "naeringskode2", "naeringskode3"):
+                code = item.get(code_key) or {}
+                desc = code.get("beskrivelse")
+                if desc:
+                    industries.append(desc)
+
+            founded_year: int | None = None
+            stiftelse = item.get("stiftelsesdato")
+            if stiftelse:
+                try:
+                    founded_year = int(str(stiftelse)[:4])
+                except (ValueError, TypeError):
+                    pass
+
+            ansatte = item.get("antallAnsatte")
+            employee_estimate = {"count": int(ansatte)} if ansatte is not None else {}
+
             records.append(
                 CompanyRecord(
                     name=str(item.get("navn") or ""),
@@ -50,6 +82,10 @@ class BrregAdapter(SourceAdapter):
                     website=item.get("hjemmeside"),
                     raw_data=item,
                     snapshot_hash=compute_hash(item),
+                    locations=locations,
+                    industries=industries,
+                    founded_year=founded_year,
+                    employee_estimate=employee_estimate,
                 )
             )
 

@@ -96,6 +96,13 @@ class CompanyRecord(BaseModel):
     aliases: list[str] = []        # trading names, former names, normalized variants
     raw_data: dict
     snapshot_hash: str             # SHA-256 of raw_data JSON
+    # Enrichment fields
+    locations: list[CompanyLocation] = []
+    phones: list[CompanyPhone] = []
+    emails: list[CompanyEmail] = []
+    industries: list[str] = []
+    founded_year: int | None = None
+    employee_estimate: dict = {}
 ```
 
 ### Two crawler paths

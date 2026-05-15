@@ -9,6 +9,30 @@ from typing import Any, ClassVar
 from pydantic import BaseModel
 
 
+class CompanyLocation(BaseModel):
+    location_type: str  # "registered_address", "headquarters", "office"
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    region: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    country_code: str | None = None
+    source: str = "registry"
+
+
+class CompanyPhone(BaseModel):
+    phone: str
+    purpose: str = "main"  # "main", "fax", "support"
+    source: str = "registry"
+
+
+class CompanyEmail(BaseModel):
+    email: str
+    purpose: str = "general"  # "general", "support", "billing"
+    source: str = "registry"
+
+
 class CompanyRecord(BaseModel):
     name: str
     country_iso2: str
@@ -19,6 +43,13 @@ class CompanyRecord(BaseModel):
     aliases: list[str] = []
     raw_data: dict
     snapshot_hash: str  # SHA-256 of canonical raw_data JSON
+    # Enrichment fields — populated when the raw API response contains them
+    locations: list[CompanyLocation] = []
+    phones: list[CompanyPhone] = []
+    emails: list[CompanyEmail] = []
+    industries: list[str] = []
+    founded_year: int | None = None
+    employee_estimate: dict = {}
 
 
 class CrawlResponse(BaseModel):
