@@ -15,6 +15,9 @@ type Querier interface {
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
 	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
+	// Atomically records the review decision and updates the domain candidate status
+	// in a single statement so the audit trail can never diverge from the domain state.
+	CreateDomainReviewAndUpdateStatus(ctx context.Context, arg CreateDomainReviewAndUpdateStatusParams) (CompanyDomainReview, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)

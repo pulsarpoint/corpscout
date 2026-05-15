@@ -43,6 +43,49 @@ func (q *Queries) CreateDomainReview(ctx context.Context, arg CreateDomainReview
 	return i, err
 }
 
+const createDomainReviewAndUpdateStatus = `-- name: CreateDomainReviewAndUpdateStatus :one
+WITH upd AS (
+    UPDATE company_domains
+    SET status = $5, relationship_type = $6
+    WHERE id = $1
+)
+INSERT INTO company_domain_reviews (company_domain_id, action, reviewed_by, review_note)
+VALUES ($1, $2, $3, $4)
+RETURNING id, company_domain_id, action, reviewed_by, review_note, created_at
+`
+
+type CreateDomainReviewAndUpdateStatusParams struct {
+	CompanyDomainID  uuid.UUID `json:"company_domain_id"`
+	Action           string    `json:"action"`
+	ReviewedBy       string    `json:"reviewed_by"`
+	ReviewNote       *string   `json:"review_note"`
+	Status           string    `json:"status"`
+	RelationshipType string    `json:"relationship_type"`
+}
+
+// Atomically records the review decision and updates the domain candidate status
+// in a single statement so the audit trail can never diverge from the domain state.
+func (q *Queries) CreateDomainReviewAndUpdateStatus(ctx context.Context, arg CreateDomainReviewAndUpdateStatusParams) (CompanyDomainReview, error) {
+	row := q.db.QueryRow(ctx, createDomainReviewAndUpdateStatus,
+		arg.CompanyDomainID,
+		arg.Action,
+		arg.ReviewedBy,
+		arg.ReviewNote,
+		arg.Status,
+		arg.RelationshipType,
+	)
+	var i CompanyDomainReview
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyDomainID,
+		&i.Action,
+		&i.ReviewedBy,
+		&i.ReviewNote,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listReviewsForClaim = `-- name: ListReviewsForClaim :many
 SELECT id, company_domain_id, action, reviewed_by, review_note, created_at FROM company_domain_reviews
 WHERE company_domain_id = $1

@@ -66,24 +66,16 @@ func (h *Handlers) handleCreateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	review, err := h.db.CreateDomainReview(r.Context(), db.CreateDomainReviewParams{
-		CompanyDomainID: id,
-		Action:          req.Action,
-		ReviewedBy:      req.ReviewedBy,
-		ReviewNote:      req.ReviewNote,
+	review, err := h.db.CreateDomainReviewAndUpdateStatus(r.Context(), db.CreateDomainReviewAndUpdateStatusParams{
+		CompanyDomainID:  id,
+		Action:           req.Action,
+		ReviewedBy:       req.ReviewedBy,
+		ReviewNote:       req.ReviewNote,
+		Status:           status,
+		RelationshipType: relType,
 	})
 	if err != nil {
 		slog.Error("create domain review", "company_domain_id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	if err := h.db.UpdateCompanyDomainStatus(r.Context(), db.UpdateCompanyDomainStatusParams{
-		ID:               id,
-		Status:           status,
-		RelationshipType: relType,
-	}); err != nil {
-		slog.Error("update company domain status", "company_domain_id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

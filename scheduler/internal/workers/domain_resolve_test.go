@@ -17,6 +17,62 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+func TestNormalizeSignal(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"crtsh", "certsh"},
+		{"duckduckgo", "search"},
+		{"certsh", "certsh"},
+		{"search", "search"},
+		{"wikidata", "wikidata"},
+		{"registry_website", "registry_website"},
+		{"whois", "whois"},
+		{"unknown_signal", "unknown_signal"},
+	}
+	for _, c := range cases {
+		if got := normalizeSignal(c.in); got != c.want {
+			t.Errorf("normalizeSignal(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestDomainResolveWorker_returns_error_when_all_candidates_fail(t *testing.T) {
+	ctx := context.Background()
+
+	companyID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	countryID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	company := db.Company{ID: companyID, Name: "Bad Corp", CountryID: countryID}
+	country := db.Country{ID: countryID, IsoAlpha2: "XX"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := crawlerclient.ResolveResponse{
+			Candidates: []crawlerclient.DomainCandidate{
+				{Domain: "bad.example", Signal: "certsh", Confidence: 60},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	crawler := crawlerclient.New(srv.URL)
+	q := &mockQuerier{}
+
+	q.On("GetCompany", ctx, companyID).Return(company, nil)
+	q.On("GetCountryByID", ctx, countryID).Return(country, nil)
+	// UpsertDomain fails — simulates any DB error for every candidate.
+	q.On("UpsertDomain", ctx, "bad.example").Return(db.Domain{}, assert.AnError)
+
+	worker := NewDomainResolveWorker(q, crawler)
+	job := &river.Job[DomainResolveArgs]{
+		JobRow: &rivertype.JobRow{ID: 99},
+		Args:   DomainResolveArgs{CompanyID: companyID.String()},
+	}
+
+	err := worker.Work(ctx, job)
+	assert.Error(t, err, "expected error when all candidates fail to persist")
+}
+
 func TestDomainResolveWorker_upserts_active_domain_for_high_confidence(t *testing.T) {
 	ctx := context.Background()
 

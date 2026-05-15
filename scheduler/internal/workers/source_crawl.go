@@ -67,6 +67,17 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 		return errors.Wrap(err, "create pull run")
 	}
 
+	// Mark last_crawled_at now so scheduleOnce won't re-enqueue this source
+	// while the crawl is still running (which can take hours for large sources).
+	if err := w.db.UpdateSourceCursor(ctx, db.UpdateSourceCursorParams{
+		ID:            source.ID,
+		LastCursor:    source.LastCursor,
+		LastCrawledAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		slog.Error("source crawl: stamp last_crawled_at failed", "source", sourceName, "job_id", job.ID, "error", err)
+		return errors.Wrap(err, "stamp last_crawled_at")
+	}
+
 	pullRunUUID := pgtype.UUID{Bytes: pullRun.ID, Valid: true}
 	sourceUUID := pgtype.UUID{Bytes: source.ID, Valid: true}
 
@@ -115,8 +126,13 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 
 			company, err := w.upsertCompany(ctx, rec, country.ID, sourceUUID)
 			if err != nil {
-				slog.Error("source crawl: upsert company failed",
-					"source", sourceName, "company", rec.Name, "error", err)
+				if errors.Is(err, errNoIdentifier) {
+					slog.Warn("source crawl: skipping company with no stable identifier",
+						"source", sourceName, "company", rec.Name, "country", rec.CountryISO2)
+				} else {
+					slog.Error("source crawl: upsert company failed",
+						"source", sourceName, "company", rec.Name, "error", err)
+				}
 				continue
 			}
 
@@ -201,6 +217,11 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 	return nil
 }
 
+// errNoIdentifier is returned by upsertCompany when a record lacks both a LEI
+// and a registration number. The unique indexes cannot prevent duplicates for
+// such records, so the company is skipped rather than silently duplicated.
+var errNoIdentifier = errors.New("no stable identifier")
+
 // upsertCompany inserts or updates a company record by LEI or registration number.
 func (w *SourceCrawlWorker) upsertCompany(ctx context.Context, rec crawlerclient.CompanyRecord, countryID uuid.UUID, primarySourceID pgtype.UUID) (db.Company, error) {
 	if rec.LEI != nil && *rec.LEI != "" {
@@ -213,13 +234,16 @@ func (w *SourceCrawlWorker) upsertCompany(ctx context.Context, rec crawlerclient
 			PrimarySourceID:    primarySourceID,
 		})
 	}
-	return w.db.UpsertCompanyByRegNumber(ctx, db.UpsertCompanyByRegNumberParams{
-		Name:               rec.Name,
-		CountryID:          countryID,
-		RegistrationNumber: rec.RegistrationNumber,
-		Status:             rec.Status,
-		PrimarySourceID:    primarySourceID,
-	})
+	if rec.RegistrationNumber != nil && *rec.RegistrationNumber != "" {
+		return w.db.UpsertCompanyByRegNumber(ctx, db.UpsertCompanyByRegNumberParams{
+			Name:               rec.Name,
+			CountryID:          countryID,
+			RegistrationNumber: rec.RegistrationNumber,
+			Status:             rec.Status,
+			PrimarySourceID:    primarySourceID,
+		})
+	}
+	return db.Company{}, errNoIdentifier
 }
 
 // companyExternalID returns the best available external identifier for a company record.

@@ -12,6 +12,23 @@ import (
 	"github.com/riverqueue/river"
 )
 
+// signalAliases maps signal names that sources may emit to the canonical values
+// accepted by the company_domains CHECK constraint. Any value not present here
+// is passed through unchanged; if the result is still invalid the DB write will
+// return an error that gets counted as a failure.
+var signalAliases = map[string]string{
+	// historical crawler typo — keep forever so old jobs don't break
+	"crtsh":      "certsh",
+	"duckduckgo": "search",
+}
+
+func normalizeSignal(s string) string {
+	if canonical, ok := signalAliases[s]; ok {
+		return canonical
+	}
+	return s
+}
+
 // DomainResolveWorker resolves candidate domains for a company by calling the
 // crawler's domain resolution pipeline and persisting results.
 type DomainResolveWorker struct {
@@ -66,8 +83,15 @@ func (w *DomainResolveWorker) Work(ctx context.Context, job *river.Job[DomainRes
 		return errors.Wrap(err, "resolve domain")
 	}
 
+	if len(resp.Candidates) == 0 {
+		return nil
+	}
+
 	// 6. Persist each candidate.
+	persisted := 0
 	for _, candidate := range resp.Candidates {
+		signal := normalizeSignal(candidate.Signal)
+
 		// a. Upsert the domain itself.
 		domainRow, err := w.db.UpsertDomain(ctx, candidate.Domain)
 		if err != nil {
@@ -93,15 +117,24 @@ func (w *DomainResolveWorker) Work(ctx context.Context, job *river.Job[DomainRes
 			DomainID:         domainRow.ID,
 			RelationshipType: relType,
 			Status:           status,
-			Signal:           candidate.Signal,
+			Signal:           signal,
 			Confidence:       int16(candidate.Confidence),
 			Evidence:         evidenceBytes,
 		})
 		if err != nil {
 			slog.Error("domain resolve: upsert company domain failed",
-				"company_id", companyID, "domain", candidate.Domain, "error", err)
+				"company_id", companyID, "domain", candidate.Domain, "signal", signal, "error", err)
 			continue
 		}
+		persisted++
+	}
+
+	// If every candidate failed to persist the job should retry — a systematic
+	// failure (e.g. invalid signal value reaching the DB) would otherwise look
+	// like success in River's job history.
+	if persisted == 0 {
+		return errors.Newf("domain resolve: 0/%d candidates persisted for company %s",
+			len(resp.Candidates), companyID)
 	}
 
 	return nil

@@ -71,17 +71,14 @@ func TestHandleCreateReview_Approved(t *testing.T) {
 	}
 
 	q := &stubQuerier{}
-	q.On("CreateDomainReview", mock.Anything, db.CreateDomainReviewParams{
-		CompanyDomainID: cdID,
-		Action:          "approved",
-		ReviewedBy:      "alice",
-		ReviewNote:      &note,
-	}).Return(review, nil)
-	q.On("UpdateCompanyDomainStatus", mock.Anything, db.UpdateCompanyDomainStatusParams{
-		ID:               cdID,
+	q.On("CreateDomainReviewAndUpdateStatus", mock.Anything, db.CreateDomainReviewAndUpdateStatusParams{
+		CompanyDomainID:  cdID,
+		Action:           "approved",
+		ReviewedBy:       "alice",
+		ReviewNote:       &note,
 		Status:           "active",
 		RelationshipType: "official_site",
-	}).Return(nil)
+	}).Return(review, nil)
 
 	r := chi.NewRouter()
 	newTestHandlers(q).RegisterRoutes(r)
@@ -114,17 +111,14 @@ func TestHandleCreateReview_Rejected(t *testing.T) {
 	}
 
 	q := &stubQuerier{}
-	q.On("CreateDomainReview", mock.Anything, db.CreateDomainReviewParams{
-		CompanyDomainID: cdID,
-		Action:          "rejected",
-		ReviewedBy:      "bob",
-		ReviewNote:      (*string)(nil),
-	}).Return(review, nil)
-	q.On("UpdateCompanyDomainStatus", mock.Anything, db.UpdateCompanyDomainStatusParams{
-		ID:               cdID,
+	q.On("CreateDomainReviewAndUpdateStatus", mock.Anything, db.CreateDomainReviewAndUpdateStatusParams{
+		CompanyDomainID:  cdID,
+		Action:           "rejected",
+		ReviewedBy:       "bob",
+		ReviewNote:       (*string)(nil),
 		Status:           "rejected",
 		RelationshipType: "candidate",
-	}).Return(nil)
+	}).Return(review, nil)
 
 	r := chi.NewRouter()
 	newTestHandlers(q).RegisterRoutes(r)

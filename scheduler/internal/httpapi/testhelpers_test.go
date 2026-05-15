@@ -68,6 +68,11 @@ func (s *stubQuerier) CreateDomainReview(ctx context.Context, arg db.CreateDomai
 	return ret.Get(0).(db.CompanyDomainReview), ret.Error(1)
 }
 
+func (s *stubQuerier) CreateDomainReviewAndUpdateStatus(ctx context.Context, arg db.CreateDomainReviewAndUpdateStatusParams) (db.CompanyDomainReview, error) {
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(db.CompanyDomainReview), ret.Error(1)
+}
+
 func (s *stubQuerier) CreatePullRun(ctx context.Context, arg db.CreatePullRunParams) (db.SourcePullRun, error) {
 	return db.SourcePullRun{}, nil
 }
@@ -127,8 +132,7 @@ func (s *stubQuerier) ListSources(ctx context.Context) ([]db.DataSource, error) 
 }
 
 func (s *stubQuerier) UpdateCompanyDomainStatus(ctx context.Context, arg db.UpdateCompanyDomainStatusParams) error {
-	ret := s.Called(ctx, arg)
-	return ret.Error(0)
+	return nil
 }
 
 func (s *stubQuerier) UpdateSourceCursor(ctx context.Context, arg db.UpdateSourceCursorParams) error {

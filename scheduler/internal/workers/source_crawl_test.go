@@ -38,6 +38,10 @@ func (m *mockQuerier) CountDomains(ctx context.Context, arg db.CountDomainsParam
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *mockQuerier) CreateDomainReviewAndUpdateStatus(ctx context.Context, arg db.CreateDomainReviewAndUpdateStatusParams) (db.CompanyDomainReview, error) {
+	return db.CompanyDomainReview{}, nil
+}
+
 func (m *mockQuerier) CreateDomainReview(ctx context.Context, arg db.CreateDomainReviewParams) (db.CompanyDomainReview, error) {
 	args := m.Called(ctx, arg)
 	return args.Get(0).(db.CompanyDomainReview), args.Error(1)
