@@ -31,6 +31,7 @@ type Querier interface {
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
+	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
 	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error

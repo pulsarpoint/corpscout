@@ -119,6 +119,14 @@ func (s *stubQuerier) ListDomains(ctx context.Context, arg db.ListDomainsParams)
 	return nil, ret.Error(1)
 }
 
+func (s *stubQuerier) ListPullRuns(ctx context.Context, arg db.ListPullRunsParams) ([]db.ListPullRunsRow, error) {
+	ret := s.Called(ctx, arg)
+	if v, ok := ret.Get(0).([]db.ListPullRunsRow); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
+}
+
 func (s *stubQuerier) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]db.CompanyDomainReview, error) {
 	return nil, nil
 }

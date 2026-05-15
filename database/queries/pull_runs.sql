@@ -18,3 +18,10 @@ WHERE id = $1;
 INSERT INTO source_snapshots (source_id, pull_run_id, payload_hash, payload)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (source_id, payload_hash) DO NOTHING;
+
+-- name: ListPullRuns :many
+SELECT spr.*, ds.name AS source_name
+FROM source_pull_runs spr
+JOIN data_sources ds ON ds.id = spr.source_id
+ORDER BY spr.started_at DESC
+LIMIT $1 OFFSET $2;

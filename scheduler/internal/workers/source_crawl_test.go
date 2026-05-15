@@ -112,6 +112,14 @@ func (m *mockQuerier) ListDomainsForCompany(ctx context.Context, companyID uuid.
 	return args.Get(0).([]db.ListDomainsForCompanyRow), args.Error(1)
 }
 
+func (m *mockQuerier) ListPullRuns(ctx context.Context, arg db.ListPullRunsParams) ([]db.ListPullRunsRow, error) {
+	args := m.Called(ctx, arg)
+	if v, ok := args.Get(0).([]db.ListPullRunsRow); ok {
+		return v, args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *mockQuerier) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]db.CompanyDomainReview, error) {
 	args := m.Called(ctx, companyDomainID)
 	return args.Get(0).([]db.CompanyDomainReview), args.Error(1)

@@ -8,8 +8,10 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const completePullRun = `-- name: CompletePullRun :exec
@@ -106,4 +108,69 @@ func (q *Queries) InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnap
 		arg.Payload,
 	)
 	return err
+}
+
+const listPullRuns = `-- name: ListPullRuns :many
+SELECT spr.id, spr.source_id, spr.river_job_id, spr.started_at, spr.completed_at, spr.status, spr.cursor_start, spr.cursor_end, spr.snapshot_date, spr.records_fetched, spr.records_upserted, spr.error_message, spr.created_at, ds.name AS source_name
+FROM source_pull_runs spr
+JOIN data_sources ds ON ds.id = spr.source_id
+ORDER BY spr.started_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListPullRunsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListPullRunsRow struct {
+	ID              uuid.UUID          `json:"id"`
+	SourceID        uuid.UUID          `json:"source_id"`
+	RiverJobID      *int64             `json:"river_job_id"`
+	StartedAt       time.Time          `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	Status          string             `json:"status"`
+	CursorStart     *string            `json:"cursor_start"`
+	CursorEnd       *string            `json:"cursor_end"`
+	SnapshotDate    pgtype.Date        `json:"snapshot_date"`
+	RecordsFetched  int32              `json:"records_fetched"`
+	RecordsUpserted int32              `json:"records_upserted"`
+	ErrorMessage    *string            `json:"error_message"`
+	CreatedAt       time.Time          `json:"created_at"`
+	SourceName      string             `json:"source_name"`
+}
+
+func (q *Queries) ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error) {
+	rows, err := q.db.Query(ctx, listPullRuns, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPullRunsRow
+	for rows.Next() {
+		var i ListPullRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceID,
+			&i.RiverJobID,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.Status,
+			&i.CursorStart,
+			&i.CursorEnd,
+			&i.SnapshotDate,
+			&i.RecordsFetched,
+			&i.RecordsUpserted,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.SourceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -38,6 +38,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Patch("/sources/{name}", h.handlePatchSource)
 		r.Post("/sources/{name}/trigger", h.handleTriggerSource)
 		r.Get("/jobs", h.handleListJobs)
+		r.Get("/pull-runs", h.handleListPullRuns)
 		r.Get("/review", h.handleListReview)
 		r.Post("/review/{id}/reviews", h.handleCreateReview)
 	})
