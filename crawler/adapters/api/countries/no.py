@@ -7,6 +7,8 @@ import httpx
 
 from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
+_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
 
 class BrregAdapter(SourceAdapter):
     source_name: ClassVar[str] = "brreg"
@@ -19,7 +21,8 @@ class BrregAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
-        zero_page = max(page - 1, 0)
+        effective_page = int(cursor) if cursor else max(page, 1)
+        zero_page = max(effective_page - 1, 0)
         params: dict[str, Any] = {
             "page": str(zero_page),
             "size": str(self.page_size),
@@ -29,7 +32,7 @@ class BrregAdapter(SourceAdapter):
             params["fraRegistreringsdato"] = since.date().isoformat()
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 

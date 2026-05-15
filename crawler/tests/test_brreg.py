@@ -94,3 +94,21 @@ async def test_brreg_passes_since_filter(adapter: BrregAdapter) -> None:
 
     assert captured["params"]["page"] == "1"  # zero-indexed (page=2 → 1)
     assert captured["params"]["fraRegistreringsdato"] == "2024-03-01"
+
+
+@respx.mock
+async def test_brreg_cursor_overrides_page(adapter: BrregAdapter) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={"_embedded": {"enheter": []}, "page": {"size": 200, "totalElements": 0, "totalPages": 0, "number": 0}},
+        )
+
+    respx.get("https://data.brreg.no/enhetsregisteret/api/enheter").mock(side_effect=handler)
+
+    await adapter.crawl(since=None, cursor="5", page=1)
+
+    assert captured["params"]["page"] == "4"  # cursor=5 → 1-indexed page 5 → 0-indexed page 4

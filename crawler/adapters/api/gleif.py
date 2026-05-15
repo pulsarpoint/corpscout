@@ -7,6 +7,8 @@ import httpx
 
 from ..base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
+_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
 _STATUS_MAP = {
     "ACTIVE": "active",
     "INACTIVE": "inactive",
@@ -25,7 +27,7 @@ class GLEIFAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
-        effective_page = int(cursor) if cursor is not None else max(page, 1)
+        effective_page = int(cursor) if cursor else max(page, 1)
         params: dict[str, Any] = {
             "page[number]": str(effective_page),
             "page[size]": str(self.page_size),
@@ -34,7 +36,7 @@ class GLEIFAdapter(SourceAdapter):
             params["filter[lastUpdateTime]"] = since.isoformat()
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.base_url, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(self.base_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 

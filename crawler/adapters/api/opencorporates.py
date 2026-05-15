@@ -8,6 +8,8 @@ import httpx
 
 from ..base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
+_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
 
 def _map_status(current_status: str | None, inactive: bool) -> str:
     if inactive:
@@ -33,14 +35,14 @@ class OpenCorporatesAdapter(SourceAdapter):
             "q": "*",
             "inactive": "false",
             "per_page": str(self.page_size),
-            "page": str(max(page, 1)),
+            "page": str(int(cursor) if cursor else max(page, 1)),
         }
         api_key = os.getenv("OPENCORPORATES_API_KEY")
         if api_key:
             params["api_token"] = api_key
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 

@@ -8,6 +8,8 @@ import httpx
 
 from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
+_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
 
 def _map_status(value: str | None) -> str:
     v = (value or "").lower()
@@ -35,7 +37,8 @@ class CompaniesHouseAdapter(SourceAdapter):
         if not api_key:
             return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
 
-        start_index = (max(page, 1) - 1) * self.page_size
+        effective_page = int(cursor) if cursor else max(page, 1)
+        start_index = (effective_page - 1) * self.page_size
         params: dict[str, Any] = {
             "size": str(self.page_size),
             "start_index": str(start_index),
@@ -43,7 +46,7 @@ class CompaniesHouseAdapter(SourceAdapter):
         }
 
         async with httpx.AsyncClient(timeout=30.0, auth=(api_key, "")) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 

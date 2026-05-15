@@ -122,3 +122,23 @@ async def test_companies_house_paging(monkeypatch: pytest.MonkeyPatch) -> None:
     # 200 + 1 < 250 -> has_more
     assert resp.has_more is True
     assert resp.next_cursor == "4"
+
+
+@respx.mock
+async def test_companies_house_cursor_overrides_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMPANIES_HOUSE_API_KEY", "key")
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={"items": [], "total_results": 0, "start_index": 400, "items_per_page": 100},
+        )
+
+    respx.get("https://api.company-information.service.gov.uk/advanced-search/companies").mock(side_effect=handler)
+
+    adapter = CompaniesHouseAdapter()
+    await adapter.crawl(since=None, cursor="5", page=1)
+
+    assert captured["params"]["start_index"] == "400"  # cursor=5 → page 5 → start_index=400

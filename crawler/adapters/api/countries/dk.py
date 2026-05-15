@@ -8,6 +8,8 @@ import httpx
 
 from ...base import CompanyRecord, CrawlResponse, SourceAdapter, compute_hash
 
+_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
 
 class CVRAdapter(SourceAdapter):
     source_name: ClassVar[str] = "cvr"
@@ -33,7 +35,7 @@ class CVRAdapter(SourceAdapter):
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 

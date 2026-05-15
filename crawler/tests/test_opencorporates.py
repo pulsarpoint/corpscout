@@ -106,3 +106,22 @@ async def test_oc_status_mapping() -> None:
         resp = await adapter.crawl(since=None, cursor=None, page=1)
         assert resp.records[0].status == want, (current, inactive)
         respx.reset()
+
+
+@respx.mock
+async def test_oc_cursor_overrides_page() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={"results": {"companies": [], "total_count": 0, "page": 7, "per_page": 100}},
+        )
+
+    respx.get("https://api.opencorporates.com/v0.4/companies/search").mock(side_effect=handler)
+
+    adapter = OpenCorporatesAdapter()
+    await adapter.crawl(since=None, cursor="7", page=1)
+
+    assert captured["params"]["page"] == "7"

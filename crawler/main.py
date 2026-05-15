@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+import httpx as _httpx
 from pydantic import BaseModel
 
 from adapters import registry
@@ -19,6 +21,15 @@ from domain_resolver import DomainResolver
 
 app = FastAPI(title="corpscout-crawler", version="0.2.0")
 resolver = DomainResolver()
+
+
+@app.exception_handler(_httpx.HTTPError)
+async def _upstream_http_error(request: Request, exc: _httpx.HTTPError) -> JSONResponse:
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return JSONResponse(
+        status_code=502,
+        content={"error": "upstream_failed", "detail": str(exc), "upstream_status": status},
+    )
 
 
 class CrawlRequest(BaseModel):
