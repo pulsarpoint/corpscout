@@ -17,3 +17,11 @@ type DomainResolveArgs struct {
 }
 
 func (DomainResolveArgs) Kind() string { return "domain_resolve" }
+
+// GLEIFEnrichArgs is the job argument for enriching a GLEIF company with parent LEI data.
+type GLEIFEnrichArgs struct {
+	CompanyID string `json:"company_id"`
+	LEI       string `json:"lei"`
+}
+
+func (GLEIFEnrichArgs) Kind() string { return "gleif_enrich" }

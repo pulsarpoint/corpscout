@@ -53,6 +53,16 @@ class ResolveRequest(BaseModel):
     country: str = ""
 
 
+class GLEIFRelationshipRequest(BaseModel):
+    lei: str
+
+
+class GLEIFRelationshipResponse(BaseModel):
+    lei: str
+    direct_parent_lei: str | None = None
+    ultimate_parent_lei: str | None = None
+
+
 def register_default_adapters() -> None:
     """(Re)register all default adapters. Idempotent."""
     registry.reset()
@@ -96,3 +106,47 @@ async def crawl(source_name: str, req: CrawlRequest) -> CrawlResponse:
 async def resolve_domain(req: ResolveRequest) -> ResolveResponse:
     candidates = await resolver.resolve(req.company_name, req.lei, req.country)
     return ResolveResponse(candidates=candidates)
+
+
+_GLEIF_BASE = "https://api.gleif.org/api/v1/lei-records"
+_GLEIF_USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
+
+
+def _extract_lei_from_relationship(data: dict) -> str | None:
+    """Extract end-node LEI from a GLEIF relationship record response."""
+    try:
+        end_node = data["data"]["relationships"]["end-node"]["links"]["related"]
+        # URL ends with /lei-records/{LEI}
+        return end_node.rstrip("/").split("/")[-1]
+    except (KeyError, TypeError, AttributeError):
+        return None
+
+
+@app.post("/enrich/gleif/relationship", response_model=GLEIFRelationshipResponse)
+async def enrich_gleif_relationship(req: GLEIFRelationshipRequest) -> GLEIFRelationshipResponse:
+    headers = {"Accept": "application/json", "User-Agent": _GLEIF_USER_AGENT}
+    direct_parent_lei: str | None = None
+    ultimate_parent_lei: str | None = None
+
+    async with _httpx.AsyncClient(timeout=20.0) as client:
+        direct_url = f"{_GLEIF_BASE}/{req.lei}/direct-parent-relationship"
+        try:
+            r = await client.get(direct_url, headers=headers)
+            if r.status_code == 200:
+                direct_parent_lei = _extract_lei_from_relationship(r.json())
+        except _httpx.HTTPError:
+            pass
+
+        ultimate_url = f"{_GLEIF_BASE}/{req.lei}/ultimate-parent-relationship"
+        try:
+            r = await client.get(ultimate_url, headers=headers)
+            if r.status_code == 200:
+                ultimate_parent_lei = _extract_lei_from_relationship(r.json())
+        except _httpx.HTTPError:
+            pass
+
+    return GLEIFRelationshipResponse(
+        lei=req.lei,
+        direct_parent_lei=direct_parent_lei,
+        ultimate_parent_lei=ultimate_parent_lei,
+    )

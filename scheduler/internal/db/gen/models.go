@@ -30,6 +30,8 @@ type Company struct {
 	EmployeeEstimate   json.RawMessage `json:"employee_estimate"`
 	RevenueEstimate    json.RawMessage `json:"revenue_estimate"`
 	Ownership          json.RawMessage `json:"ownership"`
+	ParentLei          *string         `json:"parent_lei"`
+	UltimateParentLei  *string         `json:"ultimate_parent_lei"`
 }
 
 type CompanyAlias struct {

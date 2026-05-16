@@ -31,15 +31,18 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 
 	sourceCrawlWorker := workers.NewSourceCrawlWorker(q, crawler, nil)
 	domainResolveWorker := workers.NewDomainResolveWorker(q, crawler)
+	gleifEnrichWorker := workers.NewGLEIFEnrichWorker(q, crawler)
 
 	w := river.NewWorkers()
 	river.AddWorker(w, sourceCrawlWorker)
 	river.AddWorker(w, domainResolveWorker)
+	river.AddWorker(w, gleifEnrichWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
 			"source_crawl":   {MaxWorkers: cfg.CrawlConcurrency},
 			"domain_resolve": {MaxWorkers: cfg.DomainConcurrency},
+			"gleif_enrich":   {MaxWorkers: cfg.GLEIFEnrichConcurrency},
 		},
 		Workers: w,
 	}

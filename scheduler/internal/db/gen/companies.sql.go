@@ -43,7 +43,7 @@ func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) 
 }
 
 const getCompany = `-- name: GetCompany :one
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership FROM companies WHERE id = $1
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
@@ -67,12 +67,14 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 		&i.EmployeeEstimate,
 		&i.RevenueEstimate,
 		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
 	)
 	return i, err
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership FROM companies c
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
   AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
@@ -126,6 +128,8 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 			&i.EmployeeEstimate,
 			&i.RevenueEstimate,
 			&i.Ownership,
+			&i.ParentLei,
+			&i.UltimateParentLei,
 		); err != nil {
 			return nil, err
 		}
@@ -135,6 +139,63 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const listCompaniesForGLEIFEnrich = `-- name: ListCompaniesForGLEIFEnrich :many
+SELECT id, lei FROM companies
+WHERE lei IS NOT NULL
+  AND parent_lei IS NULL
+ORDER BY created_at
+LIMIT $1 OFFSET $2
+`
+
+type ListCompaniesForGLEIFEnrichParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListCompaniesForGLEIFEnrichRow struct {
+	ID  uuid.UUID `json:"id"`
+	Lei *string   `json:"lei"`
+}
+
+func (q *Queries) ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error) {
+	rows, err := q.db.Query(ctx, listCompaniesForGLEIFEnrich, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCompaniesForGLEIFEnrichRow
+	for rows.Next() {
+		var i ListCompaniesForGLEIFEnrichRow
+		if err := rows.Scan(&i.ID, &i.Lei); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateCompanyParentLEI = `-- name: UpdateCompanyParentLEI :exec
+UPDATE companies
+SET parent_lei          = $2,
+    ultimate_parent_lei = $3,
+    updated_at          = now()
+WHERE id = $1
+`
+
+type UpdateCompanyParentLEIParams struct {
+	ID                uuid.UUID `json:"id"`
+	ParentLei         *string   `json:"parent_lei"`
+	UltimateParentLei *string   `json:"ultimate_parent_lei"`
+}
+
+func (q *Queries) UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyParentLEI, arg.ID, arg.ParentLei, arg.UltimateParentLei)
+	return err
 }
 
 const upsertCompanyAlias = `-- name: UpsertCompanyAlias :exec
@@ -167,7 +228,7 @@ ON CONFLICT (lei) DO UPDATE SET
     name = EXCLUDED.name,
     status = EXCLUDED.status,
     updated_at = now()
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei
 `
 
 type UpsertCompanyByLEIParams struct {
@@ -207,6 +268,8 @@ func (q *Queries) UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEI
 		&i.EmployeeEstimate,
 		&i.RevenueEstimate,
 		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
 	)
 	return i, err
 }
@@ -220,7 +283,7 @@ DO UPDATE SET
     name = EXCLUDED.name,
     status = EXCLUDED.status,
     updated_at = now()
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei
 `
 
 type UpsertCompanyByRegNumberParams struct {
@@ -258,6 +321,8 @@ func (q *Queries) UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompan
 		&i.EmployeeEstimate,
 		&i.RevenueEstimate,
 		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
 	)
 	return i, err
 }

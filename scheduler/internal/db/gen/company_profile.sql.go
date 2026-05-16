@@ -254,7 +254,7 @@ UPDATE companies SET
     ownership         = COALESCE($8::jsonb,         ownership),
     updated_at        = now()
 WHERE id = $9::uuid
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei
 `
 
 type UpdateCompanyEnrichmentParams struct {
@@ -301,6 +301,8 @@ func (q *Queries) UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompany
 		&i.EmployeeEstimate,
 		&i.RevenueEstimate,
 		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
 	)
 	return i, err
 }

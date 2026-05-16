@@ -212,6 +212,23 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 					slog.Error("source crawl: insert domain resolve job failed",
 						"source", sourceName, "company_id", company.ID, "error", err)
 				}
+
+				// For GLEIF companies, enqueue parent LEI enrichment.
+				if sourceName == "gleif" && rec.LEI != nil && *rec.LEI != "" {
+					if _, err := w.riverClient.Insert(ctx, GLEIFEnrichArgs{
+						CompanyID: company.ID.String(),
+						LEI:       *rec.LEI,
+					}, &river.InsertOpts{
+						Queue: "gleif_enrich",
+						UniqueOpts: river.UniqueOpts{
+							ByArgs:  true,
+							ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled},
+						},
+					}); err != nil {
+						slog.Error("source crawl: insert gleif enrich job failed",
+							"source", sourceName, "company_id", company.ID, "lei", *rec.LEI, "error", err)
+					}
+				}
 			}
 		}
 

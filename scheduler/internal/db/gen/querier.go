@@ -36,6 +36,7 @@ type Querier interface {
 	InterruptStalePullRuns(ctx context.Context) error
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
+	ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error)
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
@@ -45,6 +46,7 @@ type Querier interface {
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
+	UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error
 	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
 	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error

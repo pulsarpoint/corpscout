@@ -80,6 +80,13 @@ type ResolveResponse struct {
 	Candidates []DomainCandidate `json:"candidates"`
 }
 
+// GLEIFRelationshipResponse is returned by POST /enrich/gleif/relationship.
+type GLEIFRelationshipResponse struct {
+	LEI               string  `json:"lei"`
+	DirectParentLEI   *string `json:"direct_parent_lei,omitempty"`
+	UltimateParentLEI *string `json:"ultimate_parent_lei,omitempty"`
+}
+
 // Client is a typed HTTP client for the Python crawler service.
 type Client struct {
 	baseURL string
@@ -140,6 +147,15 @@ func (c *Client) ResolveDomain(ctx context.Context, companyName, lei, country st
 	var result ResolveResponse
 	if err := c.postJSON(ctx, "/resolve/domain", body, &result); err != nil {
 		return nil, errors.Wrap(err, context)
+	}
+	return &result, nil
+}
+
+// GLEIFRelationship calls POST /enrich/gleif/relationship to look up parent LEI codes.
+func (c *Client) GLEIFRelationship(ctx context.Context, lei string) (*GLEIFRelationshipResponse, error) {
+	var result GLEIFRelationshipResponse
+	if err := c.postJSON(ctx, "/enrich/gleif/relationship", map[string]any{"lei": lei}, &result); err != nil {
+		return nil, errors.Wrap(err, "crawler POST /enrich/gleif/relationship")
 	}
 	return &result, nil
 }

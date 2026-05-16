@@ -46,6 +46,20 @@ WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
 ORDER BY name
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
+-- name: UpdateCompanyParentLEI :exec
+UPDATE companies
+SET parent_lei          = $2,
+    ultimate_parent_lei = $3,
+    updated_at          = now()
+WHERE id = $1;
+
+-- name: ListCompaniesForGLEIFEnrich :many
+SELECT id, lei FROM companies
+WHERE lei IS NOT NULL
+  AND parent_lei IS NULL
+ORDER BY created_at
+LIMIT $1 OFFSET $2;
+
 -- name: CountCompanies :one
 SELECT COUNT(*) FROM companies c
 WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
