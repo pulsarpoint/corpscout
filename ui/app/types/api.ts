@@ -195,6 +195,7 @@ export interface VCompany {
   status: string;
   website: string | null;
   short_description: string | null;
+  description: string | null;
   founded_year: number | null;
   employee_estimate: Record<string, unknown>;
   revenue_estimate: Record<string, unknown>;

@@ -1,55 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { ChevronLeft, ExternalLink, MapPin, Phone, Mail, Briefcase, Globe, Building2 } from "lucide-react";
+import {
+  ChevronLeft, ExternalLink, MapPin, Phone, Mail,
+  Briefcase, Globe, Building2, Users, DollarSign,
+  Calendar, Hash, ShieldCheck, FileText, Tag,
+} from "lucide-react";
 import { pgrest } from "~/lib/pgrest";
 import type {
-  VCompany,
-  VCompanySource,
-  VCompanyLocation,
-  VCompanyPhone,
-  VCompanyEmail,
-  VCompanyIndustry,
-  VCompanyMarket,
-  VCompanyService,
+  VCompany, VCompanySource, VCompanyLocation, VCompanyPhone,
+  VCompanyEmail, VCompanyIndustry, VCompanyMarket, VCompanyService,
 } from "~/types/api";
 import { signalColor, confidenceColor, formatDate } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Separator } from "~/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "~/components/ui/table";
 
-const LOCATION_TYPE_LABELS: Record<string, string> = {
-  headquarters: "Headquarters",
-  registered_address: "Registered Address",
-  office: "Office",
-};
-
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  company_registry: "Company Registry",
-  financial: "Financial Database",
-  open_data: "Open Data",
-  web: "Web Crawl",
-  global_aggregator: "Global Aggregator",
-};
-
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h2 className="mb-3 text-base font-semibold flex items-center gap-2">
-        {icon}
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <p className="text-sm text-muted-foreground">{message}</p>;
-}
+// ── local types ───────────────────────────────────────────────────────────────
 
 type VCompanyDomain = {
   id: string;
@@ -65,33 +36,98 @@ type VCompanyDomain = {
   last_seen_at: string;
 };
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  active:   "text-green-700 border-green-300 bg-green-50",
+  inactive: "text-yellow-700 border-yellow-300 bg-yellow-50",
+  dissolved:"text-red-700 border-red-300 bg-red-50",
+};
+
+const LOCATION_TYPE_LABELS: Record<string, string> = {
+  headquarters:       "Headquarters",
+  registered_address: "Registered Address",
+  office:             "Office",
+};
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  company_registry:  "Company Registry",
+  financial:         "Financial Database",
+  open_data:         "Open Data",
+  web:               "Web Crawl",
+  global_aggregator: "Global Aggregator",
+};
+
+// ── section wrapper ───────────────────────────────────────────────────────────
+
+function Section({
+  icon, title, children, count,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  count?: number;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          {icon}
+          {title}
+          {count != null && (
+            <span className="ml-auto text-xs font-normal text-muted-foreground">{count}</span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return <p className="text-sm text-muted-foreground">{message}</p>;
+}
+
+// ── identity facts row ────────────────────────────────────────────────────────
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">{label}</p>
+      <div className="text-sm font-medium truncate">{children}</div>
+    </div>
+  );
+}
+
+// ── main page ─────────────────────────────────────────────────────────────────
+
 export default function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [company, setCompany] = useState<VCompany>();
-  const [sources, setSources] = useState<VCompanySource[]>([]);
-  const [domains, setDomains] = useState<VCompanyDomain[]>([]);
-  const [locations, setLocations] = useState<VCompanyLocation[]>([]);
-  const [phones, setPhones] = useState<VCompanyPhone[]>([]);
-  const [emails, setEmails] = useState<VCompanyEmail[]>([]);
+  const [company,    setCompany]    = useState<VCompany>();
+  const [sources,    setSources]    = useState<VCompanySource[]>([]);
+  const [domains,    setDomains]    = useState<VCompanyDomain[]>([]);
+  const [locations,  setLocations]  = useState<VCompanyLocation[]>([]);
+  const [phones,     setPhones]     = useState<VCompanyPhone[]>([]);
+  const [emails,     setEmails]     = useState<VCompanyEmail[]>([]);
   const [industries, setIndustries] = useState<VCompanyIndustry[]>([]);
-  const [markets, setMarkets] = useState<VCompanyMarket[]>([]);
-  const [services, setServices] = useState<VCompanyService[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [markets,    setMarkets]    = useState<VCompanyMarket[]>([]);
+  const [services,   setServices]   = useState<VCompanyService[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string>();
 
   useEffect(() => {
     if (!id) return;
     const q = `eq.${id}`;
     Promise.all([
-      pgrest<VCompany>("v_companies", { id: q, limit: 1 }),
-      pgrest<VCompanySource>("v_company_sources", { company_id: q }),
-      pgrest<VCompanyDomain>("v_company_domains", { company_id: q }),
+      pgrest<VCompany>("v_companies",          { id: q, limit: 1 }),
+      pgrest<VCompanySource>("v_company_sources",     { company_id: q }),
+      pgrest<VCompanyDomain>("v_company_domains",     { company_id: q }),
       pgrest<VCompanyLocation>("v_company_locations", { company_id: q }),
-      pgrest<VCompanyPhone>("v_company_phones", { company_id: q }),
-      pgrest<VCompanyEmail>("v_company_emails", { company_id: q }),
-      pgrest<VCompanyIndustry>("v_company_industries", { company_id: q }),
-      pgrest<VCompanyMarket>("v_company_markets", { company_id: q }),
-      pgrest<VCompanyService>("v_company_services", { company_id: q }),
+      pgrest<VCompanyPhone>("v_company_phones",       { company_id: q }),
+      pgrest<VCompanyEmail>("v_company_emails",       { company_id: q }),
+      pgrest<VCompanyIndustry>("v_company_industries",{ company_id: q }),
+      pgrest<VCompanyMarket>("v_company_markets",     { company_id: q }),
+      pgrest<VCompanyService>("v_company_services",   { company_id: q }),
     ])
       .then(([c, src, dom, loc, ph, em, ind, mkt, svc]) => {
         if (c.data.length === 0) { setError("Company not found."); return; }
@@ -109,133 +145,219 @@ export default function CompanyDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="space-y-4"><Skeleton className="h-40 w-full" /><Skeleton className="h-32 w-full" /></div>;
-  if (error || !company) return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>;
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 w-full" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+  if (error || !company) {
+    return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>;
+  }
 
-  const employeeRange = company.employee_estimate as { min?: number; max?: number; label?: string };
-  const revenueRange = company.revenue_estimate as { min?: number; max?: number; label?: string; currency?: string };
+  const empEst  = company.employee_estimate as { count?: number; min?: number; max?: number; label?: string };
+  const revEst  = company.revenue_estimate  as { min?: number; max?: number; label?: string; currency?: string };
+  const own     = company.ownership         as { type?: string; listed?: boolean; exchange?: string; ticker?: string };
+
+  const hasContact    = phones.length > 0 || emails.length > 0;
+  const hasBusiness   = industries.length > 0 || markets.length > 0 || services.length > 0;
+  const hasEstimates  = !!(empEst.label || empEst.count || revEst.label);
+  const hasOwnership  = !!(own.type || own.listed != null || own.exchange);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* breadcrumb */}
       <div className="flex items-center gap-2">
         <Link to="/companies" className="text-sm text-muted-foreground hover:underline flex items-center gap-1">
           <ChevronLeft className="size-4" />Companies
         </Link>
       </div>
 
-      {/* ── Core identity card ─────────────────────────────────────────────── */}
+      {/* ── Identity card ──────────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-xl">{company.name}</CardTitle>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold leading-tight">{company.name}</h1>
               {company.short_name && company.short_name !== company.name && (
                 <p className="text-sm text-muted-foreground mt-0.5">{company.short_name}</p>
               )}
             </div>
-            <Badge variant="outline" className={
-              company.status === "active" ? "text-green-700 border-green-300 bg-green-50" :
-              company.status === "dissolved" ? "text-red-700 border-red-300 bg-red-50" :
-              "text-yellow-700 border-yellow-300 bg-yellow-50"
-            }>
+            <Badge variant="outline" className={`shrink-0 ${STATUS_COLORS[company.status] ?? ""}`}>
               {company.status}
             </Badge>
           </div>
           {company.short_description && (
-            <p className="text-sm text-muted-foreground mt-2">{company.short_description}</p>
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{company.short_description}</p>
           )}
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Country</p>
-            <p className="mt-1 text-sm font-medium">{company.country_name} <span className="text-muted-foreground font-mono text-xs">{company.country_iso2}</span></p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Registration #</p>
-            <p className="mt-1 font-mono text-sm">{company.registration_number ?? "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">LEI</p>
-            <p className="mt-1 font-mono text-sm break-all">{company.lei ?? "—"}</p>
-          </div>
-          {company.website && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Website</p>
-              <a
-                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
-                target="_blank" rel="noopener noreferrer"
-                className="mt-1 text-sm text-primary hover:underline flex items-center gap-1"
-              >
-                {company.website.replace(/^https?:\/\//, "")}
-                <ExternalLink className="size-3 opacity-60" />
-              </a>
-            </div>
-          )}
-          {company.founded_year && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Founded</p>
-              <p className="mt-1 text-sm">{company.founded_year}</p>
-            </div>
-          )}
-          {employeeRange.label && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Employees</p>
-              <p className="mt-1 text-sm">{employeeRange.label}</p>
-            </div>
-          )}
-          {revenueRange.label && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Revenue</p>
-              <p className="mt-1 text-sm">{revenueRange.label}</p>
-            </div>
-          )}
-          {company.headquarters_location && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">HQ Location</p>
-              <p className="mt-1 text-sm">{company.headquarters_location}</p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Added</p>
-            <p className="mt-1 text-sm">{formatDate(company.created_at)}</p>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+            <Fact label="Country">
+              {company.country_name}
+              <span className="ml-1.5 font-mono text-xs text-muted-foreground">{company.country_iso2}</span>
+            </Fact>
+            {company.registration_number && (
+              <Fact label="Registration #">
+                <span className="font-mono">{company.registration_number}</span>
+              </Fact>
+            )}
+            {company.lei && (
+              <Fact label="LEI">
+                <span className="font-mono text-xs break-all">{company.lei}</span>
+              </Fact>
+            )}
+            {company.website && (
+              <Fact label="Website">
+                <a
+                  href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-primary hover:underline flex items-center gap-1"
+                >
+                  {company.website.replace(/^https?:\/\//, "")}
+                  <ExternalLink className="size-3 opacity-60 shrink-0" />
+                </a>
+              </Fact>
+            )}
+            {company.founded_year && (
+              <Fact label="Founded">{company.founded_year}</Fact>
+            )}
+            {company.headquarters_location && (
+              <Fact label="HQ Location">{company.headquarters_location}</Fact>
+            )}
+            <Fact label="Added">{formatDate(company.created_at)}</Fact>
+            {company.primary_source_display_name && (
+              <Fact label="Primary Source">
+                <span className="text-muted-foreground">{company.primary_source_display_name}</span>
+              </Fact>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Industry / markets / services tags ────────────────────────────── */}
-      {(industries.length > 0 || markets.length > 0 || services.length > 0) && (
-        <div className="flex flex-wrap gap-4">
-          {industries.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Industries</p>
-              <div className="flex flex-wrap gap-1.5">
-                {industries.map((i) => <Badge key={i.id} variant="secondary">{i.industry}</Badge>)}
-              </div>
-            </div>
+      {/* ── Full description ───────────────────────────────────────────────── */}
+      {company.description && (
+        <Section icon={<FileText className="size-4" />} title="Description">
+          <p className="text-sm leading-relaxed whitespace-pre-line">{company.description}</p>
+        </Section>
+      )}
+
+      {/* ── Firmographics + Ownership ──────────────────────────────────────── */}
+      {(hasEstimates || hasOwnership) && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {hasEstimates && (
+            <Section icon={<Users className="size-4" />} title="Size & Revenue">
+              <dl className="space-y-2">
+                {(empEst.label || empEst.count) && (
+                  <div className="flex items-center gap-2">
+                    <Users className="size-3.5 text-muted-foreground shrink-0" />
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Employees</dt>
+                    <dd className="text-sm font-medium">
+                      {empEst.label ?? (empEst.count != null ? empEst.count.toLocaleString() : "—")}
+                    </dd>
+                  </div>
+                )}
+                {revEst.label && (
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="size-3.5 text-muted-foreground shrink-0" />
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Revenue</dt>
+                    <dd className="text-sm font-medium">{revEst.label}</dd>
+                  </div>
+                )}
+              </dl>
+            </Section>
           )}
-          {markets.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Markets</p>
-              <div className="flex flex-wrap gap-1.5">
-                {markets.map((m) => <Badge key={m.id} variant="outline">{m.market}</Badge>)}
-              </div>
-            </div>
-          )}
-          {services.length > 0 && (
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Services / Products</p>
-              <div className="flex flex-wrap gap-1.5">
-                {services.map((s) => <Badge key={s.id} variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">{s.service}</Badge>)}
-              </div>
-            </div>
+          {hasOwnership && (
+            <Section icon={<ShieldCheck className="size-4" />} title="Ownership">
+              <dl className="space-y-2">
+                {own.type && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Type</dt>
+                    <dd className="text-sm font-medium capitalize">{own.type}</dd>
+                  </div>
+                )}
+                {own.listed != null && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Listed</dt>
+                    <dd className="text-sm font-medium">{own.listed ? "Yes" : "No"}</dd>
+                  </div>
+                )}
+                {own.exchange && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Exchange</dt>
+                    <dd className="text-sm font-mono">{own.exchange}</dd>
+                  </div>
+                )}
+                {own.ticker && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Ticker</dt>
+                    <dd className="text-sm font-mono">{own.ticker}</dd>
+                  </div>
+                )}
+              </dl>
+            </Section>
           )}
         </div>
       )}
 
-      {/* ── Locations ─────────────────────────────────────────────────────── */}
-      {locations.length > 0 && (
-        <Section icon={<MapPin className="size-4" />} title="Locations">
-          <div className="rounded-md border">
+      {/* ── Business profile ───────────────────────────────────────────────── */}
+      {hasBusiness && (
+        <Section icon={<Briefcase className="size-4" />} title="Business Profile">
+          <div className="space-y-3">
+            {industries.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                  <Tag className="size-3" />Industries
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {industries.map((i) => (
+                    <Badge key={i.id} variant="secondary" className="text-xs">{i.industry}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(industries.length > 0 && (markets.length > 0 || services.length > 0)) && (
+              <Separator />
+            )}
+            {markets.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Markets</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {markets.map((m) => (
+                    <Badge key={m.id} variant="outline" className="text-xs">{m.market}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {services.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Services / Products</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {services.map((s) => (
+                    <Badge key={s.id} variant="outline" className="text-xs text-blue-700 border-blue-300 bg-blue-50">
+                      {s.service}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {/* ── Locations ──────────────────────────────────────────────────────── */}
+      <Section icon={<MapPin className="size-4" />} title="Locations" count={locations.length}>
+        {locations.length === 0 ? (
+          <EmptyState message="No locations recorded." />
+        ) : (
+          <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -244,14 +366,16 @@ export default function CompanyDetailPage() {
                   <TableHead>City</TableHead>
                   <TableHead>Region</TableHead>
                   <TableHead>Country</TableHead>
-                  <TableHead>Source</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {locations.map((loc) => (
                   <TableRow key={loc.id}>
                     <TableCell>
-                      <Badge variant="outline">{LOCATION_TYPE_LABELS[loc.location_type] ?? loc.location_type}</Badge>
+                      <Badge variant="outline" className="text-xs whitespace-nowrap">
+                        {LOCATION_TYPE_LABELS[loc.location_type] ?? loc.location_type}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
                       {[loc.address_line1, loc.address_line2].filter(Boolean).join(", ") || "—"}
@@ -260,7 +384,9 @@ export default function CompanyDetailPage() {
                     <TableCell className="text-sm">{loc.region ?? "—"}</TableCell>
                     <TableCell className="text-sm">
                       {loc.country ?? "—"}
-                      {loc.country_code && <span className="ml-1 text-muted-foreground font-mono text-xs">{loc.country_code}</span>}
+                      {loc.country_code && (
+                        <span className="ml-1 text-muted-foreground font-mono text-xs">{loc.country_code}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{loc.source}</TableCell>
                   </TableRow>
@@ -268,20 +394,24 @@ export default function CompanyDetailPage() {
               </TableBody>
             </Table>
           </div>
-        </Section>
-      )}
+        )}
+      </Section>
 
-      {/* ── Phones / Emails ───────────────────────────────────────────────── */}
-      {(phones.length > 0 || emails.length > 0) && (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      {/* ── Contact ────────────────────────────────────────────────────────── */}
+      {hasContact && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {phones.length > 0 && (
-            <Section icon={<Phone className="size-4" />} title="Phone Numbers">
-              <div className="rounded-md border divide-y">
+            <Section icon={<Phone className="size-4" />} title="Phone Numbers" count={phones.length}>
+              <div className="divide-y rounded-md border overflow-hidden">
                 {phones.map((ph) => (
                   <div key={ph.id} className="px-4 py-2.5 flex items-center justify-between gap-2">
                     <div>
-                      <a href={`tel:${ph.phone}`} className="text-sm font-mono hover:underline">{ph.phone}</a>
-                      {ph.description && <p className="text-xs text-muted-foreground mt-0.5">{ph.description}</p>}
+                      <a href={`tel:${ph.phone}`} className="text-sm font-mono hover:underline">
+                        {ph.phone}
+                      </a>
+                      {ph.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{ph.description}</p>
+                      )}
                     </div>
                     <Badge variant="outline" className="text-xs shrink-0">{ph.purpose}</Badge>
                   </div>
@@ -290,13 +420,15 @@ export default function CompanyDetailPage() {
             </Section>
           )}
           {emails.length > 0 && (
-            <Section icon={<Mail className="size-4" />} title="Email Addresses">
-              <div className="rounded-md border divide-y">
+            <Section icon={<Mail className="size-4" />} title="Email Addresses" count={emails.length}>
+              <div className="divide-y rounded-md border overflow-hidden">
                 {emails.map((em) => (
                   <div key={em.id} className="px-4 py-2.5 flex items-center justify-between gap-2">
                     <div>
                       <a href={`mailto:${em.email}`} className="text-sm hover:underline">{em.email}</a>
-                      {em.name && <p className="text-xs text-muted-foreground mt-0.5">{em.name}</p>}
+                      {em.name && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{em.name}</p>
+                      )}
                     </div>
                     <Badge variant="outline" className="text-xs shrink-0">{em.purpose}</Badge>
                   </div>
@@ -307,49 +439,12 @@ export default function CompanyDetailPage() {
         </div>
       )}
 
-      {/* ── Discovery sources ─────────────────────────────────────────────── */}
-      {sources.length > 0 && (
-        <Section icon={<Building2 className="size-4" />} title="How we discovered this company">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>External ID</TableHead>
-                  <TableHead>Fetched</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sources.map((s) => (
-                  <TableRow key={s.source_id}>
-                    <TableCell>
-                      <span className="font-medium">{s.source_display_name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground font-mono">{s.source_name}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{SOURCE_TYPE_LABELS[s.source_type] ?? s.source_type}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {s.external_id ? <span className="font-mono text-xs">{s.external_id}</span> : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {s.fetched_at ? formatDate(s.fetched_at) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </Section>
-      )}
-
-      {/* ── Associated domains ────────────────────────────────────────────── */}
-      <Section icon={<Globe className="size-4" />} title={`Associated Domains (${domains.length})`}>
+      {/* ── Associated Domains ─────────────────────────────────────────────── */}
+      <Section icon={<Globe className="size-4" />} title="Associated Domains" count={domains.length}>
         {domains.length === 0 ? (
           <EmptyState message="No domains found for this company." />
         ) : (
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -366,7 +461,7 @@ export default function CompanyDetailPage() {
                     <TableCell>
                       <a
                         href={`https://${d.domain}`} target="_blank" rel="noopener noreferrer"
-                        className="font-mono text-primary hover:underline inline-flex items-center gap-1"
+                        className="font-mono text-sm text-primary hover:underline inline-flex items-center gap-1"
                       >
                         {d.domain}
                         <ExternalLink className="size-3 opacity-60" />
@@ -378,8 +473,10 @@ export default function CompanyDetailPage() {
                     <TableCell>
                       <span className={`font-bold ${confidenceColor(d.confidence)}`}>{d.confidence}</span>
                     </TableCell>
-                    <TableCell>{d.status}</TableCell>
-                    <TableCell className="text-sm">{formatDate(d.first_seen_at)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">{d.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatDate(d.first_seen_at)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -387,6 +484,68 @@ export default function CompanyDetailPage() {
           </div>
         )}
       </Section>
+
+      {/* ── Discovery Sources ──────────────────────────────────────────────── */}
+      {sources.length > 0 && (
+        <Section icon={<Building2 className="size-4" />} title="Discovery Sources" count={sources.length}>
+          <div className="rounded-md border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>External ID</TableHead>
+                  <TableHead>Last Fetched</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sources.map((s) => (
+                  <TableRow key={s.source_id}>
+                    <TableCell>
+                      <Link
+                        to={`/sources/${s.source_name}`}
+                        className="font-medium hover:underline text-primary"
+                      >
+                        {s.source_display_name}
+                      </Link>
+                      <span className="ml-2 text-xs text-muted-foreground font-mono">{s.source_name}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {SOURCE_TYPE_LABELS[s.source_type] ?? s.source_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {s.external_id
+                        ? <span className="font-mono text-xs">{s.external_id}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {s.fetched_at ? formatDate(s.fetched_at) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Section>
+      )}
+
+      {/* ── Identifiers footer ─────────────────────────────────────────────── */}
+      <Card className="bg-muted/30">
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><Hash className="size-3" />ID: <span className="font-mono">{company.id}</span></span>
+            {company.registration_number && (
+              <span className="flex items-center gap-1.5"><Hash className="size-3" />Reg: <span className="font-mono">{company.registration_number}</span></span>
+            )}
+            {company.lei && (
+              <span className="flex items-center gap-1.5"><Hash className="size-3" />LEI: <span className="font-mono">{company.lei}</span></span>
+            )}
+            <span className="flex items-center gap-1.5"><Calendar className="size-3" />Updated: {formatDate(company.updated_at)}</span>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
