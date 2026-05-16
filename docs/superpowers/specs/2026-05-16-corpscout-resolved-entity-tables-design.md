@@ -25,6 +25,7 @@ Corpscout currently has a `companies` table and company-specific child tables:
 - `company_domains`
 - `company_aliases`
 - `company_sources`
+- `company_relationships`
 
 The current schema is company-centric. That works for registry and GLEIF data, but it is not enough for catalog identity resolution from security/product sources. CPE vendor tokens can represent companies, foundations, open-source projects, brands, product families, or ambiguous labels.
 
@@ -115,6 +116,103 @@ ALTER TABLE companies
 ```
 
 `name` can remain the legal or registry name where existing imports depend on it. `display_name` can become the product-facing name used by consumers.
+
+### `company_relationships`
+
+Add a company-specific relationship table for parent, ownership, acquisition, and group relationships between resolved companies.
+
+This is not a generic entity relationship table. It only models company-to-company relationships where both sides are resolved company rows. Organization and open-source project relationships should use their own explicit tables later if needed.
+
+```sql
+CREATE TABLE company_relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject_company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    related_company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    relationship_type TEXT NOT NULL,
+    ownership_percentage NUMERIC(5,2),
+    valid_from DATE,
+    valid_to DATE,
+    source TEXT NOT NULL DEFAULT 'manual',
+    confidence REAL,
+    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'active',
+    removed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_relationships_type CHECK (
+        relationship_type IN (
+            'direct_parent',
+            'ultimate_parent',
+            'subsidiary_of',
+            'owned_by',
+            'acquired_by',
+            'merged_into',
+            'same_group',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_company_relationships_distinct CHECK (
+        subject_company_id <> related_company_id
+    ),
+    CONSTRAINT chk_company_relationships_ownership_percentage CHECK (
+        ownership_percentage IS NULL OR ownership_percentage BETWEEN 0 AND 100
+    ),
+    CONSTRAINT chk_company_relationships_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_relationships_status CHECK (
+        status IN ('active', 'needs_review', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_relationships_evidence_object CHECK (
+        jsonb_typeof(evidence) = 'object'
+    ),
+    CONSTRAINT chk_company_relationships_valid_range CHECK (
+        valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from
+    )
+);
+
+CREATE UNIQUE INDEX uq_company_relationships_current
+    ON company_relationships(subject_company_id, related_company_id, relationship_type)
+    WHERE removed_at IS NULL
+      AND status IN ('active', 'needs_review');
+
+CREATE INDEX idx_company_relationships_subject
+    ON company_relationships(subject_company_id, status, relationship_type)
+    WHERE removed_at IS NULL;
+
+CREATE INDEX idx_company_relationships_related
+    ON company_relationships(related_company_id, status, relationship_type)
+    WHERE removed_at IS NULL;
+```
+
+Direction rule:
+
+- `subject_company_id` is the company being described.
+- `related_company_id` is the parent, owner, acquirer, merged target, or group company.
+
+Relationship type rule:
+
+- `direct_parent` and `ultimate_parent` are registry-style parent-chain relationships, especially for GLEIF or corporate registry enrichment.
+- `subsidiary_of` and `owned_by` are evidence-backed business relationships when the exact registry parent chain is not available.
+- Only one current relationship of the same type between the same companies is allowed. Rejected, superseded, or removed rows can remain as history without blocking a corrected active row.
+
+Examples:
+
+```text
+NOVELIC subsidiary_of Sona BLW Precision Forgings Ltd.
+subject_company_id = NOVELIC
+related_company_id = Sona BLW Precision Forgings Ltd.
+relationship_type = subsidiary_of
+```
+
+```text
+NOVELIC direct_parent Sona BLW Precision Forgings Ltd.
+subject_company_id = NOVELIC
+related_company_id = Sona BLW Precision Forgings Ltd.
+relationship_type = direct_parent
+```
+
+`companies.parent_lei` and `companies.ultimate_parent_lei` can remain as imported GLEIF fields for compatibility, but `company_relationships` should become the reviewable relationship surface. When the parent company is resolved locally, GLEIF enrichment should upsert a relationship row in addition to storing the LEI values.
 
 ### `organizations`
 
@@ -478,13 +576,14 @@ Do not promote when:
 
 1. Keep existing `companies` tables.
 2. Add `canonical_slug`, `display_name`, `resolution_status`, `confidence`, and `evidence` to `companies`.
-3. Add `organizations` and `open_source_projects`.
-4. Add per-type CPE token association tables.
-5. Add `identity_observations`.
-6. Add `v_resolved_entities`.
-7. Add resolver queries and API endpoints.
-8. Teach backoffice-v2 to store typed Corpscout mappings.
-9. Gradually migrate company-only export/import logic to the resolver API.
+3. Add `company_relationships`.
+4. Add `organizations` and `open_source_projects`.
+5. Add per-type CPE token association tables.
+6. Add `identity_observations`.
+7. Add `v_resolved_entities`.
+8. Add resolver queries and API endpoints.
+9. Teach backoffice-v2 to store typed Corpscout mappings.
+10. Gradually migrate company-only export/import logic to the resolver API.
 
 The first implementation should not remove existing company endpoints. It should add the new tables and resolver surface alongside them.
 
@@ -494,6 +593,9 @@ Database tests:
 
 - migrations create all three resolved root tables
 - no generic `entries` table is introduced
+- `company_relationships` enforces resolved company parents on both sides
+- company relationships reject self-references
+- company relationships enforce current active/review uniqueness by subject, related company, and type
 - CPE token uniqueness is enforced per entity type
 - observation rows can exist without resolved entity IDs
 - resolved CPE token tables require a concrete parent row
@@ -517,6 +619,7 @@ Backoffice-v2 integration tests:
 ## Implementation Defaults
 
 - `companies.name` remains the registry/legal name for existing imports. `companies.display_name` is the consumer-facing label.
+- GLEIF parent fields remain on `companies` as source fields, but resolved company-to-company ownership and parentage should be written to `company_relationships`.
 - The first implementation adds CPE token association tables and minimal source/evidence storage. Rich organization and project contact/forum tables can be phased in after resolver and CPE mapping are stable.
 - Automatic CPE token promotion requires confidence `>= 0.90` plus evidence from at least one trusted source. Anything below that stays in `identity_observations`.
 - The resolver writes observations synchronously in the request path. Queue-based enrichment can process unresolved observations later.
