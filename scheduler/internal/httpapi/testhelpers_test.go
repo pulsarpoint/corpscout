@@ -2,7 +2,9 @@ package httpapi_test
 
 import (
 	"context"
+	"errors"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
@@ -353,6 +355,14 @@ func (s *stubQuerier) ListCVEEntityLinksByCVEID(ctx context.Context, cveID strin
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
 func newTestHandlers(q db.Querier) *httpapi.Handlers {
 	return httpapi.NewHandlers(q, nil, nil, nil, "")
+}
+
+var errNotFound = errors.New("not found")
+
+func routerFor(h *httpapi.Handlers) chi.Router {
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	return r
 }
 
 // ensure stubQuerier satisfies the interface at compile time

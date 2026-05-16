@@ -55,6 +55,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/pull-runs", h.handleListPullRuns)
 		r.Get("/review", h.handleListReview)
 		r.Post("/review/{id}/reviews", h.handleCreateReview)
+		r.Post("/resolve", h.handleResolve)
 	})
 }
 
@@ -88,5 +89,12 @@ func queryString(r *http.Request, key string) *string {
 		return nil
 	}
 	return &s
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
