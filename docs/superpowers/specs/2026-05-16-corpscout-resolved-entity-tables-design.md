@@ -8,9 +8,9 @@ Restructure Corpscout's central identity model so it stores only resolved, trust
 - organizations
 - open-source projects
 
-Corpscout should not promote every imported vendor string, CPE token, GitHub name, or backoffice catalog vendor into a resolved entity. Uncertain inputs should stay in candidate/observation queues until they are confidently resolved or manually reviewed.
+Corpscout should not promote every imported vendor string, CPE token, GitHub name, or external catalog vendor into a resolved entity. Uncertain inputs should stay in candidate/observation queues until they are confidently resolved or manually reviewed.
 
-Backoffice-v2 will use Corpscout as the central source for resolved company, organization, and open-source project identity data. Backoffice-v2 remains responsible for catalog vendors, products, product-service relationships, CVE/CPE mappings, and product/service augmentation.
+Corpscout will own the resolved identity data and approved CPE/CVE-to-entity mappings. External consumer workflows are out of scope for this phase. A later phase will expose a CPE-based lookup API that consumers can use to pull resolved vendor/entity information.
 
 ## Current Context
 
@@ -90,12 +90,13 @@ Open-source projects can have repositories, package names, maintainers, licenses
 ## Non-Goals
 
 - Do not create a universal identity graph in this phase.
-- Do not model products in Corpscout. Products remain in backoffice-v2.
+- Do not model products in Corpscout.
 - Do not import every CPE vendor token as a resolved entity.
 - Do not store product names as companies.
 - Do not add a generic `entries` table unless a future phase introduces shared child tables or strong cross-type FK requirements.
 - Do not force ambiguous inputs into one of the three resolved tables.
 - Do not design or implement a separate field-update review queue in this phase.
+- Do not design or implement external consumer integration flows in this phase.
 
 ## Resolved Tables
 
@@ -454,7 +455,7 @@ The service layer must verify that `approved_suggestion_id` points to a suggesti
 
 ### CVE Entity Link Suggestions
 
-Use the same suggestion pattern for CVE-to-entity mappings. Corpscout should store CVE entity relevance only; product-level CVE mappings remain in backoffice-v2.
+Use the same suggestion pattern for CVE-to-entity mappings. Corpscout should store CVE entity relevance only; product-level CVE mappings are outside Corpscout.
 
 ```sql
 CREATE TABLE cve_entity_link_suggestions (
@@ -561,11 +562,11 @@ Examples:
 - `nginx` CPE vendor token can have a pending suggestion to link to company `F5`; after approval, `cpe_entity_links` stores `cpe_vendor_token = 'nginx'` and `company_id = F5`.
 - `apache` CPE vendor token can link to organization `Apache Software Foundation`.
 - `nmap` CPE vendor token can link to open-source project `Nmap`.
-- `CVE-2024-0001` can link to both company `F5` and open-source project `NGINX` only when reviewers decide both entity-level links are useful. Product-level applicability remains in backoffice-v2.
+- `CVE-2024-0001` can link to both company `F5` and open-source project `NGINX` only when reviewers decide both entity-level links are useful. Product-level applicability remains outside Corpscout.
 
 ## Observation And Candidate Queues
 
-Inputs from CPE, backoffice-v2, GitHub, domains, registry crawls, and manual imports should first land in observation/candidate tables when not fully trusted.
+Inputs from CPE, GitHub, domains, registry crawls, external catalogs, and manual imports should first land in observation/candidate tables when not fully trusted.
 
 Recommended generic observation table:
 
@@ -642,8 +643,7 @@ Example request:
   "name": "Apache Software Foundation",
   "website": "https://www.apache.org",
   "cpe_vendor_tokens": ["apache", "apache_software_foundation"],
-  "domains": ["apache.org"],
-  "source_system": "backoffice-v2"
+  "domains": ["apache.org"]
 }
 ```
 
@@ -709,46 +709,22 @@ SELECT
 FROM open_source_projects;
 ```
 
-This gives the UI and backoffice-v2 one search surface without requiring a root table.
+This gives internal UIs and services one search surface without requiring a root table.
 
-## Backoffice-v2 Integration
+## Phase 2 CPE Lookup API Boundary
 
-Backoffice-v2 should store a typed mapping, not a generic company-only FK.
+External consumer integration is deferred to a second phase.
 
-Recommended local mapping:
+That phase should expose a read API that accepts a CPE vendor token and returns the approved resolved entity profile from Corpscout. The API should read from `cpe_entity_links` and the resolved root tables. It should not create suggestions, approve links, create products, or model consumer-side workflow.
 
-```sql
-CREATE TABLE catalog_entity_corpscout_mappings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    local_kind TEXT NOT NULL,
-    local_id UUID NOT NULL,
-    corpscout_entity_type TEXT NOT NULL,
-    corpscout_entity_id UUID NOT NULL,
-    confidence REAL,
-    status TEXT NOT NULL DEFAULT 'active',
-    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_catalog_entity_corpscout_mappings_local_kind CHECK (
-        local_kind IN ('vendor', 'service_provider')
-    ),
-    CONSTRAINT chk_catalog_entity_corpscout_mappings_entity_type CHECK (
-        corpscout_entity_type IN ('company', 'organization', 'open_source_project')
-    ),
-    CONSTRAINT chk_catalog_entity_corpscout_mappings_status CHECK (
-        status IN ('active', 'needs_review', 'rejected', 'superseded')
-    )
-);
-```
+Expected high-level behavior:
 
-Backoffice-v2 flow:
+1. Caller submits a CPE vendor token.
+2. Corpscout normalizes the token and looks up an active `cpe_entity_links` row.
+3. If a link exists, Corpscout returns the resolved entity type, entity ID, display name, slug, website, short description, and relevant profile fields.
+4. If no approved link exists, Corpscout returns no match.
 
-1. Send vendor/provider identity hints to Corpscout.
-2. Corpscout resolves to a company, organization, or open-source project, or creates an unresolved observation.
-3. Backoffice-v2 stores the typed Corpscout mapping when matched.
-4. Backoffice-v2 uses approved `cpe_entity_links` and `cve_entity_links` to map security data to local vendors when entity-level mappings exist.
-5. Backoffice-v2 creates product candidates/products from CPE product tokens under the mapped local vendor.
-6. Product and service enrichment remain in backoffice-v2.
+Detailed API request/response contracts, authentication, pagination, and consumer-side storage are second-phase design work.
 
 ## CPE Import Flow
 
@@ -766,21 +742,18 @@ Example:
 CPE token: nginx
 Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='nginx', target_company_id=F5)
 Approved link: cpe_entity_links(cpe_vendor_token='nginx', company_id=F5)
-Backoffice-v2: vendor F5, product NGINX
 ```
 
 ```text
 CPE token: apache
 Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='apache', target_organization_id=ASF)
 Approved link: cpe_entity_links(cpe_vendor_token='apache', organization_id=ASF)
-Backoffice-v2: vendor Apache Software Foundation, products Apache HTTP Server, Tomcat, Struts, ...
 ```
 
 ```text
 CPE token: nmap
 Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='nmap', target_open_source_project_id=Nmap)
 Approved link: cpe_entity_links(cpe_vendor_token='nmap', open_source_project_id=Nmap)
-Backoffice-v2: vendor Nmap or mapped catalog vendor for Nmap, products created from CPE product tokens
 ```
 
 ## CVE Import Flow
@@ -790,7 +763,7 @@ Backoffice-v2: vendor Nmap or mapped catalog vendor for Nmap, products created f
 3. Create `cve_entity_link_suggestions` rows for candidate entity links.
 4. Reviewers approve or reject the suggestions.
 5. On approval, insert `cve_entity_links` rows. A single CVE may have multiple approved entity links.
-6. Product-level CVE applicability remains in backoffice-v2.
+6. Product-level CVE applicability remains outside Corpscout.
 
 ## Review Rules
 
@@ -821,8 +794,7 @@ Do not create an approved link when:
 7. Add `identity_observations`.
 8. Add `v_resolved_entities`.
 9. Add resolver queries and API endpoints.
-10. Teach backoffice-v2 to store typed Corpscout mappings and consume approved CPE/CVE entity links.
-11. Gradually migrate company-only export/import logic to the resolver API.
+10. Defer the external CPE lookup API and all consumer integration work to phase 2.
 
 The first implementation should not remove existing company endpoints. It should add the new tables and resolver surface alongside them.
 
@@ -855,15 +827,6 @@ Service tests:
 - rejected CPE/CVE suggestions do not create links
 - ambiguous CPE tokens stay unresolved until one suggestion is approved
 
-Backoffice-v2 integration tests:
-
-- vendor can map to `company`
-- vendor can map to `organization`
-- vendor can map to `open_source_project`
-- approved CPE entity links can select the correct local vendor
-- approved CVE entity links can enrich local vendor/security workflows without replacing product-level CVE handling
-- CPE product token still creates product candidates in backoffice-v2, not Corpscout
-
 ## Implementation Defaults
 
 - `companies.name` remains the registry/legal name for existing imports. `companies.display_name` is the consumer-facing label.
@@ -874,3 +837,4 @@ Backoffice-v2 integration tests:
 - The first implementation adds CPE/CVE suggestion tables and compact approved link tables. Rich organization and project contact/forum tables can be phased in after resolver and mapping are stable.
 - Automatic workflows can create CPE/CVE suggestions, but approved links should be created only by explicit review or a trusted approval path.
 - The resolver writes observations synchronously in the request path. Queue-based enrichment can process unresolved observations later.
+- External consumer integration and CPE lookup API contracts are phase 2 work.
