@@ -32,6 +32,10 @@ type Company struct {
 	Ownership          json.RawMessage `json:"ownership"`
 	ParentLei          *string         `json:"parent_lei"`
 	UltimateParentLei  *string         `json:"ultimate_parent_lei"`
+	CanonicalSlug      string          `json:"canonical_slug"`
+	DisplayName        *string         `json:"display_name"`
+	ResolutionStatus   string          `json:"resolution_status"`
+	Evidence           json.RawMessage `json:"evidence"`
 }
 
 type CompanyAlias struct {
@@ -139,6 +143,23 @@ type CompanyPhone struct {
 	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
+type CompanyRelationship struct {
+	ID                  uuid.UUID          `json:"id"`
+	SubjectCompanyID    uuid.UUID          `json:"subject_company_id"`
+	RelatedCompanyID    uuid.UUID          `json:"related_company_id"`
+	RelationshipType    string             `json:"relationship_type"`
+	OwnershipPercentage pgtype.Numeric     `json:"ownership_percentage"`
+	ValidFrom           pgtype.Date        `json:"valid_from"`
+	ValidTo             pgtype.Date        `json:"valid_to"`
+	Source              string             `json:"source"`
+	Confidence          *float32           `json:"confidence"`
+	Evidence            json.RawMessage    `json:"evidence"`
+	Status              string             `json:"status"`
+	RemovedAt           pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
 type CompanyService struct {
 	ID          uuid.UUID       `json:"id"`
 	CompanyID   uuid.UUID       `json:"company_id"`
@@ -171,6 +192,68 @@ type Country struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
+type CpeEntityLink struct {
+	ID                   uuid.UUID          `json:"id"`
+	CpeVendorToken       string             `json:"cpe_vendor_token"`
+	EntityType           string             `json:"entity_type"`
+	CompanyID            pgtype.UUID        `json:"company_id"`
+	OrganizationID       pgtype.UUID        `json:"organization_id"`
+	OpenSourceProjectID  pgtype.UUID        `json:"open_source_project_id"`
+	ApprovedSuggestionID uuid.UUID          `json:"approved_suggestion_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
+}
+
+type CpeEntityLinkSuggestion struct {
+	ID                        uuid.UUID          `json:"id"`
+	CpeVendorToken            string             `json:"cpe_vendor_token"`
+	TargetEntityType          string             `json:"target_entity_type"`
+	TargetCompanyID           pgtype.UUID        `json:"target_company_id"`
+	TargetOrganizationID      pgtype.UUID        `json:"target_organization_id"`
+	TargetOpenSourceProjectID pgtype.UUID        `json:"target_open_source_project_id"`
+	ProposedEntityPayload     json.RawMessage    `json:"proposed_entity_payload"`
+	SuggestedBy               string             `json:"suggested_by"`
+	Confidence                *float32           `json:"confidence"`
+	Evidence                  json.RawMessage    `json:"evidence"`
+	Status                    string             `json:"status"`
+	ReviewedBy                *string            `json:"reviewed_by"`
+	ReviewedAt                pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote                *string            `json:"review_note"`
+	CreatedAt                 time.Time          `json:"created_at"`
+	UpdatedAt                 time.Time          `json:"updated_at"`
+}
+
+type CveEntityLink struct {
+	ID                   uuid.UUID          `json:"id"`
+	CveID                string             `json:"cve_id"`
+	EntityType           string             `json:"entity_type"`
+	CompanyID            pgtype.UUID        `json:"company_id"`
+	OrganizationID       pgtype.UUID        `json:"organization_id"`
+	OpenSourceProjectID  pgtype.UUID        `json:"open_source_project_id"`
+	ApprovedSuggestionID uuid.UUID          `json:"approved_suggestion_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	RemovedAt            pgtype.Timestamptz `json:"removed_at"`
+}
+
+type CveEntityLinkSuggestion struct {
+	ID                        uuid.UUID          `json:"id"`
+	CveID                     string             `json:"cve_id"`
+	TargetEntityType          string             `json:"target_entity_type"`
+	TargetCompanyID           pgtype.UUID        `json:"target_company_id"`
+	TargetOrganizationID      pgtype.UUID        `json:"target_organization_id"`
+	TargetOpenSourceProjectID pgtype.UUID        `json:"target_open_source_project_id"`
+	ProposedEntityPayload     json.RawMessage    `json:"proposed_entity_payload"`
+	SuggestedBy               string             `json:"suggested_by"`
+	Confidence                *float32           `json:"confidence"`
+	Evidence                  json.RawMessage    `json:"evidence"`
+	Status                    string             `json:"status"`
+	ReviewedBy                *string            `json:"reviewed_by"`
+	ReviewedAt                pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote                *string            `json:"review_note"`
+	CreatedAt                 time.Time          `json:"created_at"`
+	UpdatedAt                 time.Time          `json:"updated_at"`
+}
+
 type DataSource struct {
 	ID                 uuid.UUID          `json:"id"`
 	Name               string             `json:"name"`
@@ -193,6 +276,40 @@ type Domain struct {
 	Domain         string             `json:"domain"`
 	FirstSeenAt    time.Time          `json:"first_seen_at"`
 	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
+}
+
+type OpenSourceProject struct {
+	ID               uuid.UUID       `json:"id"`
+	CanonicalSlug    string          `json:"canonical_slug"`
+	DisplayName      string          `json:"display_name"`
+	Website          *string         `json:"website"`
+	RepositoryUrl    *string         `json:"repository_url"`
+	License          *string         `json:"license"`
+	ShortDescription *string         `json:"short_description"`
+	Description      *string         `json:"description"`
+	LifecycleStatus  string          `json:"lifecycle_status"`
+	Metadata         json.RawMessage `json:"metadata"`
+	Evidence         json.RawMessage `json:"evidence"`
+	Status           string          `json:"status"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+}
+
+type Organization struct {
+	ID               uuid.UUID       `json:"id"`
+	CanonicalSlug    string          `json:"canonical_slug"`
+	DisplayName      string          `json:"display_name"`
+	OrganizationType string          `json:"organization_type"`
+	Website          *string         `json:"website"`
+	ShortDescription *string         `json:"short_description"`
+	Description      *string         `json:"description"`
+	CountryCode      *string         `json:"country_code"`
+	Governance       json.RawMessage `json:"governance"`
+	Metadata         json.RawMessage `json:"metadata"`
+	Evidence         json.RawMessage `json:"evidence"`
+	Status           string          `json:"status"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
 type SourcePullRun struct {
@@ -223,6 +340,9 @@ type SourceSnapshot struct {
 type VCompany struct {
 	ID                       uuid.UUID       `json:"id"`
 	Name                     string          `json:"name"`
+	DisplayName              *string         `json:"display_name"`
+	CanonicalSlug            string          `json:"canonical_slug"`
+	ResolutionStatus         string          `json:"resolution_status"`
 	ShortName                *string         `json:"short_name"`
 	RegistrationNumber       *string         `json:"registration_number"`
 	Lei                      *string         `json:"lei"`
@@ -233,6 +353,7 @@ type VCompany struct {
 	EmployeeEstimate         json.RawMessage `json:"employee_estimate"`
 	RevenueEstimate          json.RawMessage `json:"revenue_estimate"`
 	Ownership                json.RawMessage `json:"ownership"`
+	Evidence                 json.RawMessage `json:"evidence"`
 	CreatedAt                time.Time       `json:"created_at"`
 	UpdatedAt                time.Time       `json:"updated_at"`
 	CountryID                uuid.UUID       `json:"country_id"`
@@ -363,4 +484,14 @@ type VDomain struct {
 	PrimaryCompanyName string             `json:"primary_company_name"`
 	PrimaryCompanyID   uuid.UUID          `json:"primary_company_id"`
 	PrimarySignal      string             `json:"primary_signal"`
+}
+
+type VResolvedEntity struct {
+	EntityType    string    `json:"entity_type"`
+	EntityID      uuid.UUID `json:"entity_id"`
+	DisplayName   string    `json:"display_name"`
+	CanonicalSlug string    `json:"canonical_slug"`
+	Website       *string   `json:"website"`
+	Status        string    `json:"status"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }

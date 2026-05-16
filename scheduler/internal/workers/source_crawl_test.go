@@ -241,6 +241,22 @@ func (m *mockQuerier) UpdateCompanyParentLEI(ctx context.Context, arg db.UpdateC
 	return nil
 }
 
+func (m *mockQuerier) UpsertCompanyRelationship(ctx context.Context, arg db.UpsertCompanyRelationshipParams) (db.CompanyRelationship, error) {
+	return db.CompanyRelationship{}, nil
+}
+func (m *mockQuerier) ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]db.CompanyRelationship, error) {
+	return nil, nil
+}
+func (m *mockQuerier) UpdateCompanyRelationshipStatus(ctx context.Context, arg db.UpdateCompanyRelationshipStatusParams) error {
+	return nil
+}
+func (m *mockQuerier) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (db.Company, error) {
+	return db.Company{}, nil
+}
+func (m *mockQuerier) UpdateCompanySlug(ctx context.Context, arg db.UpdateCompanySlugParams) error {
+	return nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

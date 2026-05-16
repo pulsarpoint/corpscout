@@ -22,6 +22,7 @@ type Querier interface {
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
 	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
 	GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]CompanyIndustry, error)
 	GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]CompanyLocation, error)
@@ -37,6 +38,7 @@ type Querier interface {
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
 	ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error)
+	ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]CompanyRelationship, error)
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
@@ -47,6 +49,8 @@ type Querier interface {
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
 	UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error
+	UpdateCompanyRelationshipStatus(ctx context.Context, arg UpdateCompanyRelationshipStatusParams) error
+	UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error
 	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
 	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error
@@ -64,6 +68,7 @@ type Querier interface {
 	UpsertCompanyMarket(ctx context.Context, arg UpsertCompanyMarketParams) (CompanyMarket, error)
 	// ── phones ────────────────────────────────────────────────────────────────────
 	UpsertCompanyPhone(ctx context.Context, arg UpsertCompanyPhoneParams) (CompanyPhone, error)
+	UpsertCompanyRelationship(ctx context.Context, arg UpsertCompanyRelationshipParams) (CompanyRelationship, error)
 	// ── services ──────────────────────────────────────────────────────────────────
 	UpsertCompanyService(ctx context.Context, arg UpsertCompanyServiceParams) (CompanyService, error)
 	UpsertCompanySource(ctx context.Context, arg UpsertCompanySourceParams) error

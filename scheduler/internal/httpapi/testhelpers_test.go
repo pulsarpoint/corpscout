@@ -241,6 +241,23 @@ func (s *stubQuerier) UpdateCompanyParentLEI(ctx context.Context, arg db.UpdateC
 	return nil
 }
 
+func (s *stubQuerier) UpsertCompanyRelationship(ctx context.Context, arg db.UpsertCompanyRelationshipParams) (db.CompanyRelationship, error) {
+	return db.CompanyRelationship{}, nil
+}
+func (s *stubQuerier) ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]db.CompanyRelationship, error) {
+	return nil, nil
+}
+func (s *stubQuerier) UpdateCompanyRelationshipStatus(ctx context.Context, arg db.UpdateCompanyRelationshipStatusParams) error {
+	return nil
+}
+func (s *stubQuerier) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (db.Company, error) {
+	ret := s.Called(ctx, canonicalSlug)
+	return ret.Get(0).(db.Company), ret.Error(1)
+}
+func (s *stubQuerier) UpdateCompanySlug(ctx context.Context, arg db.UpdateCompanySlugParams) error {
+	return nil
+}
+
 // --- helpers ---
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.

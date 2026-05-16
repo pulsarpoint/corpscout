@@ -68,3 +68,13 @@ WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('source_id')::uuid IS NULL OR EXISTS (
     SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = sqlc.narg('source_id')
   ));
+
+-- name: GetCompanyBySlug :one
+SELECT * FROM companies WHERE canonical_slug = $1;
+
+-- name: UpdateCompanySlug :exec
+UPDATE companies
+SET canonical_slug = $2,
+    display_name   = $3,
+    updated_at     = now()
+WHERE id = $1;
