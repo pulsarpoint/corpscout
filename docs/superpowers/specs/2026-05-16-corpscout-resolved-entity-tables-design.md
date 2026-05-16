@@ -113,7 +113,6 @@ ALTER TABLE companies
     ADD COLUMN IF NOT EXISTS canonical_slug TEXT,
     ADD COLUMN IF NOT EXISTS display_name TEXT,
     ADD COLUMN IF NOT EXISTS resolution_status TEXT NOT NULL DEFAULT 'resolved',
-    ADD COLUMN IF NOT EXISTS confidence REAL,
     ADD COLUMN IF NOT EXISTS evidence JSONB NOT NULL DEFAULT '{}'::jsonb;
 ```
 
@@ -266,7 +265,6 @@ CREATE TABLE organizations (
     country_code TEXT,
     governance JSONB NOT NULL DEFAULT '{}'::jsonb,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    confidence REAL,
     evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -276,9 +274,6 @@ CREATE TABLE organizations (
     ),
     CONSTRAINT chk_organizations_status CHECK (
         status IN ('active', 'inactive', 'unknown')
-    ),
-    CONSTRAINT chk_organizations_confidence CHECK (
-        confidence IS NULL OR confidence BETWEEN 0 AND 1
     ),
     CONSTRAINT chk_organizations_metadata_object CHECK (jsonb_typeof(metadata) = 'object'),
     CONSTRAINT chk_organizations_governance_object CHECK (jsonb_typeof(governance) = 'object'),
@@ -312,7 +307,6 @@ CREATE TABLE open_source_projects (
     description TEXT,
     lifecycle_status TEXT NOT NULL DEFAULT 'active',
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    confidence REAL,
     evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -322,9 +316,6 @@ CREATE TABLE open_source_projects (
     ),
     CONSTRAINT chk_open_source_projects_status CHECK (
         status IN ('active', 'inactive', 'unknown')
-    ),
-    CONSTRAINT chk_open_source_projects_confidence CHECK (
-        confidence IS NULL OR confidence BETWEEN 0 AND 1
     ),
     CONSTRAINT chk_open_source_projects_metadata_object CHECK (jsonb_typeof(metadata) = 'object'),
     CONSTRAINT chk_open_source_projects_evidence_object CHECK (jsonb_typeof(evidence) = 'object')
@@ -401,8 +392,14 @@ CREATE TABLE cpe_entity_link_suggestions (
         )
     ),
     CONSTRAINT chk_cpe_entity_link_suggestions_target_or_payload CHECK (
-        num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
-        OR proposed_entity_payload <> '{}'::jsonb
+        (
+            num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
+            AND proposed_entity_payload = '{}'::jsonb
+        )
+        OR (
+            num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 0
+            AND proposed_entity_payload <> '{}'::jsonb
+        )
     ),
     CONSTRAINT chk_cpe_entity_link_suggestions_status CHECK (
         status IN ('pending', 'approved', 'rejected', 'superseded')
@@ -430,6 +427,7 @@ When a suggestion is approved for a missing entity, the approval transaction sho
 CREATE TABLE cpe_entity_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cpe_vendor_token TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
     company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE CASCADE,
@@ -437,8 +435,16 @@ CREATE TABLE cpe_entity_links (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     removed_at TIMESTAMPTZ,
     CONSTRAINT chk_cpe_entity_links_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_cpe_entity_links_entity_type CHECK (
+        entity_type IN ('company', 'organization', 'open_source_project')
+    ),
     CONSTRAINT chk_cpe_entity_links_one_target CHECK (
         num_nonnulls(company_id, organization_id, open_source_project_id) = 1
+    ),
+    CONSTRAINT chk_cpe_entity_links_type_matches_target CHECK (
+        (entity_type = 'company' AND company_id IS NOT NULL)
+        OR (entity_type = 'organization' AND organization_id IS NOT NULL)
+        OR (entity_type = 'open_source_project' AND open_source_project_id IS NOT NULL)
     )
 );
 
@@ -499,8 +505,14 @@ CREATE TABLE cve_entity_link_suggestions (
         )
     ),
     CONSTRAINT chk_cve_entity_link_suggestions_target_or_payload CHECK (
-        num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
-        OR proposed_entity_payload <> '{}'::jsonb
+        (
+            num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
+            AND proposed_entity_payload = '{}'::jsonb
+        )
+        OR (
+            num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 0
+            AND proposed_entity_payload <> '{}'::jsonb
+        )
     ),
     CONSTRAINT chk_cve_entity_link_suggestions_status CHECK (
         status IN ('pending', 'approved', 'rejected', 'superseded')
@@ -524,6 +536,7 @@ Unlike CPE vendor tokens, one CVE can be linked to multiple resolved entities. E
 CREATE TABLE cve_entity_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cve_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
     company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE CASCADE,
@@ -533,8 +546,16 @@ CREATE TABLE cve_entity_links (
     CONSTRAINT chk_cve_entity_links_cve_id CHECK (
         cve_id ~ '^CVE-[0-9]{4}-[0-9]{4,}$'
     ),
+    CONSTRAINT chk_cve_entity_links_entity_type CHECK (
+        entity_type IN ('company', 'organization', 'open_source_project')
+    ),
     CONSTRAINT chk_cve_entity_links_one_target CHECK (
         num_nonnulls(company_id, organization_id, open_source_project_id) = 1
+    ),
+    CONSTRAINT chk_cve_entity_links_type_matches_target CHECK (
+        (entity_type = 'company' AND company_id IS NOT NULL)
+        OR (entity_type = 'organization' AND organization_id IS NOT NULL)
+        OR (entity_type = 'open_source_project' AND open_source_project_id IS NOT NULL)
     )
 );
 
@@ -773,7 +794,7 @@ Do not create an approved link when:
 ## Migration Strategy
 
 1. Keep existing `companies` tables, including `company_sources`.
-2. Add `canonical_slug`, `display_name`, `resolution_status`, `confidence`, and `evidence` to `companies`.
+2. Add `canonical_slug`, `display_name`, `resolution_status`, and `evidence` to `companies`.
 3. Backfill company slugs with the canonical slug algorithm, resolve collisions, then enforce `canonical_slug` uniqueness and `NOT NULL`.
 4. Add `company_relationships`.
 5. Add `organizations` and `open_source_projects`.
@@ -798,7 +819,7 @@ Database tests:
 - `ultimate_parent` rows can be rebuilt or superseded when the direct-parent chain changes
 - canonical slug generation is deterministic and handles collisions with the entity ID suffix
 - existing `company_sources` data remains available after the migration
-- CPE link suggestions require either an existing target entity or a proposed entity payload
+- CPE link suggestions require exactly one of: an existing target entity FK (with empty payload) or a non-empty proposed entity payload (with no target FK); both together are rejected
 - CPE approved links enforce one active entity link per CPE vendor token
 - CVE approved links allow multiple entity links per CVE but reject duplicate active links to the same target
 - approved CPE/CVE links require exactly one target among company, organization, and open-source project
@@ -820,6 +841,7 @@ Service tests:
 - GLEIF parent fields remain on `companies` as source fields, but resolved company-to-company ownership and parentage should be written to `company_relationships`.
 - Parent-chain consumers should prefer `direct_parent` over `subsidiary_of`; `ultimate_parent` is a denormalized cache of the direct-parent chain.
 - `company_sources` remains the source table for resolved company facts. Source-specific candidate tables do not replace it.
+- Confidence lives on suggestion and link tables only, not on resolved root entities.
 - A field-update review queue is deferred. Do not add it to the first migration plan.
 - The first implementation adds CPE/CVE suggestion tables and compact approved link tables. Rich organization and project contact/forum tables can be phased in after resolver and mapping are stable.
 - Automatic workflows can create CPE/CVE suggestions, but approved links should be created only by explicit review or a trusted approval path.
