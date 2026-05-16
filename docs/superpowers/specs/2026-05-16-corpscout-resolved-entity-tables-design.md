@@ -8,7 +8,7 @@ Restructure Corpscout's central identity model so it stores only resolved, trust
 - organizations
 - open-source projects
 
-Corpscout should not promote every imported vendor string, CPE token, GitHub name, or external catalog vendor into a resolved entity. Uncertain inputs should stay in candidate/observation queues until they are confidently resolved or manually reviewed.
+Corpscout should not promote every imported vendor string, CPE token, GitHub name, or external catalog vendor into a resolved entity. Uncertain inputs should stay in source-specific candidate tables until they are confidently resolved or manually reviewed.
 
 Corpscout will own the resolved identity data and approved CPE/CVE-to-entity mappings. External consumer workflows are out of scope for this phase. A later phase will expose a CPE-based lookup API that consumers can use to pull resolved vendor/entity information.
 
@@ -564,65 +564,53 @@ Examples:
 - `nmap` CPE vendor token can link to open-source project `Nmap`.
 - `CVE-2024-0001` can link to both company `F5` and open-source project `NGINX` only when reviewers decide both entity-level links are useful. Product-level applicability remains outside Corpscout.
 
-## Observation And Candidate Queues
+## Source-Specific Input And Suggestion Tables
 
-Inputs from CPE, GitHub, domains, registry crawls, external catalogs, and manual imports should first land in observation/candidate tables when not fully trusted.
+Do not add a generic `identity_observations` table.
 
-Recommended generic observation table:
+Corpscout receives inputs from many different sources, and each source carries different native identifiers, evidence, confidence semantics, and review needs. Candidate storage should therefore be source-specific and named by the source or identifier being processed.
 
-```sql
-CREATE TABLE identity_observations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_system TEXT NOT NULL,
-    source_ref TEXT,
-    raw_name TEXT,
-    normalized_name TEXT,
-    website TEXT,
-    domain TEXT,
-    cpe_vendor_token TEXT,
-    github_owner TEXT,
-    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
-    context JSONB NOT NULL DEFAULT '{}'::jsonb,
-    candidate_entity_type TEXT,
-    candidate_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
-    candidate_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-    candidate_open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE SET NULL,
-    confidence REAL,
-    status TEXT NOT NULL DEFAULT 'unresolved',
-    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_identity_observations_candidate_type CHECK (
-        candidate_entity_type IS NULL OR candidate_entity_type IN ('company', 'organization', 'open_source_project')
-    ),
-    CONSTRAINT chk_identity_observations_status CHECK (
-        status IN ('unresolved', 'candidate', 'resolved', 'rejected', 'ambiguous')
-    ),
-    CONSTRAINT chk_identity_observations_confidence CHECK (
-        confidence IS NULL OR confidence BETWEEN 0 AND 1
-    ),
-    CONSTRAINT chk_identity_observations_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
-    CONSTRAINT chk_identity_observations_context_object CHECK (jsonb_typeof(context) = 'object')
-);
-```
+Examples:
 
-This is intentionally a queue/candidate table, not a resolved identity table. It may be generic because it stores unresolved observations, not trusted profile data.
+- `cpe_entity_link_suggestions`
+- `cve_entity_link_suggestions`
+- `domain_entity_link_suggestions`
+- `website_entity_link_suggestions`
+- `github_owner_entity_link_suggestions`
+- `gleif_company_imports`
+- `company_registry_imports`
+- `ai_company_profile_suggestions`
+- `manual_entity_suggestions`
+
+CPE and CVE are only two source families. They are not the primary or universal candidate model.
+
+Each source-specific candidate table should keep the columns that are natural for that source. Common lifecycle fields can be reused where useful:
+
+- source-native identifier or payload
+- proposed target entity type
+- proposed target entity ID, when the entity already exists
+- proposed entity payload, when the entity does not exist yet
+- confidence, if the source produces one
+- evidence or raw source payload
+- status: `pending`, `approved`, `rejected`, `superseded`
+- reviewer metadata when human review is involved
+
+Avoid flattening every source into the same generic columns. For example, a GitHub owner candidate should preserve GitHub-specific fields, while a GLEIF import should preserve LEI and registry-specific fields.
 
 Promotion rules:
 
 - Promote to `companies`, `organizations`, or `open_source_projects` only when source evidence is strong enough or a human approves the resolution.
 - Use `cpe_entity_link_suggestions` and `cve_entity_link_suggestions` for proposed CPE/CVE mappings to resolved entities.
-- Keep ambiguous tokens in `identity_observations`.
-- Rejected observations remain as durable negative evidence.
+- Keep ambiguous inputs in their source-specific candidate table.
+- Rejected source-specific candidates remain as durable negative evidence in the source table that produced them.
 
-## Source And Observation Responsibilities
+## Source And Candidate Responsibilities
 
-Keep `company_sources`; it is not deprecated by `identity_observations`.
+Keep `company_sources`; it is not replaced by source-specific candidate tables.
 
 `company_sources` remains the company-specific audit/source table for accepted profile facts on resolved company rows. It should be used for sources that support company fields such as legal name, website, headquarters, market, services, ownership notes, and registry data.
 
-`identity_observations` is for raw identity inputs, candidate matches, ambiguous inputs, and negative evidence before or during resolution. When an observation is promoted into a resolved company fact, keep the original observation for traceability and copy or link the accepted evidence into the resolved entity's evidence fields or `company_sources`.
+Source-specific candidate tables are for raw inputs, candidate matches, ambiguous inputs, and negative evidence before or during resolution. When a candidate is promoted into a resolved company fact, keep the original source-specific row for traceability and copy or link the accepted evidence into the resolved entity's evidence fields or `company_sources`.
 
 Organizations and open-source projects should get equivalent explicit source tables, such as `organization_sources` and `open_source_project_sources`, instead of sharing `company_sources`.
 
@@ -665,12 +653,11 @@ If no high-confidence match exists:
 ```json
 {
   "matched": false,
-  "status": "observation_created",
-  "observation_id": "00000000-0000-0000-0000-000000000000"
+  "status": "no_match"
 }
 ```
 
-The resolver should never create resolved rows from weak input automatically. It can create observations and candidates.
+The resolver should never create resolved rows from weak input automatically. Source-specific ingestion endpoints can create source-specific candidates when a workflow requires review.
 
 ## Unified Read View
 
@@ -791,9 +778,9 @@ Do not create an approved link when:
 4. Add `company_relationships`.
 5. Add `organizations` and `open_source_projects`.
 6. Add `cpe_entity_link_suggestions`, `cpe_entity_links`, `cve_entity_link_suggestions`, and `cve_entity_links`.
-7. Add `identity_observations`.
-8. Add `v_resolved_entities`.
-9. Add resolver queries and API endpoints.
+7. Add `v_resolved_entities`.
+8. Add resolver queries and API endpoints.
+9. Defer additional source-specific candidate tables until their importers are implemented.
 10. Defer the external CPE lookup API and all consumer integration work to phase 2.
 
 The first implementation should not remove existing company endpoints. It should add the new tables and resolver surface alongside them.
@@ -815,13 +802,13 @@ Database tests:
 - CPE approved links enforce one active entity link per CPE vendor token
 - CVE approved links allow multiple entity links per CVE but reject duplicate active links to the same target
 - approved CPE/CVE links require exactly one target among company, organization, and open-source project
-- observation rows can exist without resolved entity IDs
+- source-specific candidate rows can exist without resolved entity IDs when they include a proposed entity payload
 - `v_resolved_entities` returns companies, organizations, and open-source projects
 
 Service tests:
 
 - high-confidence inputs resolve to existing entities
-- low-confidence identity inputs create observations only
+- low-confidence identity inputs create source-specific candidates only when a matching source-specific ingestion table exists
 - CPE/CVE candidates create pending suggestions instead of approved links
 - approved CPE/CVE suggestions create approved links
 - rejected CPE/CVE suggestions do not create links
@@ -832,9 +819,9 @@ Service tests:
 - `companies.name` remains the registry/legal name for existing imports. `companies.display_name` is the consumer-facing label.
 - GLEIF parent fields remain on `companies` as source fields, but resolved company-to-company ownership and parentage should be written to `company_relationships`.
 - Parent-chain consumers should prefer `direct_parent` over `subsidiary_of`; `ultimate_parent` is a denormalized cache of the direct-parent chain.
-- `company_sources` remains the source table for resolved company facts. `identity_observations` does not replace it.
+- `company_sources` remains the source table for resolved company facts. Source-specific candidate tables do not replace it.
 - A field-update review queue is deferred. Do not add it to the first migration plan.
 - The first implementation adds CPE/CVE suggestion tables and compact approved link tables. Rich organization and project contact/forum tables can be phased in after resolver and mapping are stable.
 - Automatic workflows can create CPE/CVE suggestions, but approved links should be created only by explicit review or a trusted approval path.
-- The resolver writes observations synchronously in the request path. Queue-based enrichment can process unresolved observations later.
+- The resolver does not write to a generic observation table. Source-specific ingestion endpoints own candidate creation for their source.
 - External consumer integration and CPE lookup API contracts are phase 2 work.
