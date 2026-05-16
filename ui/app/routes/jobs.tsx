@@ -174,6 +174,9 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkWorking, setBulkWorking] = useState(false);
+  const [bulkResult, setBulkResult] = useState<string>();
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const page = Number(searchParams.get("page") ?? 1);
@@ -189,6 +192,12 @@ export default function JobsPage() {
       ]);
       setJobs(jobsRes.items);
       setStats(statsRes);
+      // Drop selections for jobs that are no longer on this page.
+      setSelected((prev) => {
+        const pageIds = new Set(jobsRes.items.map((j) => j.id));
+        const next = new Set([...prev].filter((id) => pageIds.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
     } catch {
       setError("Failed to load jobs.");
     } finally {
@@ -198,6 +207,8 @@ export default function JobsPage() {
 
   useEffect(() => {
     setLoading(true);
+    setSelected(new Set());
+    setBulkResult(undefined);
     fetchData();
     timerRef.current = setInterval(fetchData, 30_000);
     return () => clearInterval(timerRef.current);
@@ -215,7 +226,73 @@ export default function JobsPage() {
     setSearchParams(next);
   }
 
+  // ── Selection helpers ───────────────────────────────────────────────────────
+
+  const cancellableOnPage = jobs.filter((j) => CANCELLABLE_STATES.has(j.state));
+  const allCancellableSelected =
+    cancellableOnPage.length > 0 &&
+    cancellableOnPage.every((j) => selected.has(j.id));
+  const someSelected = selected.size > 0;
+
+  function toggleSelectAll() {
+    if (allCancellableSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(cancellableOnPage.map((j) => j.id)));
+    }
+  }
+
+  function toggleJob(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // ── Bulk actions ────────────────────────────────────────────────────────────
+
+  async function cancelSelected() {
+    setBulkWorking(true);
+    setBulkResult(undefined);
+    try {
+      const res = await api.cancelBulkByIds([...selected]);
+      setSelected(new Set());
+      setBulkResult(`Cancelled ${res.cancelled} job${res.cancelled !== 1 ? "s" : ""}.`);
+      await fetchData();
+    } catch {
+      setBulkResult("Bulk cancel failed.");
+    } finally {
+      setBulkWorking(false);
+    }
+  }
+
+  async function cancelAllMatching() {
+    setBulkWorking(true);
+    setBulkResult(undefined);
+    try {
+      const res = await api.cancelBulkByFilter({ status, kind });
+      setSelected(new Set());
+      setBulkResult(`Cancelled ${res.cancelled} job${res.cancelled !== 1 ? "s" : ""}.`);
+      await fetchData();
+    } catch {
+      setBulkResult("Bulk cancel failed.");
+    } finally {
+      setBulkWorking(false);
+    }
+  }
+
   const summary = summarise(stats);
+
+  // Count of cancellable jobs matching current filter (from stats).
+  const cancellableFilterTotal = (() => {
+    const matchingStates = status
+      ? (CANCELLABLE_STATES.has(status) ? [status] : [])
+      : [...CANCELLABLE_STATES];
+    return stats
+      .filter((s) => matchingStates.includes(s.state) && (!kind || s.kind === kind))
+      .reduce((n, s) => n + s.count, 0);
+  })();
 
   return (
     <div className="space-y-5">
@@ -259,6 +336,55 @@ export default function JobsPage() {
         </select>
       </div>
 
+      {/* Bulk action bar */}
+      {someSelected && (
+        <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2">
+          <span className="text-sm font-medium">{selected.size} selected</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={bulkWorking}
+            onClick={cancelSelected}
+          >
+            {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+            Cancel selected
+          </Button>
+          {cancellableFilterTotal > selected.size && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkWorking}
+              onClick={cancelAllMatching}
+              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+            >
+              {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+              Cancel all {cancellableFilterTotal.toLocaleString()} matching
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+            Clear selection
+          </Button>
+          {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
+        </div>
+      )}
+
+      {/* "Cancel all matching" shortcut when nothing is selected but there are cancellable jobs */}
+      {!someSelected && cancellableFilterTotal > 0 && (
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={bulkWorking}
+            onClick={cancelAllMatching}
+            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+          >
+            {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+            Cancel all {cancellableFilterTotal.toLocaleString()} matching
+          </Button>
+          {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
       ) : error ? (
@@ -271,6 +397,18 @@ export default function JobsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      className="rounded border-input size-4 cursor-pointer accent-primary"
+                      checked={allCancellableSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected && !allCancellableSelected;
+                      }}
+                      onChange={toggleSelectAll}
+                      title="Select all cancellable jobs on this page"
+                    />
+                  </TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Subject</TableHead>
                   <TableHead>State</TableHead>
@@ -285,9 +423,21 @@ export default function JobsPage() {
                   <>
                     <TableRow
                       key={j.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className={`cursor-pointer hover:bg-muted/50 ${selected.has(j.id) ? "bg-muted/40" : ""}`}
                       onClick={() => setExpandedId(expandedId === j.id ? null : j.id)}
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {CANCELLABLE_STATES.has(j.state) ? (
+                          <input
+                            type="checkbox"
+                            className="rounded border-input size-4 cursor-pointer accent-primary"
+                            checked={selected.has(j.id)}
+                            onChange={() => toggleJob(j.id)}
+                          />
+                        ) : (
+                          <span className="block size-4" />
+                        )}
+                      </TableCell>
                       <TableCell><KindBadge kind={j.kind} /></TableCell>
                       <TableCell className="text-sm max-w-[200px] truncate">
                         {j.kind === "source_crawl" && j.subject ? (
@@ -320,7 +470,7 @@ export default function JobsPage() {
                     </TableRow>
                     {expandedId === j.id && (
                       <TableRow key={`${j.id}-detail`}>
-                        <TableCell colSpan={7} className="p-0">
+                        <TableCell colSpan={8} className="p-0">
                           <ExpandedJob job={j} onCancel={cancelJob} />
                         </TableCell>
                       </TableRow>

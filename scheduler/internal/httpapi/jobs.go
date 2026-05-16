@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -227,6 +229,119 @@ func (h *Handlers) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "cancelled", "id": id})
+}
+
+type cancelBulkRequest struct {
+	IDs    []int64            `json:"ids,omitempty"`
+	Filter *cancelBulkFilter  `json:"filter,omitempty"`
+}
+
+type cancelBulkFilter struct {
+	Status string `json:"status,omitempty"`
+	Kind   string `json:"kind,omitempty"`
+}
+
+func (h *Handlers) handleCancelBulk(w http.ResponseWriter, r *http.Request) {
+	if h.rv == nil || h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "service not available")
+		return
+	}
+
+	var req cancelBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Mode 1: cancel a specific list of IDs.
+	if len(req.IDs) > 0 {
+		cancelled := h.cancelJobIDs(ctx, req.IDs)
+		writeJSON(w, http.StatusOK, map[string]any{"cancelled": cancelled})
+		return
+	}
+
+	// Mode 2: cancel all jobs matching a filter.
+	if req.Filter == nil {
+		writeError(w, http.StatusBadRequest, "provide ids or filter")
+		return
+	}
+
+	// Bulk-update non-running jobs directly in SQL — far faster than N round-trips.
+	nonRunningRows, err := h.pool.Query(ctx, `
+		UPDATE river_job
+		SET state       = 'cancelled'::river_job_state,
+		    finalized_at = now()
+		WHERE state IN ('available', 'scheduled', 'retryable', 'pending')
+		  AND ($1::text IS NULL OR state::text = $1)
+		  AND ($2::text IS NULL OR kind         = $2)
+		RETURNING id
+	`, nilIfEmpty(req.Filter.Status), nilIfEmpty(req.Filter.Kind))
+	if err != nil {
+		slog.Error("cancel bulk: update non-running", "error", err)
+		writeError(w, http.StatusInternalServerError, "bulk cancel failed")
+		return
+	}
+	defer nonRunningRows.Close()
+	var nonRunningCount int
+	for nonRunningRows.Next() {
+		nonRunningCount++
+	}
+
+	// For running jobs, signal via River (triggers context cancellation in worker).
+	runningRows, err := h.pool.Query(ctx, `
+		SELECT id FROM river_job
+		WHERE state::text = 'running'
+		  AND ($1::text IS NULL OR kind = $1)
+	`, nilIfEmpty(req.Filter.Kind))
+	if err != nil {
+		slog.Error("cancel bulk: query running", "error", err)
+		writeJSON(w, http.StatusOK, map[string]any{"cancelled": nonRunningCount, "running_cancel_error": err.Error()})
+		return
+	}
+	defer runningRows.Close()
+	var runningIDs []int64
+	for runningRows.Next() {
+		var id int64
+		if err := runningRows.Scan(&id); err == nil {
+			runningIDs = append(runningIDs, id)
+		}
+	}
+
+	runningCancelled := h.cancelJobIDs(ctx, runningIDs)
+	writeJSON(w, http.StatusOK, map[string]any{"cancelled": nonRunningCount + runningCancelled})
+}
+
+// cancelJobIDs cancels a list of job IDs via River (handles running jobs),
+// using up to 10 concurrent goroutines. Returns count of successful cancellations.
+func (h *Handlers) cancelJobIDs(ctx context.Context, ids []int64) int {
+	if len(ids) == 0 {
+		return 0
+	}
+	const concurrency = 10
+	sem := make(chan struct{}, concurrency)
+	var (
+		mu        sync.Mutex
+		cancelled int
+	)
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		id := id
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if _, err := h.rv.JobCancel(ctx, id); err == nil {
+				mu.Lock()
+				cancelled++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return cancelled
 }
 
 func nilIfEmpty(s string) *string {

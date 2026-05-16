@@ -122,5 +122,11 @@ export const api = {
 
   cancelJob: (id: number) => post<{ status: string; id: number }>(`/jobs/${id}/cancel`, {}),
 
+  cancelBulkByIds: (ids: number[]) =>
+    post<{ cancelled: number }>("/jobs/cancel-bulk", { ids }),
+
+  cancelBulkByFilter: (filter: { status?: string; kind?: string }) =>
+    post<{ cancelled: number }>("/jobs/cancel-bulk", { filter }),
+
   getCountries: () => get<Country[]>("/countries"),
 };
