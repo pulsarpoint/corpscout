@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -15,7 +16,6 @@ type resolveRequest struct {
 	Name            string   `json:"name"`
 	Website         string   `json:"website"`
 	CPEVendorTokens []string `json:"cpe_vendor_tokens"`
-	Domains         []string `json:"domains"`
 }
 
 type resolveResponse struct {
@@ -46,8 +46,8 @@ func (h *Handlers) handleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" && req.Website == "" && len(req.CPEVendorTokens) == 0 && len(req.Domains) == 0 {
-		writeError(w, http.StatusBadRequest, "provide at least one of: name, website, cpe_vendor_tokens, domains")
+	if req.Name == "" && req.Website == "" && len(req.CPEVendorTokens) == 0 {
+		writeError(w, http.StatusBadRequest, "provide at least one of: name, website, cpe_vendor_tokens")
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *Handlers) resolverNameLookup(ctx context.Context, name string) (*resolv
 	row := h.pool.QueryRow(ctx, `
 		SELECT entity_type, entity_id, display_name, canonical_slug, website, status, updated_at
 		FROM v_resolved_entities
-		WHERE display_name ILIKE $1
+		WHERE lower(display_name) = lower($1)
 		ORDER BY entity_type, display_name
 		LIMIT 1
 	`, name)
@@ -153,7 +153,7 @@ func (h *Handlers) resolverNameLookup(ctx context.Context, name string) (*resolv
 func scanResolvedRow(row pgx.Row) (*resolvedRow, error) {
 	var r resolvedRow
 	err := row.Scan(&r.EntityType, &r.EntityID, &r.DisplayName, &r.CanonicalSlug, &r.Website, &r.Status, &r.UpdatedAt)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
