@@ -252,8 +252,15 @@ async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCand
 async def certsh_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
-    async with _get_lock("certsh"):
-        async with httpx.AsyncClient(timeout=30.0) as client:
+
+    # Skip crt.sh entirely if the lock is already held — avoids queuing N workers
+    # behind a 15s request and cascading timeouts.
+    lock = _get_lock("certsh")
+    if lock.locked():
+        return candidates
+
+    async with lock:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             try:
                 resp = await client.get(
                     "https://crt.sh/",
@@ -264,7 +271,6 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
                 entries = resp.json()
             except (httpx.HTTPError, ValueError) as e:
                 logger.warning("crt.sh signal failed: %s", e)
-                await asyncio.sleep(1.0)
                 return candidates
 
         if isinstance(entries, list):
@@ -287,7 +293,7 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
                         )
                     )
 
-        await asyncio.sleep(0.5)  # honour 2 req/s; sleep inside lock so it gates all callers
+    await asyncio.sleep(0.5)  # honour 2 req/s outside the lock
     return candidates
 
 
