@@ -257,6 +257,43 @@ func (m *mockQuerier) UpdateCompanySlug(ctx context.Context, arg db.UpdateCompan
 	return nil
 }
 
+func (m *mockQuerier) InsertOrganization(ctx context.Context, arg db.InsertOrganizationParams) (db.Organization, error) {
+	return db.Organization{}, nil
+}
+func (m *mockQuerier) GetOrganizationByID(ctx context.Context, id uuid.UUID) (db.Organization, error) {
+	return db.Organization{}, nil
+}
+func (m *mockQuerier) GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (db.Organization, error) {
+	return db.Organization{}, nil
+}
+func (m *mockQuerier) ListOrganizations(ctx context.Context, arg db.ListOrganizationsParams) ([]db.Organization, error) {
+	return nil, nil
+}
+func (m *mockQuerier) CountOrganizations(ctx context.Context, q_ *string) (int64, error) {
+	return 0, nil
+}
+func (m *mockQuerier) UpdateOrganizationStatus(ctx context.Context, arg db.UpdateOrganizationStatusParams) error {
+	return nil
+}
+func (m *mockQuerier) InsertOpenSourceProject(ctx context.Context, arg db.InsertOpenSourceProjectParams) (db.OpenSourceProject, error) {
+	return db.OpenSourceProject{}, nil
+}
+func (m *mockQuerier) GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (db.OpenSourceProject, error) {
+	return db.OpenSourceProject{}, nil
+}
+func (m *mockQuerier) GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (db.OpenSourceProject, error) {
+	return db.OpenSourceProject{}, nil
+}
+func (m *mockQuerier) ListOpenSourceProjects(ctx context.Context, arg db.ListOpenSourceProjectsParams) ([]db.OpenSourceProject, error) {
+	return nil, nil
+}
+func (m *mockQuerier) CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error) {
+	return 0, nil
+}
+func (m *mockQuerier) UpdateOpenSourceProjectStatus(ctx context.Context, arg db.UpdateOpenSourceProjectStatusParams) error {
+	return nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

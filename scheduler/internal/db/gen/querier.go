@@ -15,6 +15,8 @@ type Querier interface {
 	CountCandidatesForReview(ctx context.Context) (int64, error)
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
 	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
+	CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error)
+	CountOrganizations(ctx context.Context, q_ *string) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
 	// Atomically records the review decision and updates the domain candidate status
 	// in a single statement so the audit trail can never diverge from the domain state.
@@ -31,8 +33,16 @@ type Querier interface {
 	GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]CompanyService, error)
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
+	GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (OpenSourceProject, error)
+	GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (OpenSourceProject, error)
+	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
+	GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (Organization, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
+	// database/queries/open_source_projects.sql
+	InsertOpenSourceProject(ctx context.Context, arg InsertOpenSourceProjectParams) (OpenSourceProject, error)
+	// database/queries/organizations.sql
+	InsertOrganization(ctx context.Context, arg InsertOrganizationParams) (Organization, error)
 	InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error
 	InterruptStalePullRuns(ctx context.Context) error
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
@@ -42,6 +52,8 @@ type Querier interface {
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
+	ListOpenSourceProjects(ctx context.Context, arg ListOpenSourceProjectsParams) ([]OpenSourceProject, error)
+	ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error)
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
 	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
@@ -51,6 +63,8 @@ type Querier interface {
 	UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error
 	UpdateCompanyRelationshipStatus(ctx context.Context, arg UpdateCompanyRelationshipStatusParams) error
 	UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error
+	UpdateOpenSourceProjectStatus(ctx context.Context, arg UpdateOpenSourceProjectStatusParams) error
+	UpdateOrganizationStatus(ctx context.Context, arg UpdateOrganizationStatusParams) error
 	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
 	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error

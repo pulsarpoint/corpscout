@@ -258,6 +258,59 @@ func (s *stubQuerier) UpdateCompanySlug(ctx context.Context, arg db.UpdateCompan
 	return nil
 }
 
+func (s *stubQuerier) InsertOrganization(ctx context.Context, arg db.InsertOrganizationParams) (db.Organization, error) {
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(db.Organization), ret.Error(1)
+}
+func (s *stubQuerier) GetOrganizationByID(ctx context.Context, id uuid.UUID) (db.Organization, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(db.Organization), ret.Error(1)
+}
+func (s *stubQuerier) GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (db.Organization, error) {
+	ret := s.Called(ctx, canonicalSlug)
+	return ret.Get(0).(db.Organization), ret.Error(1)
+}
+func (s *stubQuerier) ListOrganizations(ctx context.Context, arg db.ListOrganizationsParams) ([]db.Organization, error) {
+	ret := s.Called(ctx, arg)
+	if v, ok := ret.Get(0).([]db.Organization); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
+}
+func (s *stubQuerier) CountOrganizations(ctx context.Context, q_ *string) (int64, error) {
+	ret := s.Called(ctx, q_)
+	return ret.Get(0).(int64), ret.Error(1)
+}
+func (s *stubQuerier) UpdateOrganizationStatus(ctx context.Context, arg db.UpdateOrganizationStatusParams) error {
+	return nil
+}
+func (s *stubQuerier) InsertOpenSourceProject(ctx context.Context, arg db.InsertOpenSourceProjectParams) (db.OpenSourceProject, error) {
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(db.OpenSourceProject), ret.Error(1)
+}
+func (s *stubQuerier) GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (db.OpenSourceProject, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(db.OpenSourceProject), ret.Error(1)
+}
+func (s *stubQuerier) GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (db.OpenSourceProject, error) {
+	ret := s.Called(ctx, canonicalSlug)
+	return ret.Get(0).(db.OpenSourceProject), ret.Error(1)
+}
+func (s *stubQuerier) ListOpenSourceProjects(ctx context.Context, arg db.ListOpenSourceProjectsParams) ([]db.OpenSourceProject, error) {
+	ret := s.Called(ctx, arg)
+	if v, ok := ret.Get(0).([]db.OpenSourceProject); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
+}
+func (s *stubQuerier) CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error) {
+	ret := s.Called(ctx, q_)
+	return ret.Get(0).(int64), ret.Error(1)
+}
+func (s *stubQuerier) UpdateOpenSourceProjectStatus(ctx context.Context, arg db.UpdateOpenSourceProjectStatusParams) error {
+	return nil
+}
+
 // --- helpers ---
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
