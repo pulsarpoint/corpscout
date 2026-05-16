@@ -324,6 +324,12 @@ func (m *mockQuerier) UpdateCPELinkSuggestionStatus(ctx context.Context, arg db.
 func (m *mockQuerier) UpdateCVELinkSuggestionStatus(ctx context.Context, arg db.UpdateCVELinkSuggestionStatusParams) error {
 	return nil
 }
+func (m *mockQuerier) CountPendingCVELinkSuggestions(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (m *mockQuerier) ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]db.CveEntityLink, error) {
+	return nil, nil
+}
 
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)

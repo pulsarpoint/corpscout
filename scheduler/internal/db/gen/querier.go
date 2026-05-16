@@ -18,6 +18,7 @@ type Querier interface {
 	CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error)
 	CountOrganizations(ctx context.Context, q_ *string) (int64, error)
 	CountPendingCPELinkSuggestions(ctx context.Context) (int64, error)
+	CountPendingCVELinkSuggestions(ctx context.Context) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
 	// Atomically records the review decision and updates the domain candidate status
 	// in a single statement so the audit trail can never diverge from the domain state.
@@ -51,6 +52,7 @@ type Querier interface {
 	InsertOrganization(ctx context.Context, arg InsertOrganizationParams) (Organization, error)
 	InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error
 	InterruptStalePullRuns(ctx context.Context) error
+	ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]CveEntityLink, error)
 	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
 	ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error)

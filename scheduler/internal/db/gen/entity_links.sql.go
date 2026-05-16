@@ -24,6 +24,17 @@ func (q *Queries) CountPendingCPELinkSuggestions(ctx context.Context) (int64, er
 	return count, err
 }
 
+const countPendingCVELinkSuggestions = `-- name: CountPendingCVELinkSuggestions :one
+SELECT COUNT(*) FROM cve_entity_link_suggestions WHERE status = 'pending'
+`
+
+func (q *Queries) CountPendingCVELinkSuggestions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingCVELinkSuggestions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getCPEEntityLinkByToken = `-- name: GetCPEEntityLinkByToken :one
 SELECT id, cpe_vendor_token, entity_type, company_id, organization_id, open_source_project_id, approved_suggestion_id, created_at, removed_at FROM cpe_entity_links
 WHERE cpe_vendor_token = $1 AND removed_at IS NULL
@@ -242,6 +253,41 @@ func (q *Queries) InsertCVELinkSuggestion(ctx context.Context, arg InsertCVELink
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listCVEEntityLinksByCVEID = `-- name: ListCVEEntityLinksByCVEID :many
+SELECT id, cve_id, entity_type, company_id, organization_id, open_source_project_id, approved_suggestion_id, created_at, removed_at FROM cve_entity_links
+WHERE cve_id = $1 AND removed_at IS NULL
+`
+
+func (q *Queries) ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]CveEntityLink, error) {
+	rows, err := q.db.Query(ctx, listCVEEntityLinksByCVEID, cveID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CveEntityLink
+	for rows.Next() {
+		var i CveEntityLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.CveID,
+			&i.EntityType,
+			&i.CompanyID,
+			&i.OrganizationID,
+			&i.OpenSourceProjectID,
+			&i.ApprovedSuggestionID,
+			&i.CreatedAt,
+			&i.RemovedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPendingCPELinkSuggestions = `-- name: ListPendingCPELinkSuggestions :many

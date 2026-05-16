@@ -341,6 +341,12 @@ func (s *stubQuerier) UpdateCPELinkSuggestionStatus(ctx context.Context, arg db.
 func (s *stubQuerier) UpdateCVELinkSuggestionStatus(ctx context.Context, arg db.UpdateCVELinkSuggestionStatusParams) error {
 	return nil
 }
+func (s *stubQuerier) CountPendingCVELinkSuggestions(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (s *stubQuerier) ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]db.CveEntityLink, error) {
+	return nil, nil
+}
 
 // --- helpers ---
 

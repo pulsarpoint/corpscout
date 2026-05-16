@@ -70,3 +70,10 @@ INSERT INTO cve_entity_links (
 )
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
+
+-- name: CountPendingCVELinkSuggestions :one
+SELECT COUNT(*) FROM cve_entity_link_suggestions WHERE status = 'pending';
+
+-- name: ListCVEEntityLinksByCVEID :many
+SELECT * FROM cve_entity_links
+WHERE cve_id = $1 AND removed_at IS NULL;
