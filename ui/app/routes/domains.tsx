@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { pgrest } from "~/lib/pgrest";
@@ -103,6 +103,14 @@ export default function DomainsPage() {
   const orphan = searchParams.get("orphan") === "1";
   const sortKey = searchParams.get("sort") ?? "first_seen_at";
   const sortDir = (searchParams.get("dir") ?? "desc") as "asc" | "desc";
+  const q = searchParams.get("q") ?? "";
+
+  // Local input state so typing doesn't immediately trigger a fetch on each keystroke.
+  const [inputValue, setInputValue] = useState(q);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep local input in sync when the URL param changes externally (e.g. back/forward).
+  useEffect(() => { setInputValue(q); }, [q]);
 
   const sorting: SortingState = useMemo(
     () => [{ id: sortKey, desc: sortDir === "desc" }],
@@ -120,6 +128,7 @@ export default function DomainsPage() {
       if (signal) params["primary_signal"] = `eq.${signal}`;
       if (minConf) params["max_confidence"] = `gte.${minConf}`;
       if (orphan) params["company_count"] = "eq.0";
+      if (q) params["domain"] = `ilike.*${q}*`;
 
       const res = await pgrest<VDomain>("v_domains", params);
       setDomains(res.data);
@@ -127,7 +136,7 @@ export default function DomainsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, signal, minConf, orphan, sortKey, sortDir]);
+  }, [page, signal, minConf, orphan, sortKey, sortDir, q]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -148,6 +157,18 @@ export default function DomainsPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
+        <input
+          type="search"
+          placeholder="Search domain…"
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring w-52"
+          value={inputValue}
+          onChange={(e) => {
+            const val = e.target.value;
+            setInputValue(val);
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => setParam({ q: val }), 400);
+          }}
+        />
         <select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
           value={signal}
