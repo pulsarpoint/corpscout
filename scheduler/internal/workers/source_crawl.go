@@ -206,7 +206,7 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 					Queue: "domain_resolve",
 					UniqueOpts: river.UniqueOpts{
 						ByArgs:  true,
-						ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled},
+						ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled},
 					},
 				}); err != nil {
 					slog.Error("source crawl: insert domain resolve job failed",
