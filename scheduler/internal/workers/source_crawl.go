@@ -17,6 +17,7 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
 // SourceCrawlWorker processes source crawl jobs by fetching company records
@@ -201,7 +202,13 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 			if w.riverClient != nil {
 				if _, err := w.riverClient.Insert(ctx, DomainResolveArgs{
 					CompanyID: company.ID.String(),
-				}, &river.InsertOpts{Queue: "domain_resolve"}); err != nil {
+				}, &river.InsertOpts{
+					Queue: "domain_resolve",
+					UniqueOpts: river.UniqueOpts{
+						ByArgs:  true,
+						ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled},
+					},
+				}); err != nil {
 					slog.Error("source crawl: insert domain resolve job failed",
 						"source", sourceName, "company_id", company.ID, "error", err)
 				}

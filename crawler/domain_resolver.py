@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import re
+import socket
 import urllib.parse
 from typing import ClassVar
 
@@ -54,6 +56,53 @@ SELECT ?company ?website WHERE {{
 LIMIT 5
 """.strip()
 
+# Legal-form suffixes to strip before generating domain candidates, ordered
+# longest-first so "private limited company" matches before "limited".
+_LEGAL_SUFFIXES = [
+    r"\bprivate limited company\b", r"\bpublic limited company\b",
+    r"\bgesellschaft mit beschränkter haftung\b",
+    r"\baksjeselskap\b", r"\bannpartselskab\b", r"\banpartsselskab\b",
+    r"\baktieselskab\b", r"\baksjonærselskap\b",
+    r"\bsociété anonyme\b", r"\bsociété à responsabilité limitée\b",
+    r"\bsociedad anónima\b", r"\bsociedad limitada\b",
+    r"\bsociedad de responsabilidad limitada\b",
+    r"\bcompagnie\b",
+    r"\bincorporated\b", r"\bcorporation\b",
+    r"\blimited liability company\b", r"\blimited liability partnership\b",
+    r"\bllc\b", r"\bllp\b", r"\binc\b", r"\bltd\b", r"\bplc\b", r"\bcorp\b",
+    r"\bco\b",
+    r"\b(as|asa|ans|da|ba|sa|nuf|ks|sf)\b",  # Norwegian
+    r"\b(a/s|a\.s)\b",                         # Danish/Norwegian
+    r"\b(ab|hb|kb|ek)\b",                      # Swedish
+    r"\b(bv|nv|vof|cv|ov|vve)\b",              # Dutch
+    r"\b(gmbh|ag|kg|ohg|kgaa|eg|gbr|ug)\b",   # German
+    r"\b(srl|spa|sas|snc|sapa|scarl)\b",       # Italian
+    r"\b(sarl|sas|sc|snc|sca)\b",              # French
+    r"\b(sl|sa|cb|scp)\b",                     # Spanish
+    r"\b(oy|oyj|ky|ay|osk)\b",                # Finnish
+    r"\b(as|ou|mtü|tü|uü)\b",                 # Estonian
+    r"\b(sp\.? z\.? o\.? o\.?)\b",            # Polish
+    r"\b(lda|s\.a\.)\b",                       # Portuguese
+]
+_LEGAL_RE = re.compile(
+    "|".join(_LEGAL_SUFFIXES),
+    re.IGNORECASE,
+)
+
+# Country ISO-2 → primary ccTLD mapping.
+_COUNTRY_TLD: dict[str, str] = {
+    "NO": ".no", "DK": ".dk", "SE": ".se", "FI": ".fi",
+    "GB": ".co.uk", "DE": ".de", "FR": ".fr", "NL": ".nl",
+    "IT": ".it", "ES": ".es", "PT": ".pt", "PL": ".pl",
+    "AT": ".at", "CH": ".ch", "BE": ".be", "CZ": ".cz",
+    "HU": ".hu", "RO": ".ro", "SK": ".sk", "BG": ".bg",
+    "HR": ".hr", "SI": ".si", "EE": ".ee", "LV": ".lv",
+    "LT": ".lt", "US": ".com", "CA": ".ca", "AU": ".com.au",
+    "NZ": ".co.nz", "JP": ".co.jp", "KR": ".co.kr",
+    "CN": ".cn", "IN": ".in", "BR": ".com.br", "MX": ".com.mx",
+    "AR": ".com.ar", "ZA": ".co.za",
+}
+
 
 def _safe_domain(url: str) -> str | None:
     """Extract a usable hostname from a URL.
@@ -83,6 +132,60 @@ def _safe_domain(url: str) -> str | None:
     return host
 
 
+def _company_slug(name: str) -> str:
+    """Normalise a company name into a domain-name slug.
+
+    Strips legal suffixes, converts to lowercase, replaces non-alphanumeric
+    runs with hyphens, and trims leading/trailing hyphens.
+    """
+    s = _LEGAL_RE.sub("", name)
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = s.strip("-")
+    return s
+
+
+def _candidate_domains(name: str, country: str) -> list[str]:
+    """Generate plausible domain candidates for a company name + country."""
+    slug = _company_slug(name)
+    if not slug or len(slug) < 2:
+        return []
+    # Remove any leading numbers/hyphens that make invalid domains
+    slug_clean = slug.lstrip("0123456789-")
+    if not slug_clean or len(slug_clean) < 2:
+        slug_clean = slug
+
+    tlds: list[str] = [".com"]
+    country_tld = _COUNTRY_TLD.get(country.upper())
+    if country_tld and country_tld != ".com":
+        tlds = [country_tld, ".com"]
+
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for tld in tlds:
+        domain = slug_clean + tld
+        if domain not in seen and "." in domain:
+            seen.add(domain)
+            candidates.append(domain)
+        # Also try slug without hyphens for short names
+        slug_nohyphen = slug_clean.replace("-", "")
+        if slug_nohyphen != slug_clean and len(slug_nohyphen) >= 3:
+            domain2 = slug_nohyphen + tld
+            if domain2 not in seen:
+                seen.add(domain2)
+                candidates.append(domain2)
+    return candidates
+
+
+def _dns_resolve(domain: str) -> bool:
+    """Return True if the domain resolves via DNS (has an A or AAAA record)."""
+    try:
+        socket.getaddrinfo(domain, None, proto=socket.IPPROTO_TCP)
+        return True
+    except OSError:
+        return False
+
+
 async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCandidate]:
     queries: list[str] = []
     if lei:
@@ -100,10 +203,16 @@ async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCand
                         params={"query": query, "format": "json"},
                         headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
                     )
+                    if resp.status_code == 429:
+                        # Wikidata rate-limit: back off and skip remaining queries.
+                        retry_after = int(resp.headers.get("retry-after", "60"))
+                        logger.warning("wikidata 429 — backing off %ds", retry_after)
+                        await asyncio.sleep(min(retry_after, 120))
+                        break
                     resp.raise_for_status()
                 except httpx.HTTPError as e:
                     logger.warning("wikidata signal failed: %s", e)
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(2.0)
                     continue
                 data = resp.json()
                 for binding in (data.get("results") or {}).get("bindings") or []:
@@ -131,7 +240,7 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
     async with _get_lock("certsh"):
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 resp = await client.get(
                     "https://crt.sh/",
@@ -142,7 +251,7 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
                 entries = resp.json()
             except (httpx.HTTPError, ValueError) as e:
                 logger.warning("crt.sh signal failed: %s", e)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
                 return candidates
 
         if isinstance(entries, list):
@@ -169,54 +278,29 @@ async def certsh_signal(company_name: str) -> list[DomainCandidate]:
     return candidates
 
 
-async def duckduckgo_signal(company_name: str) -> list[DomainCandidate]:
-    candidates: list[DomainCandidate] = []
-    seen: set[str] = set()
-    async with _get_lock("search"):
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                resp = await client.get(
-                    "https://api.duckduckgo.com/",
-                    params={
-                        "q": f"{company_name} official site",
-                        "format": "json",
-                        "no_redirect": "1",
-                        "no_html": "1",
-                    },
-                    headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-            except (httpx.HTTPError, ValueError) as e:
-                logger.warning("duckduckgo signal failed: %s", e)
-                await asyncio.sleep(1.0)
-                return candidates
+async def heuristic_signal(company_name: str, country: str) -> list[DomainCandidate]:
+    """Generate domain candidates from company name + country TLD and verify via DNS."""
+    candidates_raw = _candidate_domains(company_name, country)
+    if not candidates_raw:
+        return []
 
-        abstract_url = data.get("AbstractURL")
-        urls: list[str] = []
-        if abstract_url:
-            urls.append(abstract_url)
-        for result in data.get("Results") or []:
-            first = result.get("FirstURL")
-            if first:
-                urls.append(first)
-
-        for url in urls:
-            domain = _safe_domain(url)
-            if not domain or domain in seen:
-                continue
-            seen.add(domain)
-            candidates.append(
+    results: list[DomainCandidate] = []
+    loop = asyncio.get_event_loop()
+    for domain in candidates_raw:
+        try:
+            resolves = await loop.run_in_executor(None, _dns_resolve, domain)
+        except Exception:
+            resolves = False
+        if resolves:
+            results.append(
                 DomainCandidate(
                     domain=domain,
                     signal="search",
-                    confidence=30,
-                    evidence={"source": "duckduckgo", "abstract_url": abstract_url},
+                    confidence=40,
+                    evidence={"method": "name_heuristic", "verified": "dns"},
                 )
             )
-
-        await asyncio.sleep(1.0)  # honour 1 req/s; sleep inside lock so it gates all callers
-    return candidates
+    return results
 
 
 def _sparql_literal(value: str) -> str:
@@ -240,6 +324,8 @@ class DomainResolver:
         if wikidata_results:
             return wikidata_results
 
-        certsh_results = await certsh_signal(company_name)
-        search_results = await duckduckgo_signal(company_name)
-        return certsh_results + search_results
+        certsh_results, heuristic_results = await asyncio.gather(
+            certsh_signal(company_name),
+            heuristic_signal(company_name, country),
+        )
+        return certsh_results + heuristic_results
