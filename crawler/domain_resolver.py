@@ -5,6 +5,7 @@ import ipaddress
 import logging
 import re
 import socket
+import time
 import urllib.parse
 from typing import ClassVar
 
@@ -23,6 +24,10 @@ _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@puls
 _CERTSH_LOCK: asyncio.Lock | None = None
 _WIKIDATA_LOCK: asyncio.Lock | None = None
 _SEARCH_LOCK: asyncio.Lock | None = None
+
+# Wikidata global backoff: when 429'd, skip all Wikidata calls until this time.
+# Checked BEFORE acquiring the lock so blocked callers don't pile up behind it.
+_WIKIDATA_BACKOFF_UNTIL: float = 0.0
 
 
 def _get_lock(ref: str) -> asyncio.Lock:
@@ -187,6 +192,12 @@ def _dns_resolve(domain: str) -> bool:
 
 
 async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCandidate]:
+    global _WIKIDATA_BACKOFF_UNTIL  # noqa: PLW0603
+
+    # Skip entirely if within backoff window (avoids piling up behind the lock).
+    if time.monotonic() < _WIKIDATA_BACKOFF_UNTIL:
+        return []
+
     queries: list[str] = []
     if lei:
         queries.append(_WIKIDATA_TEMPLATE_BY_LEI.format(lei=_sparql_literal(lei)))
@@ -195,6 +206,9 @@ async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCand
     candidates: list[DomainCandidate] = []
     seen: set[str] = set()
     async with _get_lock("wikidata"):
+        # Re-check after acquiring lock — another task may have set the backoff.
+        if time.monotonic() < _WIKIDATA_BACKOFF_UNTIL:
+            return []
         async with httpx.AsyncClient(timeout=30.0) as client:
             for query in queries:
                 try:
@@ -204,16 +218,15 @@ async def wikidata_signal(company_name: str, lei: str | None) -> list[DomainCand
                         headers={"User-Agent": _USER_AGENT, "Accept": "application/sparql-results+json"},
                     )
                     if resp.status_code == 429:
-                        # Wikidata rate-limit: back off and skip remaining queries.
+                        # Set global backoff and release lock immediately — do NOT sleep inside lock.
                         retry_after = int(resp.headers.get("retry-after", "60"))
-                        logger.warning("wikidata 429 — backing off %ds", retry_after)
-                        await asyncio.sleep(min(retry_after, 120))
+                        _WIKIDATA_BACKOFF_UNTIL = time.monotonic() + min(retry_after, 60)
+                        logger.warning("wikidata 429 — global backoff %ds", min(retry_after, 60))
                         break
                     resp.raise_for_status()
                 except httpx.HTTPError as e:
                     logger.warning("wikidata signal failed: %s", e)
-                    await asyncio.sleep(2.0)
-                    continue
+                    break
                 data = resp.json()
                 for binding in (data.get("results") or {}).get("bindings") or []:
                     company_uri = (binding.get("company") or {}).get("value", "")
@@ -319,13 +332,14 @@ class DomainResolver:
         lei: str | None,
         country: str,
     ) -> list[DomainCandidate]:
-        # Wikidata first (confidence 85): if present we trust it and exit.
-        wikidata_results = await wikidata_signal(company_name, lei)
-        if wikidata_results:
-            return wikidata_results
-
-        certsh_results, heuristic_results = await asyncio.gather(
+        # Run all three signals concurrently — Wikidata 429 backoff must not
+        # block crt.sh and the DNS heuristic.
+        wikidata_results, certsh_results, heuristic_results = await asyncio.gather(
+            wikidata_signal(company_name, lei),
             certsh_signal(company_name),
             heuristic_signal(company_name, country),
         )
+        # Wikidata at confidence 85 takes priority; fall back to lower signals.
+        if wikidata_results:
+            return wikidata_results
         return certsh_results + heuristic_results
