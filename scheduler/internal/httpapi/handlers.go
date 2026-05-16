@@ -56,6 +56,12 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/review", h.handleListReview)
 		r.Post("/review/{id}/reviews", h.handleCreateReview)
 		r.Post("/resolve", h.handleResolve)
+		r.Get("/organizations", h.handleListOrganizations)
+		r.Post("/organizations", h.handleCreateOrganization)
+		r.Get("/organizations/{id}", h.handleGetOrganization)
+		r.Get("/open-source-projects", h.handleListOpenSourceProjects)
+		r.Post("/open-source-projects", h.handleCreateOpenSourceProject)
+		r.Get("/open-source-projects/{id}", h.handleGetOpenSourceProject)
 	})
 }
 
