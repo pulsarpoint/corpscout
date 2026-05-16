@@ -13,7 +13,7 @@ VALUES (
     $9, $10, $11, $12,
     $13, $14, $15
 )
-ON CONFLICT ON CONSTRAINT uq_company_locations_active_headquarters
+ON CONFLICT (company_id, location_type) WHERE removed_at IS NULL AND location_type = 'headquarters'
 DO UPDATE SET
     label         = EXCLUDED.label,
     address_line1 = EXCLUDED.address_line1,
@@ -42,7 +42,7 @@ ORDER BY location_type, created_at;
 -- name: UpsertCompanyPhone :one
 INSERT INTO company_phones (company_id, phone, description, purpose, source, confidence, evidence)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT ON CONSTRAINT uq_company_phones_active
+ON CONFLICT (company_id, phone, purpose) WHERE removed_at IS NULL
 DO UPDATE SET
     description = EXCLUDED.description,
     source      = EXCLUDED.source,
@@ -62,7 +62,7 @@ ORDER BY purpose, phone;
 -- name: UpsertCompanyEmail :one
 INSERT INTO company_emails (company_id, email, description, purpose, name, source, confidence, evidence)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT ON CONSTRAINT uq_company_emails_active
+ON CONFLICT (company_id, lower(email), purpose) WHERE removed_at IS NULL
 DO UPDATE SET
     description = EXCLUDED.description,
     name        = EXCLUDED.name,
