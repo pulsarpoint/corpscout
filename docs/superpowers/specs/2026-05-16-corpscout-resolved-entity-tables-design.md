@@ -349,14 +349,32 @@ CPE vendor tokens are associations, not aliases.
 
 For example, `nginx` should not become a company alias for F5. If evidence shows the CPE vendor token belongs under F5 for catalog purposes, store it as a CPE token associated with F5.
 
-Each resolved type gets its own CPE token table:
+Each resolved type gets its own CPE token table. These tables intentionally do not share a generic parent because Corpscout does not use a generic `entries` root table.
+
+- `company_cpe_vendor_tokens` belongs only to `companies`.
+- `organization_cpe_vendor_tokens` belongs only to `organizations`.
+- `open_source_project_cpe_vendor_tokens` belongs only to `open_source_projects`.
+
+The three tables should mirror their non-FK columns so consumers can use the same semantics regardless of resolved entity type.
+
+`association_type` explains why this CPE vendor token belongs to the resolved entity. It should be explicit and should not have a default. If the system cannot choose an association type confidently, the token should remain in `identity_observations` for review.
+
+Allowed association types:
+
+- `official_identifier`: the CPE vendor token directly names this resolved entity.
+- `owned_product_or_brand`: the token names a product, product family, or brand owned by this entity.
+- `maintained_or_governed_project`: the token names a project maintained or governed by this entity.
+- `legacy_or_acquired`: the token comes from a previous owner, acquired entity, or legacy brand that now maps to this entity.
+- `manual_review`: a reviewer intentionally associated the token, but the precise reason does not fit the other categories.
+
+Company CPE token table:
 
 ```sql
 CREATE TABLE company_cpe_vendor_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     cpe_vendor_token TEXT NOT NULL,
-    association_type TEXT NOT NULL DEFAULT 'owned_or_maintained',
+    association_type TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'manual',
     confidence REAL,
     evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -366,6 +384,15 @@ CREATE TABLE company_cpe_vendor_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_company_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_company_cpe_vendor_tokens_association_type CHECK (
+        association_type IN (
+            'official_identifier',
+            'owned_product_or_brand',
+            'maintained_or_governed_project',
+            'legacy_or_acquired',
+            'manual_review'
+        )
+    ),
     CONSTRAINT chk_company_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
     CONSTRAINT chk_company_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
     CONSTRAINT chk_company_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
@@ -373,18 +400,81 @@ CREATE TABLE company_cpe_vendor_tokens (
 );
 ```
 
-Mirror that shape for:
+Organization CPE token table:
 
-- `organization_cpe_vendor_tokens`
-- `open_source_project_cpe_vendor_tokens`
+```sql
+CREATE TABLE organization_cpe_vendor_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    cpe_vendor_token TEXT NOT NULL,
+    association_type TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    confidence REAL,
+    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'active',
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_organization_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_organization_cpe_vendor_tokens_association_type CHECK (
+        association_type IN (
+            'official_identifier',
+            'owned_product_or_brand',
+            'maintained_or_governed_project',
+            'legacy_or_acquired',
+            'manual_review'
+        )
+    ),
+    CONSTRAINT chk_organization_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
+    CONSTRAINT chk_organization_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+    CONSTRAINT chk_organization_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
+    CONSTRAINT uq_organization_cpe_vendor_tokens UNIQUE (organization_id, cpe_vendor_token)
+);
+```
+
+Open-source project CPE token table:
+
+```sql
+CREATE TABLE open_source_project_cpe_vendor_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    open_source_project_id UUID NOT NULL REFERENCES open_source_projects(id) ON DELETE CASCADE,
+    cpe_vendor_token TEXT NOT NULL,
+    association_type TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    confidence REAL,
+    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'active',
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_association_type CHECK (
+        association_type IN (
+            'official_identifier',
+            'owned_product_or_brand',
+            'maintained_or_governed_project',
+            'legacy_or_acquired',
+            'manual_review'
+        )
+    ),
+    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
+    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
+    CONSTRAINT uq_open_source_project_cpe_vendor_tokens UNIQUE (open_source_project_id, cpe_vendor_token)
+);
+```
 
 Do not use these tables for unresolved CPE observations. They should contain resolved associations only.
 
 Examples:
 
-- `F5` company has CPE vendor tokens `f5` and `nginx` when evidence supports F5 ownership/maintenance context.
-- `Apache Software Foundation` organization has CPE vendor tokens `apache` and `apache_software_foundation`.
-- `Nmap` open-source project has CPE vendor token `nmap` if it resolves to the project rather than a company.
+- `F5` company has CPE vendor token `f5` with `association_type = 'official_identifier'`.
+- `F5` company has CPE vendor token `nginx` with `association_type = 'owned_product_or_brand'` when evidence supports F5 ownership or maintenance context.
+- `Apache Software Foundation` organization has CPE vendor tokens `apache` and `apache_software_foundation` with `association_type = 'official_identifier'`.
+- `CNCF` organization can have CPE vendor token `kubernetes` with `association_type = 'maintained_or_governed_project'` if the resolver intentionally maps that token to CNCF rather than the project row.
+- `Nmap` open-source project has CPE vendor token `nmap` with `association_type = 'official_identifier'` if it resolves to the project rather than a company.
 
 ## Observation And Candidate Queues
 
