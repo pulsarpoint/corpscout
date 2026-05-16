@@ -73,3 +73,50 @@ func TestHandleCreateOrganization_MissingRequiredFields(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestHandleCreateOrganization_Success(t *testing.T) {
+	q := &stubQuerier{}
+	q.On("InsertOrganization", mock.Anything, mock.MatchedBy(func(p db.InsertOrganizationParams) bool {
+		return p.DisplayName == "OWASP Foundation" &&
+			p.OrganizationType == "foundation" &&
+			p.CanonicalSlug != "" &&
+			string(p.Governance) == "{}" &&
+			string(p.Metadata) == "{}" &&
+			string(p.Evidence) == "{}"
+	})).Return(db.Organization{DisplayName: "OWASP Foundation"}, nil)
+
+	h := newTestHandlers(q)
+	r := routerFor(h)
+
+	body := `{"display_name":"OWASP Foundation","organization_type":"foundation"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/organizations", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestHandleCreateOpenSourceProject_Success(t *testing.T) {
+	q := &stubQuerier{}
+	q.On("InsertOpenSourceProject", mock.Anything, mock.MatchedBy(func(p db.InsertOpenSourceProjectParams) bool {
+		return p.DisplayName == "curl" &&
+			p.CanonicalSlug != "" &&
+			p.LifecycleStatus == "active" &&
+			string(p.Metadata) == "{}" &&
+			string(p.Evidence) == "{}"
+	})).Return(db.OpenSourceProject{DisplayName: "curl"}, nil)
+
+	h := newTestHandlers(q)
+	r := routerFor(h)
+
+	body := `{"display_name":"curl"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/open-source-projects", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	q.AssertExpectations(t)
+}

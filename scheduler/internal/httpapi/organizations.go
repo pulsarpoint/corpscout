@@ -13,12 +13,13 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/slug"
 )
 
-// nilIfBlank returns nil if s is empty or whitespace-only, otherwise a pointer to s.
+// nilIfBlank returns nil if s is empty or whitespace-only, otherwise a pointer to the trimmed value.
 func nilIfBlank(s string) *string {
-	if strings.TrimSpace(s) == "" {
+	t := strings.TrimSpace(s)
+	if t == "" {
 		return nil
 	}
-	return &s
+	return &t
 }
 
 // ── Organizations ─────────────────────────────────────────────────────────────
