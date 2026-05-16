@@ -95,6 +95,7 @@ Open-source projects can have repositories, package names, maintainers, licenses
 - Do not store product names as companies.
 - Do not add a generic `entries` table unless a future phase introduces shared child tables or strong cross-type FK requirements.
 - Do not force ambiguous inputs into one of the three resolved tables.
+- Do not design or implement a separate field-update review queue in this phase.
 
 ## Resolved Tables
 
@@ -116,6 +117,33 @@ ALTER TABLE companies
 ```
 
 `name` can remain the legal or registry name where existing imports depend on it. `display_name` can become the product-facing name used by consumers.
+
+For existing company rows, add `canonical_slug` as nullable first, backfill it with the rules below, resolve collisions, then enforce `NOT NULL` and uniqueness. New company writes must provide `canonical_slug`.
+
+After backfill:
+
+```sql
+ALTER TABLE companies
+    ALTER COLUMN canonical_slug SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_companies_canonical_slug
+    ON companies(canonical_slug);
+```
+
+### Canonical Slug Rules
+
+`canonical_slug` is a stable handle for URLs, search, and operator-facing references. It is unique inside each resolved root table, not globally unique across all entity types. Consumers must treat `(entity_type, canonical_slug)` as the public lookup key when using the unified resolver surface.
+
+Generate slugs with this algorithm:
+
+1. Choose the base label from `display_name`; for companies, fall back to `name` when `display_name` is empty.
+2. Trim whitespace, normalize Unicode with NFKD, transliterate when supported, drop remaining non-ASCII characters, lowercase the result, and replace `&` with `and`.
+3. Replace every run of non-alphanumeric characters with one hyphen.
+4. Collapse repeated hyphens and trim leading or trailing hyphens.
+5. If the slug is empty, use `{entity_type}-{uuid8}`.
+6. If the slug collides inside the same root table, append `-{uuid8}` from the entity ID instead of using an order-dependent numeric suffix.
+
+Do not automatically rewrite `canonical_slug` when `display_name` changes. Slug changes should be explicit administrative operations so external references remain stable. Resolver matching must not treat slug equality alone as strong identity evidence.
 
 ### `company_relationships`
 
@@ -195,6 +223,13 @@ Relationship type rule:
 - `direct_parent` and `ultimate_parent` are registry-style parent-chain relationships, especially for GLEIF or corporate registry enrichment.
 - `subsidiary_of` and `owned_by` are evidence-backed business relationships when the exact registry parent chain is not available.
 - Only one current relationship of the same type between the same companies is allowed. Rejected, superseded, or removed rows can remain as history without blocking a corrected active row.
+
+Source and precedence rule:
+
+- `source` must identify the origin of the relationship, such as `gleif`, `company_registry`, `manual_review`, `ai_research`, or a named importer.
+- `direct_parent` is authoritative over `subsidiary_of` for parent-chain consumers when both rows exist for the same subject and related company.
+- `subsidiary_of` can coexist with `direct_parent` as business-research evidence, but operational parent lookup should prefer `direct_parent`.
+- `ultimate_parent` rows are denormalized cache rows derived from the `direct_parent` chain. They exist to make queries fast, not as independently asserted facts. When the direct-parent chain changes, matching `ultimate_parent` rows must be rebuilt or superseded.
 
 Examples:
 
@@ -403,6 +438,22 @@ Promotion rules:
 - Keep ambiguous tokens in `identity_observations`.
 - Rejected observations remain as durable negative evidence.
 
+## Source And Observation Responsibilities
+
+Keep `company_sources`; it is not deprecated by `identity_observations`.
+
+`company_sources` remains the company-specific audit/source table for accepted profile facts on resolved company rows. It should be used for sources that support company fields such as legal name, website, headquarters, market, services, ownership notes, and registry data.
+
+`identity_observations` is for raw identity inputs, candidate matches, ambiguous inputs, and negative evidence before or during resolution. When an observation is promoted into a resolved company fact, keep the original observation for traceability and copy or link the accepted evidence into the resolved entity's evidence fields or `company_sources`.
+
+Organizations and open-source projects should get equivalent explicit source tables, such as `organization_sources` and `open_source_project_sources`, instead of sharing `company_sources`.
+
+## Deferred Field Update Review Queue
+
+This phase intentionally does not add a separate queue for proposed field updates to already-resolved entities.
+
+Trusted imports and manual review can update resolved profile fields directly while recording source/evidence metadata in the appropriate resolved source table. Lower-confidence field changes, such as a newly discovered website or address for an existing company, should not be auto-applied unless the importer can meet the normal confidence rules. A future phase can introduce a dedicated field-update review workflow, but this design should not block the resolved entity table migration on that queue.
+
 ## Resolver API
 
 Corpscout should expose a unified resolver API over the three precise root tables.
@@ -574,16 +625,17 @@ Do not promote when:
 
 ## Migration Strategy
 
-1. Keep existing `companies` tables.
+1. Keep existing `companies` tables, including `company_sources`.
 2. Add `canonical_slug`, `display_name`, `resolution_status`, `confidence`, and `evidence` to `companies`.
-3. Add `company_relationships`.
-4. Add `organizations` and `open_source_projects`.
-5. Add per-type CPE token association tables.
-6. Add `identity_observations`.
-7. Add `v_resolved_entities`.
-8. Add resolver queries and API endpoints.
-9. Teach backoffice-v2 to store typed Corpscout mappings.
-10. Gradually migrate company-only export/import logic to the resolver API.
+3. Backfill company slugs with the canonical slug algorithm, resolve collisions, then enforce `canonical_slug` uniqueness and `NOT NULL`.
+4. Add `company_relationships`.
+5. Add `organizations` and `open_source_projects`.
+6. Add per-type CPE token association tables.
+7. Add `identity_observations`.
+8. Add `v_resolved_entities`.
+9. Add resolver queries and API endpoints.
+10. Teach backoffice-v2 to store typed Corpscout mappings.
+11. Gradually migrate company-only export/import logic to the resolver API.
 
 The first implementation should not remove existing company endpoints. It should add the new tables and resolver surface alongside them.
 
@@ -596,6 +648,10 @@ Database tests:
 - `company_relationships` enforces resolved company parents on both sides
 - company relationships reject self-references
 - company relationships enforce current active/review uniqueness by subject, related company, and type
+- company relationship consumers prefer `direct_parent` over `subsidiary_of` for parent-chain lookups
+- `ultimate_parent` rows can be rebuilt or superseded when the direct-parent chain changes
+- canonical slug generation is deterministic and handles collisions with the entity ID suffix
+- existing `company_sources` data remains available after the migration
 - CPE token uniqueness is enforced per entity type
 - observation rows can exist without resolved entity IDs
 - resolved CPE token tables require a concrete parent row
@@ -620,6 +676,9 @@ Backoffice-v2 integration tests:
 
 - `companies.name` remains the registry/legal name for existing imports. `companies.display_name` is the consumer-facing label.
 - GLEIF parent fields remain on `companies` as source fields, but resolved company-to-company ownership and parentage should be written to `company_relationships`.
+- Parent-chain consumers should prefer `direct_parent` over `subsidiary_of`; `ultimate_parent` is a denormalized cache of the direct-parent chain.
+- `company_sources` remains the source table for resolved company facts. `identity_observations` does not replace it.
+- A field-update review queue is deferred. Do not add it to the first migration plan.
 - The first implementation adds CPE token association tables and minimal source/evidence storage. Rich organization and project contact/forum tables can be phased in after resolver and CPE mapping are stable.
 - Automatic CPE token promotion requires confidence `>= 0.90` plus evidence from at least one trusted source. Anything below that stays in `identity_observations`.
 - The resolver writes observations synchronously in the request path. Queue-based enrichment can process unresolved observations later.
