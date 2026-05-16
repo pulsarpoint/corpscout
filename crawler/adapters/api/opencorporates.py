@@ -31,15 +31,17 @@ class OpenCorporatesAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
+        api_key = os.getenv("CRAWLER_OPENCORPORATES_API_KEY")
+        if not api_key:
+            return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
+
         params: dict[str, Any] = {
             "q": "*",
             "inactive": "false",
             "per_page": str(self.page_size),
             "page": str(int(cursor) if cursor else max(page, 1)),
+            "api_token": api_key,
         }
-        api_key = os.getenv("CRAWLER_OPENCORPORATES_API_KEY")
-        if api_key:
-            params["api_token"] = api_key
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})

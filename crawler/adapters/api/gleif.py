@@ -32,8 +32,7 @@ class GLEIFAdapter(SourceAdapter):
             "page[number]": str(effective_page),
             "page[size]": str(self.page_size),
         }
-        if since is not None:
-            params["filter[lastUpdateTime]"] = since.isoformat()
+        # GLEIF API does not support time-based filtering; always do a full page scan.
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.base_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})

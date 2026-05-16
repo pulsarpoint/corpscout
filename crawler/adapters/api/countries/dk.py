@@ -23,15 +23,16 @@ class CVRAdapter(SourceAdapter):
         page: int,
     ) -> CrawlResponse:
         token = os.getenv("CVR_API_TOKEN")
+        if not token:
+            return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
 
         offset = int(cursor) if cursor else 0
         params: dict[str, Any] = {
             "search": "",
             "country": "dk",
             "start": str(offset),
+            "token": token,
         }
-        if token:
-            params["token"] = token
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
