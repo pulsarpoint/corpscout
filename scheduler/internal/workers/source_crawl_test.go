@@ -233,6 +233,14 @@ func (m *mockQuerier) UpsertCompanyService(ctx context.Context, arg db.UpsertCom
 	return db.CompanyService{}, nil
 }
 
+func (m *mockQuerier) ListCompaniesForGLEIFEnrich(ctx context.Context, arg db.ListCompaniesForGLEIFEnrichParams) ([]db.ListCompaniesForGLEIFEnrichRow, error) {
+	return nil, nil
+}
+
+func (m *mockQuerier) UpdateCompanyParentLEI(ctx context.Context, arg db.UpdateCompanyParentLEIParams) error {
+	return nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

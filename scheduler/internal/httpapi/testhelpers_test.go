@@ -233,6 +233,14 @@ func (s *stubQuerier) UpsertDomain(ctx context.Context, domain string) (db.Domai
 	return db.Domain{}, nil
 }
 
+func (s *stubQuerier) ListCompaniesForGLEIFEnrich(ctx context.Context, arg db.ListCompaniesForGLEIFEnrichParams) ([]db.ListCompaniesForGLEIFEnrichRow, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) UpdateCompanyParentLEI(ctx context.Context, arg db.UpdateCompanyParentLEIParams) error {
+	return nil
+}
+
 // --- helpers ---
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
