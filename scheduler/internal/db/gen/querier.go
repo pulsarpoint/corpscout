@@ -17,12 +17,14 @@ type Querier interface {
 	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
 	CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error)
 	CountOrganizations(ctx context.Context, q_ *string) (int64, error)
+	CountPendingCPELinkSuggestions(ctx context.Context) (int64, error)
 	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
 	// Atomically records the review decision and updates the domain candidate status
 	// in a single statement so the audit trail can never diverge from the domain state.
 	CreateDomainReviewAndUpdateStatus(ctx context.Context, arg CreateDomainReviewAndUpdateStatusParams) (CompanyDomainReview, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
+	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
 	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
@@ -39,6 +41,10 @@ type Querier interface {
 	GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (Organization, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
+	InsertCPEEntityLink(ctx context.Context, arg InsertCPEEntityLinkParams) (CpeEntityLink, error)
+	InsertCPELinkSuggestion(ctx context.Context, arg InsertCPELinkSuggestionParams) (CpeEntityLinkSuggestion, error)
+	InsertCVEEntityLink(ctx context.Context, arg InsertCVEEntityLinkParams) (CveEntityLink, error)
+	InsertCVELinkSuggestion(ctx context.Context, arg InsertCVELinkSuggestionParams) (CveEntityLinkSuggestion, error)
 	// database/queries/open_source_projects.sql
 	InsertOpenSourceProject(ctx context.Context, arg InsertOpenSourceProjectParams) (OpenSourceProject, error)
 	// database/queries/organizations.sql
@@ -54,9 +60,13 @@ type Querier interface {
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
 	ListOpenSourceProjects(ctx context.Context, arg ListOpenSourceProjectsParams) ([]OpenSourceProject, error)
 	ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error)
+	ListPendingCPELinkSuggestions(ctx context.Context, arg ListPendingCPELinkSuggestionsParams) ([]CpeEntityLinkSuggestion, error)
+	ListPendingCVELinkSuggestions(ctx context.Context, arg ListPendingCVELinkSuggestionsParams) ([]CveEntityLinkSuggestion, error)
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
 	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
+	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
+	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)

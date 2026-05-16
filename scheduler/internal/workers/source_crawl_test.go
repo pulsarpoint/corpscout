@@ -294,6 +294,37 @@ func (m *mockQuerier) UpdateOpenSourceProjectStatus(ctx context.Context, arg db.
 	return nil
 }
 
+func (m *mockQuerier) CountPendingCPELinkSuggestions(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (m *mockQuerier) GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (db.CpeEntityLink, error) {
+	return db.CpeEntityLink{}, nil
+}
+func (m *mockQuerier) InsertCPEEntityLink(ctx context.Context, arg db.InsertCPEEntityLinkParams) (db.CpeEntityLink, error) {
+	return db.CpeEntityLink{}, nil
+}
+func (m *mockQuerier) InsertCPELinkSuggestion(ctx context.Context, arg db.InsertCPELinkSuggestionParams) (db.CpeEntityLinkSuggestion, error) {
+	return db.CpeEntityLinkSuggestion{}, nil
+}
+func (m *mockQuerier) InsertCVEEntityLink(ctx context.Context, arg db.InsertCVEEntityLinkParams) (db.CveEntityLink, error) {
+	return db.CveEntityLink{}, nil
+}
+func (m *mockQuerier) InsertCVELinkSuggestion(ctx context.Context, arg db.InsertCVELinkSuggestionParams) (db.CveEntityLinkSuggestion, error) {
+	return db.CveEntityLinkSuggestion{}, nil
+}
+func (m *mockQuerier) ListPendingCPELinkSuggestions(ctx context.Context, arg db.ListPendingCPELinkSuggestionsParams) ([]db.CpeEntityLinkSuggestion, error) {
+	return nil, nil
+}
+func (m *mockQuerier) ListPendingCVELinkSuggestions(ctx context.Context, arg db.ListPendingCVELinkSuggestionsParams) ([]db.CveEntityLinkSuggestion, error) {
+	return nil, nil
+}
+func (m *mockQuerier) UpdateCPELinkSuggestionStatus(ctx context.Context, arg db.UpdateCPELinkSuggestionStatusParams) error {
+	return nil
+}
+func (m *mockQuerier) UpdateCVELinkSuggestionStatus(ctx context.Context, arg db.UpdateCVELinkSuggestionStatusParams) error {
+	return nil
+}
+
 // compile-time check
 var _ db.Querier = (*mockQuerier)(nil)
 

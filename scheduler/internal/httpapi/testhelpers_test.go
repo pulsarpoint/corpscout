@@ -311,6 +311,37 @@ func (s *stubQuerier) UpdateOpenSourceProjectStatus(ctx context.Context, arg db.
 	return nil
 }
 
+func (s *stubQuerier) CountPendingCPELinkSuggestions(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (s *stubQuerier) GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (db.CpeEntityLink, error) {
+	return db.CpeEntityLink{}, nil
+}
+func (s *stubQuerier) InsertCPEEntityLink(ctx context.Context, arg db.InsertCPEEntityLinkParams) (db.CpeEntityLink, error) {
+	return db.CpeEntityLink{}, nil
+}
+func (s *stubQuerier) InsertCPELinkSuggestion(ctx context.Context, arg db.InsertCPELinkSuggestionParams) (db.CpeEntityLinkSuggestion, error) {
+	return db.CpeEntityLinkSuggestion{}, nil
+}
+func (s *stubQuerier) InsertCVEEntityLink(ctx context.Context, arg db.InsertCVEEntityLinkParams) (db.CveEntityLink, error) {
+	return db.CveEntityLink{}, nil
+}
+func (s *stubQuerier) InsertCVELinkSuggestion(ctx context.Context, arg db.InsertCVELinkSuggestionParams) (db.CveEntityLinkSuggestion, error) {
+	return db.CveEntityLinkSuggestion{}, nil
+}
+func (s *stubQuerier) ListPendingCPELinkSuggestions(ctx context.Context, arg db.ListPendingCPELinkSuggestionsParams) ([]db.CpeEntityLinkSuggestion, error) {
+	return nil, nil
+}
+func (s *stubQuerier) ListPendingCVELinkSuggestions(ctx context.Context, arg db.ListPendingCVELinkSuggestionsParams) ([]db.CveEntityLinkSuggestion, error) {
+	return nil, nil
+}
+func (s *stubQuerier) UpdateCPELinkSuggestionStatus(ctx context.Context, arg db.UpdateCPELinkSuggestionStatusParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCVELinkSuggestionStatus(ctx context.Context, arg db.UpdateCVELinkSuggestionStatusParams) error {
+	return nil
+}
+
 // --- helpers ---
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
