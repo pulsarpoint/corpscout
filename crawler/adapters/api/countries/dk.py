@@ -22,8 +22,8 @@ class CVRAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
-        token = os.getenv("CVR_API_TOKEN")
-        if not token:
+        token = (os.getenv("CVR_API_TOKEN") or "").strip()
+        if not token or token.startswith("#"):
             return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
 
         offset = int(cursor) if cursor else 0
