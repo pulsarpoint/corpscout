@@ -10,6 +10,10 @@ from ...base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter
 
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
+# The CH Advanced Search API rejects start_index + size > 10_000.
+# With page_size=100, pages 0-99 are safe (page 99: start_index=9900).
+_CH_MAX_PAGE = 99
+
 
 def _map_status(value: str | None) -> str:
     v = (value or "").lower()
@@ -37,13 +41,27 @@ class CompaniesHouseAdapter(SourceAdapter):
         if not api_key:
             raise RuntimeError("COMPANIES_HOUSE_API_KEY is not set — API requires HTTP Basic auth")
 
-        effective_page = int(cursor) if cursor else max(page, 1)
-        start_index = (effective_page - 1) * self.page_size
+        # cursor = "YYYY-MM-DD,N" (incorporated_from date + 0-indexed page within bucket)
+        # or None / legacy integer → start from page 0 with no date filter.
+        date_cursor: str | None = None
+        page_offset: int = 0
+
+        if cursor and "," in cursor:
+            parts = cursor.split(",", 1)
+            date_cursor = parts[0] or None
+            try:
+                page_offset = int(parts[1])
+            except ValueError:
+                page_offset = 0
+
+        start_index = page_offset * self.page_size
         params: dict[str, Any] = {
             "size": str(self.page_size),
             "start_index": str(start_index),
             "company_status": "active",
         }
+        if date_cursor:
+            params["incorporated_from"] = date_cursor
 
         async with httpx.AsyncClient(timeout=30.0, auth=(api_key, "")) as client:
             resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
@@ -94,10 +112,17 @@ class CompaniesHouseAdapter(SourceAdapter):
                 )
             )
 
-        total = int(data.get("total_results") or 0)
-        start = int(data.get("start_index") or start_index)
-        has_more = (start + len(items)) < total
-        next_cursor = str(effective_page + 1) if has_more else None
+        # CH API never returns total_results; use `hits` for the total count.
+        total = int(data.get("hits") or 0)
+        has_more = len(items) == self.page_size
+
+        next_cursor: str | None = None
+        if has_more:
+            if page_offset < _CH_MAX_PAGE:
+                next_cursor = f"{date_cursor or ''},{page_offset + 1}"
+            else:
+                last_date = (items[-1].get("date_of_creation") or "") if items else ""
+                next_cursor = f"{last_date},0"
 
         return CrawlResponse(
             records=records,
