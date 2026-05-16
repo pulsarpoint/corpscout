@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/go-chi/chi/v5"
+	"github.com/riverqueue/river"
 )
 
 type jobRow struct {
@@ -198,6 +200,33 @@ func (h *Handlers) handleJobStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, stats)
+}
+
+func (h *Handlers) handleCancelJob(w http.ResponseWriter, r *http.Request) {
+	if h.rv == nil {
+		writeError(w, http.StatusServiceUnavailable, "river client not available")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	var id int64
+	if _, err := fmt.Sscan(idStr, &id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	_, err := h.rv.JobCancel(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, river.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return
+		}
+		slog.Error("cancel job", "job_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to cancel job")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "cancelled", "id": id})
 }
 
 func nilIfEmpty(s string) *string {

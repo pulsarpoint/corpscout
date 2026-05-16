@@ -120,5 +120,7 @@ export const api = {
 
   getJob: (id: number) => get<Job>(`/jobs/${id}`),
 
+  cancelJob: (id: number) => post<{ status: string; id: number }>(`/jobs/${id}/cancel`, {}),
+
   getCountries: () => get<Country[]>("/countries"),
 };

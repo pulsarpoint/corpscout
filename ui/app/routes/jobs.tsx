@@ -31,7 +31,10 @@ const STATE_LABELS: Record<string, string> = {
 const KIND_LABELS: Record<string, string> = {
   source_crawl:   "Source Crawl",
   domain_resolve: "Domain Resolve",
+  gleif_enrich:   "GLEIF Enrich",
 };
+
+const CANCELLABLE_STATES = new Set(["available", "running", "scheduled", "retryable"]);
 
 function StateBadge({ state }: { state: string }) {
   const label = STATE_LABELS[state] ?? state;
@@ -55,6 +58,8 @@ function KindBadge({ kind }: { kind: string }) {
     return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-xs" variant="outline">Source Crawl</Badge>;
   if (kind === "domain_resolve")
     return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 text-xs" variant="outline">Domain Resolve</Badge>;
+  if (kind === "gleif_enrich")
+    return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs" variant="outline">GLEIF Enrich</Badge>;
   return <Badge variant="outline" className="text-xs">{kind}</Badge>;
 }
 
@@ -101,7 +106,22 @@ function ErrorList({ errors }: { errors: JobError[] }) {
   );
 }
 
-function ExpandedJob({ job }: { job: Job }) {
+function ExpandedJob({ job, onCancel }: { job: Job; onCancel: (id: number) => Promise<void> }) {
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string>();
+
+  async function handleCancel() {
+    setCancelling(true);
+    setCancelError(undefined);
+    try {
+      await onCancel(job.id);
+    } catch {
+      setCancelError("Failed to cancel job.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="px-4 py-3 bg-muted/30 border-t space-y-3 text-sm">
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-4">
@@ -123,6 +143,20 @@ function ExpandedJob({ job }: { job: Job }) {
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Error history</p>
           <ErrorList errors={job.errors} />
+        </div>
+      )}
+      {CANCELLABLE_STATES.has(job.state) && (
+        <div className="flex items-center gap-3">
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={cancelling}
+            onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+          >
+            {cancelling ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+            Cancel job
+          </Button>
+          {cancelError && <span className="text-xs text-red-600">{cancelError}</span>}
         </div>
       )}
     </div>
@@ -169,6 +203,11 @@ export default function JobsPage() {
     return () => clearInterval(timerRef.current);
   }, [fetchData]);
 
+  async function cancelJob(id: number) {
+    await api.cancelJob(id);
+    await fetchData();
+  }
+
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value); else next.delete(key);
@@ -206,6 +245,7 @@ export default function JobsPage() {
           <option value="">All types</option>
           <option value="source_crawl">Source Crawl</option>
           <option value="domain_resolve">Domain Resolve</option>
+          <option value="gleif_enrich">GLEIF Enrich</option>
         </select>
         <select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -281,7 +321,7 @@ export default function JobsPage() {
                     {expandedId === j.id && (
                       <TableRow key={`${j.id}-detail`}>
                         <TableCell colSpan={7} className="p-0">
-                          <ExpandedJob job={j} />
+                          <ExpandedJob job={j} onCancel={cancelJob} />
                         </TableCell>
                       </TableRow>
                     )}
