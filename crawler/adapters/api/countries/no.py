@@ -10,6 +10,12 @@ from ...base import CompanyLocation, CompanyRecord, CrawlResponse, SourceAdapter
 _USER_AGENT = "corpscout/1.0 (https://github.com/pulsarpoint/corpscout; ops@pulsarpoint.com)"
 
 
+# Brreg API rejects size*(page+1) > 10_000. With size=200 that means page 0-49 max.
+# We use date-cursor pagination: cursor = "YYYY-MM-DD,<page_offset>" so we can
+# restart the page counter for each date bucket and cover all 1.1M records.
+_BRREG_MAX_PAGE = 49  # 200 * (49+1) = 10_000 — safe upper bound
+
+
 class BrregAdapter(SourceAdapter):
     source_name: ClassVar[str] = "brreg"
     endpoint: ClassVar[str] = "https://data.brreg.no/enhetsregisteret/api/enheter"
@@ -21,13 +27,28 @@ class BrregAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
-        effective_page = int(cursor) if cursor else max(page, 1)
-        zero_page = max(effective_page - 1, 0)
+        # cursor = "YYYY-MM-DD,N" (date bucket + 0-indexed page within bucket)
+        # or None (start from beginning)
+        # Legacy integer cursors (page numbers) are reset to the beginning.
+        date_cursor: str | None = None
+        page_offset: int = 0
+
+        if cursor and "," in cursor:
+            parts = cursor.split(",", 1)
+            date_cursor = parts[0] or None
+            try:
+                page_offset = int(parts[1])
+            except ValueError:
+                page_offset = 0
+        # else: legacy int cursor or None → start from page 0 with no date filter
+
         params: dict[str, Any] = {
-            "page": str(zero_page),
+            "page": str(page_offset),
             "size": str(self.page_size),
             "sort": "registreringsdatoEnhetsregisteret,asc",
         }
+        if date_cursor:
+            params["fraRegistreringsdatoEnhetsregisteret"] = date_cursor
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
@@ -92,9 +113,18 @@ class BrregAdapter(SourceAdapter):
         page_info = data.get("page") or {}
         total = int(page_info.get("totalElements") or 0)
         total_pages = int(page_info.get("totalPages") or 0)
-        current = int(page_info.get("number") or zero_page)
+        current = int(page_info.get("number") or page_offset)
+
         has_more = (current + 1) < total_pages
-        next_cursor = str(current + 2) if has_more else None  # convert back to 1-indexed
+        next_cursor: str | None = None
+        if has_more:
+            if current < _BRREG_MAX_PAGE:
+                # Stay in the same date bucket, advance page
+                next_cursor = f"{date_cursor or ''},{current + 1}"
+            else:
+                # At page limit — advance date bucket to last record's registration date
+                last_date = (embedded[-1].get("registreringsdatoEnhetsregisteret") or "") if embedded else ""
+                next_cursor = f"{last_date},0"
 
         return CrawlResponse(
             records=records,
