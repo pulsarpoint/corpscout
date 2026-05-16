@@ -1101,8 +1101,8 @@ func (s *stubQuerier) ListOrganizations(ctx context.Context, arg db.ListOrganiza
 	}
 	return nil, ret.Error(1)
 }
-func (s *stubQuerier) CountOrganizations(ctx context.Context, q *string) (int64, error) {
-	ret := s.Called(ctx, q)
+func (s *stubQuerier) CountOrganizations(ctx context.Context, arg db.CountOrganizationsParams) (int64, error) {
+	ret := s.Called(ctx, arg)
 	return ret.Get(0).(int64), ret.Error(1)
 }
 func (s *stubQuerier) UpdateOrganizationStatus(ctx context.Context, arg db.UpdateOrganizationStatusParams) error {
@@ -1127,8 +1127,8 @@ func (s *stubQuerier) ListOpenSourceProjects(ctx context.Context, arg db.ListOpe
 	}
 	return nil, ret.Error(1)
 }
-func (s *stubQuerier) CountOpenSourceProjects(ctx context.Context, q *string) (int64, error) {
-	ret := s.Called(ctx, q)
+func (s *stubQuerier) CountOpenSourceProjects(ctx context.Context, arg db.CountOpenSourceProjectsParams) (int64, error) {
+	ret := s.Called(ctx, arg)
 	return ret.Get(0).(int64), ret.Error(1)
 }
 func (s *stubQuerier) UpdateOpenSourceProjectStatus(ctx context.Context, arg db.UpdateOpenSourceProjectStatusParams) error {
@@ -1780,7 +1780,7 @@ import (
 func TestHandleListOrganizations_Empty(t *testing.T) {
 	q := &stubQuerier{}
 	q.On("ListOrganizations", mock.Anything, mock.Anything).Return([]db.Organization{}, nil)
-	q.On("CountOrganizations", mock.Anything, mock.Anything).Return(int64(0), nil)
+	q.On("CountOrganizations", mock.Anything, mock.AnythingOfType("db.CountOrganizationsParams")).Return(int64(0), nil)
 
 	h := newTestHandlers(q)
 	r := routerFor(h)
@@ -1893,7 +1893,7 @@ func (h *Handlers) handleListOrganizations(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	total, err := h.db.CountOrganizations(r.Context(), params.Q)
+	total, err := h.db.CountOrganizations(r.Context(), db.CountOrganizationsParams{Q: params.Q})
 	if err != nil {
 		slog.Error("count organizations", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -1986,7 +1986,7 @@ func (h *Handlers) handleListOpenSourceProjects(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	total, err := h.db.CountOpenSourceProjects(r.Context(), params.Q)
+	total, err := h.db.CountOpenSourceProjects(r.Context(), db.CountOpenSourceProjectsParams{Q: params.Q})
 	if err != nil {
 		slog.Error("count open_source_projects", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
