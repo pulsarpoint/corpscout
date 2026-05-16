@@ -44,6 +44,12 @@ func (w *SourceCrawlWorker) SetRiverClient(rc *river.Client[pgx.Tx]) {
 	w.riverClient = rc
 }
 
+// Timeout gives source crawl jobs 12 hours — large sources (brreg ~1M records)
+// take several hours per full crawl and must not be cut off by the default 1h limit.
+func (w *SourceCrawlWorker) Timeout(*river.Job[SourceCrawlArgs]) time.Duration {
+	return 12 * time.Hour
+}
+
 // Work executes a source crawl job.
 func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawlArgs]) error {
 	sourceName := job.Args.SourceName
@@ -96,7 +102,10 @@ func (w *SourceCrawlWorker) Work(ctx context.Context, job *river.Job[SourceCrawl
 		if err != nil {
 			slog.Error("source crawl: crawl failed", "source", sourceName, "job_id", job.ID, "page", page, "error", err)
 			errMsg := err.Error()
-			_ = w.db.FailPullRun(ctx, db.FailPullRunParams{
+			// Use context.Background() — the job context may already be cancelled
+			// (e.g. deadline exceeded), so we must use an independent context to
+			// ensure the status update actually reaches the database.
+			_ = w.db.FailPullRun(context.Background(), db.FailPullRunParams{
 				ID:           pullRun.ID,
 				ErrorMessage: &errMsg,
 			})
