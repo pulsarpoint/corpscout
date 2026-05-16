@@ -287,7 +287,6 @@ CREATE TABLE organizations (
 
 Organization child tables should be explicit:
 
-- `organization_cpe_vendor_tokens`
 - `organization_websites`
 - `organization_contacts`
 - `organization_locations`
@@ -333,7 +332,6 @@ CREATE TABLE open_source_projects (
 
 Open-source project child tables should be explicit:
 
-- `open_source_project_cpe_vendor_tokens`
 - `open_source_project_repositories`
 - `open_source_project_package_names`
 - `open_source_project_maintainers`
@@ -343,138 +341,227 @@ Open-source project child tables should be explicit:
 - `open_source_project_sources`
 - `open_source_project_related_organizations`
 
-## CPE Vendor Token Associations
+## CPE And CVE Entity Links
 
-CPE vendor tokens are associations, not aliases.
+CPE vendor tokens and CVE IDs are associations, not aliases.
 
 For example, `nginx` should not become a company alias for F5. If evidence shows the CPE vendor token belongs under F5 for catalog purposes, store it as a CPE token associated with F5.
 
-Each resolved type gets its own CPE token table. These tables intentionally do not share a generic parent because Corpscout does not use a generic `entries` root table.
+Use a two-step model:
 
-- `company_cpe_vendor_tokens` belongs only to `companies`.
-- `organization_cpe_vendor_tokens` belongs only to `organizations`.
-- `open_source_project_cpe_vendor_tokens` belongs only to `open_source_projects`.
+- suggestion tables store review workflow data, evidence, confidence, proposed target, and approval state
+- approved link tables store only the final mapping and a reference back to the approved suggestion
 
-The three tables should mirror their non-FK columns so consumers can use the same semantics regardless of resolved entity type.
+Do not store `source`, `evidence`, `confidence`, reviewer notes, or proposed entity creation payloads on approved links. Those belong on suggestions. Approved links should stay small because they are operational lookup tables.
 
-`association_type` explains why this CPE vendor token belongs to the resolved entity. It should be explicit and should not have a default. If the system cannot choose an association type confidently, the token should remain in `identity_observations` for review.
+These link tables are the narrow exception to the "no shared child tables" rule. They are not profile child tables; they are resolver mapping tables from external security identifiers to one resolved entity type.
 
-Allowed association types:
+### CPE Entity Link Suggestions
 
-- `official_identifier`: the CPE vendor token directly names this resolved entity.
-- `owned_product_or_brand`: the token names a product, product family, or brand owned by this entity.
-- `maintained_or_governed_project`: the token names a project maintained or governed by this entity.
-- `legacy_or_acquired`: the token comes from a previous owner, acquired entity, or legacy brand that now maps to this entity.
-- `manual_review`: a reviewer intentionally associated the token, but the precise reason does not fit the other categories.
-
-Company CPE token table:
+`cpe_entity_link_suggestions` stores candidate mappings from a CPE vendor token to either an existing resolved entity or a proposed entity that should be created first.
 
 ```sql
-CREATE TABLE company_cpe_vendor_tokens (
+CREATE TABLE cpe_entity_link_suggestions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     cpe_vendor_token TEXT NOT NULL,
-    association_type TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'manual',
+    target_entity_type TEXT NOT NULL,
+    target_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    target_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    target_open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE SET NULL,
+    proposed_entity_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    suggested_by TEXT NOT NULL,
     confidence REAL,
     evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status TEXT NOT NULL DEFAULT 'active',
-    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_company_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
-    CONSTRAINT chk_company_cpe_vendor_tokens_association_type CHECK (
-        association_type IN (
-            'official_identifier',
-            'owned_product_or_brand',
-            'maintained_or_governed_project',
-            'legacy_or_acquired',
-            'manual_review'
+    CONSTRAINT chk_cpe_entity_link_suggestions_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_cpe_entity_link_suggestions_target_type CHECK (
+        target_entity_type IN ('company', 'organization', 'open_source_project')
+    ),
+    CONSTRAINT chk_cpe_entity_link_suggestions_target_matches_type CHECK (
+        (
+            target_entity_type = 'company'
+            AND target_organization_id IS NULL
+            AND target_open_source_project_id IS NULL
+        )
+        OR (
+            target_entity_type = 'organization'
+            AND target_company_id IS NULL
+            AND target_open_source_project_id IS NULL
+        )
+        OR (
+            target_entity_type = 'open_source_project'
+            AND target_company_id IS NULL
+            AND target_organization_id IS NULL
         )
     ),
-    CONSTRAINT chk_company_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
-    CONSTRAINT chk_company_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
-    CONSTRAINT chk_company_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
-    CONSTRAINT uq_company_cpe_vendor_tokens UNIQUE (company_id, cpe_vendor_token)
+    CONSTRAINT chk_cpe_entity_link_suggestions_target_or_payload CHECK (
+        num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
+        OR proposed_entity_payload <> '{}'::jsonb
+    ),
+    CONSTRAINT chk_cpe_entity_link_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_cpe_entity_link_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_cpe_entity_link_suggestions_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
+    CONSTRAINT chk_cpe_entity_link_suggestions_payload_object CHECK (jsonb_typeof(proposed_entity_payload) = 'object')
 );
+
+CREATE INDEX idx_cpe_entity_link_suggestions_review
+    ON cpe_entity_link_suggestions(status, cpe_vendor_token, target_entity_type);
 ```
 
-Organization CPE token table:
+If the target entity does not exist, `proposed_entity_payload` should contain the proposed `display_name`, `canonical_slug` input, `website` when known, and enough evidence for a reviewer to decide whether to create a `company`, `organization`, or `open_source_project`.
+
+When a suggestion is approved for a missing entity, the approval transaction should create the resolved entity first, update the suggestion with the new target ID, then insert the approved link.
+
+### CPE Entity Links
+
+`cpe_entity_links` stores approved CPE vendor-token mappings only. There should be one active approved link per CPE vendor token. Ambiguous tokens should stay as pending or rejected suggestions until one target is chosen.
 
 ```sql
-CREATE TABLE organization_cpe_vendor_tokens (
+CREATE TABLE cpe_entity_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     cpe_vendor_token TEXT NOT NULL,
-    association_type TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'manual',
-    confidence REAL,
-    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status TEXT NOT NULL DEFAULT 'active',
-    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE CASCADE,
+    approved_suggestion_id UUID NOT NULL REFERENCES cpe_entity_link_suggestions(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_organization_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
-    CONSTRAINT chk_organization_cpe_vendor_tokens_association_type CHECK (
-        association_type IN (
-            'official_identifier',
-            'owned_product_or_brand',
-            'maintained_or_governed_project',
-            'legacy_or_acquired',
-            'manual_review'
-        )
-    ),
-    CONSTRAINT chk_organization_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
-    CONSTRAINT chk_organization_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
-    CONSTRAINT chk_organization_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
-    CONSTRAINT uq_organization_cpe_vendor_tokens UNIQUE (organization_id, cpe_vendor_token)
+    removed_at TIMESTAMPTZ,
+    CONSTRAINT chk_cpe_entity_links_token CHECK (btrim(cpe_vendor_token) <> ''),
+    CONSTRAINT chk_cpe_entity_links_one_target CHECK (
+        num_nonnulls(company_id, organization_id, open_source_project_id) = 1
+    )
 );
+
+CREATE UNIQUE INDEX uq_cpe_entity_links_active_token
+    ON cpe_entity_links(cpe_vendor_token)
+    WHERE removed_at IS NULL;
+
+CREATE UNIQUE INDEX uq_cpe_entity_links_active_suggestion
+    ON cpe_entity_links(approved_suggestion_id)
+    WHERE removed_at IS NULL;
 ```
 
-Open-source project CPE token table:
+The service layer must verify that `approved_suggestion_id` points to a suggestion with `status = 'approved'` and that the approved link target matches the suggestion target. A database trigger can enforce that later, but the first migration can keep this in service code.
+
+### CVE Entity Link Suggestions
+
+Use the same suggestion pattern for CVE-to-entity mappings. Corpscout should store CVE entity relevance only; product-level CVE mappings remain in backoffice-v2.
 
 ```sql
-CREATE TABLE open_source_project_cpe_vendor_tokens (
+CREATE TABLE cve_entity_link_suggestions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    open_source_project_id UUID NOT NULL REFERENCES open_source_projects(id) ON DELETE CASCADE,
-    cpe_vendor_token TEXT NOT NULL,
-    association_type TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'manual',
+    cve_id TEXT NOT NULL,
+    target_entity_type TEXT NOT NULL,
+    target_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    target_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    target_open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE SET NULL,
+    proposed_entity_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    suggested_by TEXT NOT NULL,
     confidence REAL,
     evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status TEXT NOT NULL DEFAULT 'active',
-    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_token CHECK (btrim(cpe_vendor_token) <> ''),
-    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_association_type CHECK (
-        association_type IN (
-            'official_identifier',
-            'owned_product_or_brand',
-            'maintained_or_governed_project',
-            'legacy_or_acquired',
-            'manual_review'
+    CONSTRAINT chk_cve_entity_link_suggestions_cve_id CHECK (
+        cve_id ~ '^CVE-[0-9]{4}-[0-9]{4,}$'
+    ),
+    CONSTRAINT chk_cve_entity_link_suggestions_target_type CHECK (
+        target_entity_type IN ('company', 'organization', 'open_source_project')
+    ),
+    CONSTRAINT chk_cve_entity_link_suggestions_target_matches_type CHECK (
+        (
+            target_entity_type = 'company'
+            AND target_organization_id IS NULL
+            AND target_open_source_project_id IS NULL
+        )
+        OR (
+            target_entity_type = 'organization'
+            AND target_company_id IS NULL
+            AND target_open_source_project_id IS NULL
+        )
+        OR (
+            target_entity_type = 'open_source_project'
+            AND target_company_id IS NULL
+            AND target_organization_id IS NULL
         )
     ),
-    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_status CHECK (status IN ('active', 'needs_review', 'rejected', 'superseded')),
-    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_confidence CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
-    CONSTRAINT chk_open_source_project_cpe_vendor_tokens_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
-    CONSTRAINT uq_open_source_project_cpe_vendor_tokens UNIQUE (open_source_project_id, cpe_vendor_token)
+    CONSTRAINT chk_cve_entity_link_suggestions_target_or_payload CHECK (
+        num_nonnulls(target_company_id, target_organization_id, target_open_source_project_id) = 1
+        OR proposed_entity_payload <> '{}'::jsonb
+    ),
+    CONSTRAINT chk_cve_entity_link_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_cve_entity_link_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_cve_entity_link_suggestions_evidence_object CHECK (jsonb_typeof(evidence) = 'object'),
+    CONSTRAINT chk_cve_entity_link_suggestions_payload_object CHECK (jsonb_typeof(proposed_entity_payload) = 'object')
 );
+
+CREATE INDEX idx_cve_entity_link_suggestions_review
+    ON cve_entity_link_suggestions(status, cve_id, target_entity_type);
 ```
 
-Do not use these tables for unresolved CPE observations. They should contain resolved associations only.
+### CVE Entity Links
+
+Unlike CPE vendor tokens, one CVE can be linked to multiple resolved entities. Enforce uniqueness only for the same CVE and same target entity.
+
+```sql
+CREATE TABLE cve_entity_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cve_id TEXT NOT NULL,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE CASCADE,
+    approved_suggestion_id UUID NOT NULL REFERENCES cve_entity_link_suggestions(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    removed_at TIMESTAMPTZ,
+    CONSTRAINT chk_cve_entity_links_cve_id CHECK (
+        cve_id ~ '^CVE-[0-9]{4}-[0-9]{4,}$'
+    ),
+    CONSTRAINT chk_cve_entity_links_one_target CHECK (
+        num_nonnulls(company_id, organization_id, open_source_project_id) = 1
+    )
+);
+
+CREATE UNIQUE INDEX uq_cve_entity_links_active_company
+    ON cve_entity_links(cve_id, company_id)
+    WHERE removed_at IS NULL AND company_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_cve_entity_links_active_organization
+    ON cve_entity_links(cve_id, organization_id)
+    WHERE removed_at IS NULL AND organization_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_cve_entity_links_active_open_source_project
+    ON cve_entity_links(cve_id, open_source_project_id)
+    WHERE removed_at IS NULL AND open_source_project_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_cve_entity_links_active_suggestion
+    ON cve_entity_links(approved_suggestion_id)
+    WHERE removed_at IS NULL;
+```
+
+The service layer must verify that `approved_suggestion_id` points to a suggestion with `status = 'approved'` and that the approved CVE link target matches the suggestion target.
 
 Examples:
 
-- `F5` company has CPE vendor token `f5` with `association_type = 'official_identifier'`.
-- `F5` company has CPE vendor token `nginx` with `association_type = 'owned_product_or_brand'` when evidence supports F5 ownership or maintenance context.
-- `Apache Software Foundation` organization has CPE vendor tokens `apache` and `apache_software_foundation` with `association_type = 'official_identifier'`.
-- `CNCF` organization can have CPE vendor token `kubernetes` with `association_type = 'maintained_or_governed_project'` if the resolver intentionally maps that token to CNCF rather than the project row.
-- `Nmap` open-source project has CPE vendor token `nmap` with `association_type = 'official_identifier'` if it resolves to the project rather than a company.
+- `nginx` CPE vendor token can have a pending suggestion to link to company `F5`; after approval, `cpe_entity_links` stores `cpe_vendor_token = 'nginx'` and `company_id = F5`.
+- `apache` CPE vendor token can link to organization `Apache Software Foundation`.
+- `nmap` CPE vendor token can link to open-source project `Nmap`.
+- `CVE-2024-0001` can link to both company `F5` and open-source project `NGINX` only when reviewers decide both entity-level links are useful. Product-level applicability remains in backoffice-v2.
 
 ## Observation And Candidate Queues
 
@@ -524,7 +611,7 @@ This is intentionally a queue/candidate table, not a resolved identity table. It
 Promotion rules:
 
 - Promote to `companies`, `organizations`, or `open_source_projects` only when source evidence is strong enough or a human approves the resolution.
-- Promote a CPE token to a resolved CPE token association only after the target entity is known.
+- Use `cpe_entity_link_suggestions` and `cve_entity_link_suggestions` for proposed CPE/CVE mappings to resolved entities.
 - Keep ambiguous tokens in `identity_observations`.
 - Rejected observations remain as durable negative evidence.
 
@@ -659,45 +746,55 @@ Backoffice-v2 flow:
 1. Send vendor/provider identity hints to Corpscout.
 2. Corpscout resolves to a company, organization, or open-source project, or creates an unresolved observation.
 3. Backoffice-v2 stores the typed Corpscout mapping when matched.
-4. Backoffice-v2 uses resolved CPE vendor token associations to map CPE/CVE data to local vendors.
+4. Backoffice-v2 uses approved `cpe_entity_links` and `cve_entity_links` to map security data to local vendors when entity-level mappings exist.
 5. Backoffice-v2 creates product candidates/products from CPE product tokens under the mapped local vendor.
 6. Product and service enrichment remain in backoffice-v2.
 
 ## CPE Import Flow
 
-1. Import CPE vendor tokens into `identity_observations`.
-2. Group observations by normalized CPE vendor token and supporting context.
-3. Resolve against known companies, organizations, and open-source projects.
-4. If confidence is high, create or update the appropriate `*_cpe_vendor_tokens` row.
-5. If confidence is medium or ambiguous, keep it as a candidate for review.
-6. If rejected, mark the observation as `rejected` and keep the negative evidence.
+1. Import CPE vendor tokens and group them by normalized token and supporting context.
+2. Try to match each token to existing companies, organizations, and open-source projects.
+3. If the target entity exists, create a `cpe_entity_link_suggestions` row pointing to that entity.
+4. If the target entity does not exist, create a `cpe_entity_link_suggestions` row with `proposed_entity_payload`.
+5. Reviewers approve or reject the suggestion.
+6. On approval, insert one active `cpe_entity_links` row. If the entity did not exist, create it before inserting the approved link.
+7. On rejection, keep the suggestion as durable negative evidence.
 
 Example:
 
 ```text
 CPE token: nginx
-Resolved entity: company F5
-Association: company_cpe_vendor_tokens(company_id=F5, cpe_vendor_token='nginx')
+Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='nginx', target_company_id=F5)
+Approved link: cpe_entity_links(cpe_vendor_token='nginx', company_id=F5)
 Backoffice-v2: vendor F5, product NGINX
 ```
 
 ```text
 CPE token: apache
-Resolved entity: organization Apache Software Foundation
-Association: organization_cpe_vendor_tokens(organization_id=ASF, cpe_vendor_token='apache')
+Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='apache', target_organization_id=ASF)
+Approved link: cpe_entity_links(cpe_vendor_token='apache', organization_id=ASF)
 Backoffice-v2: vendor Apache Software Foundation, products Apache HTTP Server, Tomcat, Struts, ...
 ```
 
 ```text
 CPE token: nmap
-Resolved entity: open-source project Nmap
-Association: open_source_project_cpe_vendor_tokens(project_id=Nmap, cpe_vendor_token='nmap')
+Suggestion: cpe_entity_link_suggestions(cpe_vendor_token='nmap', target_open_source_project_id=Nmap)
+Approved link: cpe_entity_links(cpe_vendor_token='nmap', open_source_project_id=Nmap)
 Backoffice-v2: vendor Nmap or mapped catalog vendor for Nmap, products created from CPE product tokens
 ```
 
+## CVE Import Flow
+
+1. Import CVE IDs and supporting context from vulnerability feeds.
+2. Match each CVE to known companies, organizations, or open-source projects only when there is entity-level relevance.
+3. Create `cve_entity_link_suggestions` rows for candidate entity links.
+4. Reviewers approve or reject the suggestions.
+5. On approval, insert `cve_entity_links` rows. A single CVE may have multiple approved entity links.
+6. Product-level CVE applicability remains in backoffice-v2.
+
 ## Review Rules
 
-Automatic promotion requires strong evidence. Examples:
+Automatic suggestion creation requires strong evidence. Examples:
 
 - official website/domain match
 - registry or trusted source confirms identity
@@ -705,12 +802,12 @@ Automatic promotion requires strong evidence. Examples:
 - GitHub/repository/project site confirms the OSS project identity
 - manual review confirms ambiguous cases
 
-Do not promote when:
+Do not create an approved link when:
 
 - only a raw CPE vendor token is available
 - the token is a product or brand name with unclear owner
 - the same token appears in unrelated contexts
-- the source confidence is low
+- the suggestion confidence is low
 - the proposed entity type is uncertain
 
 ## Migration Strategy
@@ -720,11 +817,11 @@ Do not promote when:
 3. Backfill company slugs with the canonical slug algorithm, resolve collisions, then enforce `canonical_slug` uniqueness and `NOT NULL`.
 4. Add `company_relationships`.
 5. Add `organizations` and `open_source_projects`.
-6. Add per-type CPE token association tables.
+6. Add `cpe_entity_link_suggestions`, `cpe_entity_links`, `cve_entity_link_suggestions`, and `cve_entity_links`.
 7. Add `identity_observations`.
 8. Add `v_resolved_entities`.
 9. Add resolver queries and API endpoints.
-10. Teach backoffice-v2 to store typed Corpscout mappings.
+10. Teach backoffice-v2 to store typed Corpscout mappings and consume approved CPE/CVE entity links.
 11. Gradually migrate company-only export/import logic to the resolver API.
 
 The first implementation should not remove existing company endpoints. It should add the new tables and resolver surface alongside them.
@@ -742,24 +839,29 @@ Database tests:
 - `ultimate_parent` rows can be rebuilt or superseded when the direct-parent chain changes
 - canonical slug generation is deterministic and handles collisions with the entity ID suffix
 - existing `company_sources` data remains available after the migration
-- CPE token uniqueness is enforced per entity type
+- CPE link suggestions require either an existing target entity or a proposed entity payload
+- CPE approved links enforce one active entity link per CPE vendor token
+- CVE approved links allow multiple entity links per CVE but reject duplicate active links to the same target
+- approved CPE/CVE links require exactly one target among company, organization, and open-source project
 - observation rows can exist without resolved entity IDs
-- resolved CPE token tables require a concrete parent row
 - `v_resolved_entities` returns companies, organizations, and open-source projects
 
 Service tests:
 
 - high-confidence inputs resolve to existing entities
-- low-confidence inputs create observations only
-- ambiguous CPE tokens stay unresolved
-- rejected observations are not promoted later without explicit review
+- low-confidence identity inputs create observations only
+- CPE/CVE candidates create pending suggestions instead of approved links
+- approved CPE/CVE suggestions create approved links
+- rejected CPE/CVE suggestions do not create links
+- ambiguous CPE tokens stay unresolved until one suggestion is approved
 
 Backoffice-v2 integration tests:
 
 - vendor can map to `company`
 - vendor can map to `organization`
 - vendor can map to `open_source_project`
-- CPE vendor token association can select the correct local vendor
+- approved CPE entity links can select the correct local vendor
+- approved CVE entity links can enrich local vendor/security workflows without replacing product-level CVE handling
 - CPE product token still creates product candidates in backoffice-v2, not Corpscout
 
 ## Implementation Defaults
@@ -769,6 +871,6 @@ Backoffice-v2 integration tests:
 - Parent-chain consumers should prefer `direct_parent` over `subsidiary_of`; `ultimate_parent` is a denormalized cache of the direct-parent chain.
 - `company_sources` remains the source table for resolved company facts. `identity_observations` does not replace it.
 - A field-update review queue is deferred. Do not add it to the first migration plan.
-- The first implementation adds CPE token association tables and minimal source/evidence storage. Rich organization and project contact/forum tables can be phased in after resolver and CPE mapping are stable.
-- Automatic CPE token promotion requires confidence `>= 0.90` plus evidence from at least one trusted source. Anything below that stays in `identity_observations`.
+- The first implementation adds CPE/CVE suggestion tables and compact approved link tables. Rich organization and project contact/forum tables can be phased in after resolver and mapping are stable.
+- Automatic workflows can create CPE/CVE suggestions, but approved links should be created only by explicit review or a trusted approval path.
 - The resolver writes observations synchronously in the request path. Queue-based enrichment can process unresolved observations later.
