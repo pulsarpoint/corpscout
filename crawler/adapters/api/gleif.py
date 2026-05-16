@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, ClassVar
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -16,6 +17,16 @@ _STATUS_MAP = {
 }
 
 
+def _extract_cursor_from_url(url: str) -> str | None:
+    """Extract page[cursor] value from a GLEIF pagination URL."""
+    try:
+        qs = parse_qs(urlparse(url).query)
+        values = qs.get("page[cursor]") or qs.get("page%5Bcursor%5D")
+        return values[0] if values else None
+    except Exception:
+        return None
+
+
 class GLEIFAdapter(SourceAdapter):
     source_name: ClassVar[str] = "gleif"
     base_url: ClassVar[str] = "https://api.gleif.org/api/v1/lei-records"
@@ -27,12 +38,14 @@ class GLEIFAdapter(SourceAdapter):
         cursor: str | None,
         page: int,
     ) -> CrawlResponse:
-        effective_page = int(cursor) if cursor else max(page, 1)
-        params: dict[str, Any] = {
-            "page[number]": str(effective_page),
-            "page[size]": str(self.page_size),
-        }
-        # GLEIF API does not support time-based filtering; always do a full page scan.
+        # GLEIF only supports cursor-based pagination (page-based stops at 10,000 results).
+        # cursor=None or a legacy page-number string → start from the beginning with cursor=*.
+        # cursor=<opaque string> → continue from that cursor.
+        params: dict[str, Any] = {"page[size]": str(self.page_size)}
+        if cursor and not cursor.isdigit():
+            params["page[cursor]"] = cursor
+        else:
+            params["page[cursor]"] = "*"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(self.base_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
@@ -103,12 +116,13 @@ class GLEIFAdapter(SourceAdapter):
                 )
             )
 
+        links = data.get("links") or {}
+        next_url = links.get("next")
+        has_more = bool(next_url)
+        next_cursor = _extract_cursor_from_url(next_url) if next_url else None
+
         pagination = (data.get("meta") or {}).get("pagination") or {}
         total = int(pagination.get("total") or 0)
-        current_page = int(pagination.get("currentPage") or page)
-        last_page = int(pagination.get("lastPage") or current_page)
-        has_more = current_page < last_page
-        next_cursor = str(current_page + 1) if has_more else None
 
         return CrawlResponse(
             records=records,
