@@ -24,6 +24,62 @@ func (q *Queries) CountPendingCompanySuggestions(ctx context.Context) (int64, er
 	return count, err
 }
 
+const getCompanyContactSuggestionByID = `-- name: GetCompanyContactSuggestionByID :one
+SELECT id, company_id, company_suggestion_id, operation, contact_kind, current_payload, proposed_payload, confidence, status, reviewed_by, reviewed_at, review_note, created_at, updated_at FROM company_contact_suggestions WHERE id = $1
+`
+
+func (q *Queries) GetCompanyContactSuggestionByID(ctx context.Context, id uuid.UUID) (CompanyContactSuggestion, error) {
+	row := q.db.QueryRow(ctx, getCompanyContactSuggestionByID, id)
+	var i CompanyContactSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.CompanySuggestionID,
+		&i.Operation,
+		&i.ContactKind,
+		&i.CurrentPayload,
+		&i.ProposedPayload,
+		&i.Confidence,
+		&i.Status,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ReviewNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCompanyStatusSuggestionByID = `-- name: GetCompanyStatusSuggestionByID :one
+
+SELECT id, company_id, company_suggestion_id, operation, status_field, current_value, proposed_value, current_payload, proposed_payload, confidence, status, reviewed_by, reviewed_at, review_note, created_at, updated_at FROM company_status_suggestions WHERE id = $1
+`
+
+// Section suggestion lookup and approval queries
+func (q *Queries) GetCompanyStatusSuggestionByID(ctx context.Context, id uuid.UUID) (CompanyStatusSuggestion, error) {
+	row := q.db.QueryRow(ctx, getCompanyStatusSuggestionByID, id)
+	var i CompanyStatusSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.CompanySuggestionID,
+		&i.Operation,
+		&i.StatusField,
+		&i.CurrentValue,
+		&i.ProposedValue,
+		&i.CurrentPayload,
+		&i.ProposedPayload,
+		&i.Confidence,
+		&i.Status,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ReviewNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCompanySuggestionByID = `-- name: GetCompanySuggestionByID :one
 SELECT id, proposed_display_name, proposed_legal_name, proposed_website, proposed_canonical_slug, proposed_country_id, proposed_profile, confidence, status, created_company_id, reviewed_by, reviewed_at, review_note, created_at, updated_at FROM company_suggestions WHERE id = $1
 `
@@ -578,6 +634,88 @@ func (q *Queries) ListPendingCompanySuggestions(ctx context.Context, arg ListPen
 	return items, nil
 }
 
+const updateCompanyContactSuggestionApproved = `-- name: UpdateCompanyContactSuggestionApproved :exec
+UPDATE company_contact_suggestions
+SET status = 'approved', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCompanyContactSuggestionApprovedParams struct {
+	ID         uuid.UUID `json:"id"`
+	ReviewedBy *string   `json:"reviewed_by"`
+	ReviewNote *string   `json:"review_note"`
+}
+
+func (q *Queries) UpdateCompanyContactSuggestionApproved(ctx context.Context, arg UpdateCompanyContactSuggestionApprovedParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyContactSuggestionApproved, arg.ID, arg.ReviewedBy, arg.ReviewNote)
+	return err
+}
+
+const updateCompanyContactSuggestionRejected = `-- name: UpdateCompanyContactSuggestionRejected :exec
+UPDATE company_contact_suggestions
+SET status = 'rejected', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCompanyContactSuggestionRejectedParams struct {
+	ID         uuid.UUID `json:"id"`
+	ReviewedBy *string   `json:"reviewed_by"`
+	ReviewNote *string   `json:"review_note"`
+}
+
+func (q *Queries) UpdateCompanyContactSuggestionRejected(ctx context.Context, arg UpdateCompanyContactSuggestionRejectedParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyContactSuggestionRejected, arg.ID, arg.ReviewedBy, arg.ReviewNote)
+	return err
+}
+
+const updateCompanyStatus = `-- name: UpdateCompanyStatus :exec
+UPDATE companies SET status = $2, updated_at = now() WHERE id = $1
+`
+
+type UpdateCompanyStatusParams struct {
+	ID     uuid.UUID `json:"id"`
+	Status string    `json:"status"`
+}
+
+func (q *Queries) UpdateCompanyStatus(ctx context.Context, arg UpdateCompanyStatusParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateCompanyStatusSuggestionApproved = `-- name: UpdateCompanyStatusSuggestionApproved :exec
+UPDATE company_status_suggestions
+SET status = 'approved', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCompanyStatusSuggestionApprovedParams struct {
+	ID         uuid.UUID `json:"id"`
+	ReviewedBy *string   `json:"reviewed_by"`
+	ReviewNote *string   `json:"review_note"`
+}
+
+func (q *Queries) UpdateCompanyStatusSuggestionApproved(ctx context.Context, arg UpdateCompanyStatusSuggestionApprovedParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyStatusSuggestionApproved, arg.ID, arg.ReviewedBy, arg.ReviewNote)
+	return err
+}
+
+const updateCompanyStatusSuggestionRejected = `-- name: UpdateCompanyStatusSuggestionRejected :exec
+UPDATE company_status_suggestions
+SET status = 'rejected', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type UpdateCompanyStatusSuggestionRejectedParams struct {
+	ID         uuid.UUID `json:"id"`
+	ReviewedBy *string   `json:"reviewed_by"`
+	ReviewNote *string   `json:"review_note"`
+}
+
+func (q *Queries) UpdateCompanyStatusSuggestionRejected(ctx context.Context, arg UpdateCompanyStatusSuggestionRejectedParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyStatusSuggestionRejected, arg.ID, arg.ReviewedBy, arg.ReviewNote)
+	return err
+}
+
 const updateCompanySuggestionApproved = `-- name: UpdateCompanySuggestionApproved :exec
 UPDATE company_suggestions
 SET status = 'approved',
@@ -624,5 +762,19 @@ type UpdateCompanySuggestionRejectedParams struct {
 
 func (q *Queries) UpdateCompanySuggestionRejected(ctx context.Context, arg UpdateCompanySuggestionRejectedParams) error {
 	_, err := q.db.Exec(ctx, updateCompanySuggestionRejected, arg.ID, arg.ReviewedBy, arg.ReviewNote)
+	return err
+}
+
+const updateCompanyWebsite = `-- name: UpdateCompanyWebsite :exec
+UPDATE companies SET website = $2, updated_at = now() WHERE id = $1
+`
+
+type UpdateCompanyWebsiteParams struct {
+	ID      uuid.UUID `json:"id"`
+	Website *string   `json:"website"`
+}
+
+func (q *Queries) UpdateCompanyWebsite(ctx context.Context, arg UpdateCompanyWebsiteParams) error {
+	_, err := q.db.Exec(ctx, updateCompanyWebsite, arg.ID, arg.Website)
 	return err
 }

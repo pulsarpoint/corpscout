@@ -306,7 +306,8 @@ func (s *stubQuerier) ListCVEEntityLinksByCVEID(ctx context.Context, cveID strin
 
 // Suggestion methods
 func (s *stubQuerier) CountPendingCompanySuggestions(ctx context.Context) (int64, error) {
-	return 0, nil
+	ret := s.Called(ctx)
+	return ret.Get(0).(int64), ret.Error(1)
 }
 func (s *stubQuerier) GetCompanySuggestionByID(ctx context.Context, id uuid.UUID) (db.CompanySuggestion, error) {
 	return db.CompanySuggestion{}, nil
@@ -401,6 +402,32 @@ func (s *stubQuerier) MarkBrregRawInputProcessed(ctx context.Context, id uuid.UU
 	return nil
 }
 func (s *stubQuerier) MarkBrregRawInputFailed(ctx context.Context, arg db.MarkBrregRawInputFailedParams) error {
+	return nil
+}
+
+// Section suggestion stubs (new in Task 10)
+func (s *stubQuerier) GetCompanyStatusSuggestionByID(ctx context.Context, id uuid.UUID) (db.CompanyStatusSuggestion, error) {
+	return db.CompanyStatusSuggestion{}, nil
+}
+func (s *stubQuerier) UpdateCompanyStatusSuggestionApproved(ctx context.Context, arg db.UpdateCompanyStatusSuggestionApprovedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCompanyStatusSuggestionRejected(ctx context.Context, arg db.UpdateCompanyStatusSuggestionRejectedParams) error {
+	return nil
+}
+func (s *stubQuerier) GetCompanyContactSuggestionByID(ctx context.Context, id uuid.UUID) (db.CompanyContactSuggestion, error) {
+	return db.CompanyContactSuggestion{}, nil
+}
+func (s *stubQuerier) UpdateCompanyContactSuggestionApproved(ctx context.Context, arg db.UpdateCompanyContactSuggestionApprovedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCompanyContactSuggestionRejected(ctx context.Context, arg db.UpdateCompanyContactSuggestionRejectedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCompanyStatus(ctx context.Context, arg db.UpdateCompanyStatusParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCompanyWebsite(ctx context.Context, arg db.UpdateCompanyWebsiteParams) error {
 	return nil
 }
 

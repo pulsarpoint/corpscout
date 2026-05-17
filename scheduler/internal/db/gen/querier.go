@@ -28,12 +28,15 @@ type Querier interface {
 	GetCompanyByLEI(ctx context.Context, lei *string) (Company, error)
 	GetCompanyByRegistrationAndCountry(ctx context.Context, arg GetCompanyByRegistrationAndCountryParams) (Company, error)
 	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
+	GetCompanyContactSuggestionByID(ctx context.Context, id uuid.UUID) (CompanyContactSuggestion, error)
 	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
 	GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]CompanyIndustry, error)
 	GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]CompanyLocation, error)
 	GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]CompanyMarket, error)
 	GetCompanyPhones(ctx context.Context, companyID uuid.UUID) ([]CompanyPhone, error)
 	GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]CompanyService, error)
+	// Section suggestion lookup and approval queries
+	GetCompanyStatusSuggestionByID(ctx context.Context, id uuid.UUID) (CompanyStatusSuggestion, error)
 	GetCompanySuggestionByID(ctx context.Context, id uuid.UUID) (CompanySuggestion, error)
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
@@ -89,13 +92,19 @@ type Querier interface {
 	SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error
 	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
 	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error
+	UpdateCompanyContactSuggestionApproved(ctx context.Context, arg UpdateCompanyContactSuggestionApprovedParams) error
+	UpdateCompanyContactSuggestionRejected(ctx context.Context, arg UpdateCompanyContactSuggestionRejectedParams) error
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
 	UpdateCompanyRelationshipStatus(ctx context.Context, arg UpdateCompanyRelationshipStatusParams) error
 	UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error
+	UpdateCompanyStatus(ctx context.Context, arg UpdateCompanyStatusParams) error
+	UpdateCompanyStatusSuggestionApproved(ctx context.Context, arg UpdateCompanyStatusSuggestionApprovedParams) error
+	UpdateCompanyStatusSuggestionRejected(ctx context.Context, arg UpdateCompanyStatusSuggestionRejectedParams) error
 	UpdateCompanySuggestionApproved(ctx context.Context, arg UpdateCompanySuggestionApprovedParams) error
 	UpdateCompanySuggestionRejected(ctx context.Context, arg UpdateCompanySuggestionRejectedParams) error
+	UpdateCompanyWebsite(ctx context.Context, arg UpdateCompanyWebsiteParams) error
 	UpdateOpenSourceProjectStatus(ctx context.Context, arg UpdateOpenSourceProjectStatusParams) error
 	UpdateOrganizationStatus(ctx context.Context, arg UpdateOrganizationStatusParams) error
 	UpdateSourceConfig(ctx context.Context, arg UpdateSourceConfigParams) error

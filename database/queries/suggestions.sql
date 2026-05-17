@@ -113,3 +113,37 @@ INSERT INTO suggestion_source_links (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
+
+-- Section suggestion lookup and approval queries
+
+-- name: GetCompanyStatusSuggestionByID :one
+SELECT * FROM company_status_suggestions WHERE id = $1;
+
+-- name: UpdateCompanyStatusSuggestionApproved :exec
+UPDATE company_status_suggestions
+SET status = 'approved', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: UpdateCompanyStatusSuggestionRejected :exec
+UPDATE company_status_suggestions
+SET status = 'rejected', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: GetCompanyContactSuggestionByID :one
+SELECT * FROM company_contact_suggestions WHERE id = $1;
+
+-- name: UpdateCompanyContactSuggestionApproved :exec
+UPDATE company_contact_suggestions
+SET status = 'approved', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: UpdateCompanyContactSuggestionRejected :exec
+UPDATE company_contact_suggestions
+SET status = 'rejected', reviewed_by = $2, review_note = $3, reviewed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: UpdateCompanyStatus :exec
+UPDATE companies SET status = $2, updated_at = now() WHERE id = $1;
+
+-- name: UpdateCompanyWebsite :exec
+UPDATE companies SET website = $2, updated_at = now() WHERE id = $1;
