@@ -48,5 +48,6 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	if err != nil {
 		return nil, err
 	}
+	sourcePullWorker.SetRiverClient(rc)
 	return rc, nil
 }
