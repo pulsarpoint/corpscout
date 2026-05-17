@@ -30,23 +30,27 @@ func (p *BrregProcessor) ProcessBatch(ctx context.Context, sourceName string) er
 	}
 
 	leaseBy := "brreg-processor"
-	rows, err := p.db.ClaimPendingBrregRawInputs(ctx, db.ClaimPendingBrregRawInputsParams{
-		ProcessingLeaseBy: &leaseBy,
-		Column2:           brregLeaseSecs,
-		Limit:             brregBatchSize,
-	})
-	if err != nil {
-		return errors.Wrap(err, "claim brreg rows")
-	}
-
-	for _, row := range rows {
-		if err := p.processOne(ctx, src, row); err != nil {
-			slog.Error("brreg processor: row failed", "row_id", row.ID, "org_number", row.OrganizationNumber, "error", err)
-			errMsg := err.Error()
-			_ = p.db.MarkBrregRawInputFailed(ctx, db.MarkBrregRawInputFailedParams{
-				ID:              row.ID,
-				ProcessingError: &errMsg,
-			})
+	for {
+		rows, err := p.db.ClaimPendingBrregRawInputs(ctx, db.ClaimPendingBrregRawInputsParams{
+			ProcessingLeaseBy: &leaseBy,
+			Column2:           brregLeaseSecs,
+			Limit:             brregBatchSize,
+		})
+		if err != nil {
+			return errors.Wrap(err, "claim brreg rows")
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, row := range rows {
+			if err := p.processOne(ctx, src, row); err != nil {
+				slog.Error("brreg processor: row failed", "row_id", row.ID, "org_number", row.OrganizationNumber, "error", err)
+				errMsg := err.Error()
+				_ = p.db.MarkBrregRawInputFailed(ctx, db.MarkBrregRawInputFailedParams{
+					ID:              row.ID,
+					ProcessingError: &errMsg,
+				})
+			}
 		}
 	}
 	return nil

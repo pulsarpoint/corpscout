@@ -86,16 +86,20 @@ func (w *SourcePullWorker) Work(ctx context.Context, job *river.Job[SourcePullAr
 	})
 
 	if src.ProcessorTaskType != nil && *src.ProcessorTaskType == "source_process" && w.rv != nil {
-		_, _ = w.rv.Insert(ctx, SourceProcessArgs{
+		if _, err := w.rv.Insert(ctx, SourceProcessArgs{
 			SourceName: src.Name,
 			PullRunID:  run.ID.String(),
-		}, &river.InsertOpts{Queue: "source_process"})
+		}, &river.InsertOpts{Queue: "source_process"}); err != nil {
+			slog.Error("source pull: enqueue source_process job", "source", src.Name, "error", err)
+			return errors.Wrap(err, "enqueue source_process job")
+		}
 	}
 	return nil
 }
 
 func (w *SourcePullWorker) pullAndInsert(ctx context.Context, src db.DataSource, runID uuid.UUID) (inserted, updated, unchanged int, err error) {
 	page := 1
+	var rowErrs int
 	for {
 		resp, err := w.crawler.Crawl(ctx, src.Name, time.Time{}, nil, page)
 		if err != nil {
@@ -109,12 +113,16 @@ func (w *SourcePullWorker) pullAndInsert(ctx context.Context, src db.DataSource,
 			unchanged += unch
 			if e != nil {
 				slog.Warn("source pull: upsert row", "source", src.Name, "error", e)
+				rowErrs++
 			}
 		}
 		if !resp.HasMore {
 			break
 		}
 		page++
+	}
+	if rowErrs > 0 {
+		return inserted, updated, unchanged, fmt.Errorf("%d record(s) failed to upsert", rowErrs)
 	}
 	return
 }

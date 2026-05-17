@@ -31,8 +31,15 @@ func TestCompaniesHouseProcessor_NewCompany_CreatesSuggestion(t *testing.T) {
 
 	created := false
 	countryID := uuid.New()
+	claimCalls := 0
 	q := &mockQuerier{
-		claimCH: func() []db.CompaniesHouseCompanyRawInput { return []db.CompaniesHouseCompanyRawInput{rawRow} },
+		claimCH: func() []db.CompaniesHouseCompanyRawInput {
+			claimCalls++
+			if claimCalls == 1 {
+				return []db.CompaniesHouseCompanyRawInput{rawRow}
+			}
+			return nil
+		},
 		getCompanyByRegAndCountry: func(reg *string, iso string) (db.Company, error) {
 			assert.Equal(t, "GB", iso)
 			return db.Company{}, pgxErrNoRows

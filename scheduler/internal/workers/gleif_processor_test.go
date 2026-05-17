@@ -39,8 +39,15 @@ func TestGLEIFProcessor_NewCompany_CreatesSuggestion(t *testing.T) {
 	linkCreated := false
 	markedProcessed := false
 
+	claimCalls := 0
 	q := &mockQuerier{
-		claimGLEIF: func() []db.GleifCompanyRawInput { return []db.GleifCompanyRawInput{rawRow} },
+		claimGLEIF: func() []db.GleifCompanyRawInput {
+			claimCalls++
+			if claimCalls == 1 {
+				return []db.GleifCompanyRawInput{rawRow}
+			}
+			return nil
+		},
 		getCompanyByLEI: func(lei *string) (db.Company, error) {
 			return db.Company{}, pgxErrNoRows
 		},
@@ -97,8 +104,15 @@ func TestGLEIFProcessor_ExistingCompany_CreatesStatusSuggestion(t *testing.T) {
 
 	statusSuggestionCreated := false
 
+	claimCalls2 := 0
 	q := &mockQuerier{
-		claimGLEIF: func() []db.GleifCompanyRawInput { return []db.GleifCompanyRawInput{rawRow} },
+		claimGLEIF: func() []db.GleifCompanyRawInput {
+			claimCalls2++
+			if claimCalls2 == 1 {
+				return []db.GleifCompanyRawInput{rawRow}
+			}
+			return nil
+		},
 		getCompanyByLEI: func(lei *string) (db.Company, error) {
 			lei456 := "EXIST456"
 			return db.Company{ID: companyID, Lei: &lei456}, nil

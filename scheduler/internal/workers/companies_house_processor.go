@@ -30,23 +30,27 @@ func (p *CompaniesHouseProcessor) ProcessBatch(ctx context.Context, sourceName s
 	}
 
 	leaseBy := "ch-processor"
-	rows, err := p.db.ClaimPendingCompaniesHouseRawInputs(ctx, db.ClaimPendingCompaniesHouseRawInputsParams{
-		ProcessingLeaseBy: &leaseBy,
-		Column2:           chLeaseSecs,
-		Limit:             chBatchSize,
-	})
-	if err != nil {
-		return errors.Wrap(err, "claim ch rows")
-	}
-
-	for _, row := range rows {
-		if err := p.processOne(ctx, src, row); err != nil {
-			slog.Error("ch processor: row failed", "row_id", row.ID, "company_number", row.CompanyNumber, "error", err)
-			errMsg := err.Error()
-			_ = p.db.MarkCompaniesHouseRawInputFailed(ctx, db.MarkCompaniesHouseRawInputFailedParams{
-				ID:              row.ID,
-				ProcessingError: &errMsg,
-			})
+	for {
+		rows, err := p.db.ClaimPendingCompaniesHouseRawInputs(ctx, db.ClaimPendingCompaniesHouseRawInputsParams{
+			ProcessingLeaseBy: &leaseBy,
+			Column2:           chLeaseSecs,
+			Limit:             chBatchSize,
+		})
+		if err != nil {
+			return errors.Wrap(err, "claim ch rows")
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, row := range rows {
+			if err := p.processOne(ctx, src, row); err != nil {
+				slog.Error("ch processor: row failed", "row_id", row.ID, "company_number", row.CompanyNumber, "error", err)
+				errMsg := err.Error()
+				_ = p.db.MarkCompaniesHouseRawInputFailed(ctx, db.MarkCompaniesHouseRawInputFailedParams{
+					ID:              row.ID,
+					ProcessingError: &errMsg,
+				})
+			}
 		}
 	}
 	return nil

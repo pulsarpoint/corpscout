@@ -31,23 +31,27 @@ func (p *GLEIFProcessor) ProcessBatch(ctx context.Context, sourceName string) er
 	}
 
 	leaseBy := "gleif-processor"
-	rows, err := p.db.ClaimPendingGLEIFRawInputs(ctx, db.ClaimPendingGLEIFRawInputsParams{
-		ProcessingLeaseBy: &leaseBy,
-		Column2:           gleifLeaseSecs,
-		Limit:             gleifBatchSize,
-	})
-	if err != nil {
-		return errors.Wrap(err, "claim gleif rows")
-	}
-
-	for _, row := range rows {
-		if err := p.processOne(ctx, src, row); err != nil {
-			slog.Error("gleif processor: row failed", "row_id", row.ID, "lei", row.Lei, "error", err)
-			errMsg := err.Error()
-			_ = p.db.MarkGLEIFRawInputFailed(ctx, db.MarkGLEIFRawInputFailedParams{
-				ID:              row.ID,
-				ProcessingError: &errMsg,
-			})
+	for {
+		rows, err := p.db.ClaimPendingGLEIFRawInputs(ctx, db.ClaimPendingGLEIFRawInputsParams{
+			ProcessingLeaseBy: &leaseBy,
+			Column2:           gleifLeaseSecs,
+			Limit:             gleifBatchSize,
+		})
+		if err != nil {
+			return errors.Wrap(err, "claim gleif rows")
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, row := range rows {
+			if err := p.processOne(ctx, src, row); err != nil {
+				slog.Error("gleif processor: row failed", "row_id", row.ID, "lei", row.Lei, "error", err)
+				errMsg := err.Error()
+				_ = p.db.MarkGLEIFRawInputFailed(ctx, db.MarkGLEIFRawInputFailedParams{
+					ID:              row.ID,
+					ProcessingError: &errMsg,
+				})
+			}
 		}
 	}
 	return nil

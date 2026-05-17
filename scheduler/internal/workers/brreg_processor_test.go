@@ -34,8 +34,15 @@ func TestBrregProcessor_NewCompany_CreatesSuggestionWithWebsite(t *testing.T) {
 	contactSuggestionCreated := false
 	countryID := uuid.New()
 
+	claimCalls := 0
 	q := &mockQuerier{
-		claimBrreg: func() []db.BrregCompanyRawInput { return []db.BrregCompanyRawInput{rawRow} },
+		claimBrreg: func() []db.BrregCompanyRawInput {
+			claimCalls++
+			if claimCalls == 1 {
+				return []db.BrregCompanyRawInput{rawRow}
+			}
+			return nil
+		},
 		getCompanyByRegAndCountry: func(reg *string, iso string) (db.Company, error) {
 			assert.Equal(t, "NO", iso)
 			return db.Company{}, pgxErrNoRows

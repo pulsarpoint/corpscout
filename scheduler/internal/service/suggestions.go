@@ -133,7 +133,7 @@ func ApproveCompanyStatusSuggestion(ctx context.Context, pool TxPool, suggestion
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := db.New(tx)
 
-	if sug.ProposedValue != nil {
+	if sug.ProposedValue != nil && sug.StatusField == "lifecycle_status" {
 		if err := qtx.UpdateCompanyStatus(ctx, db.UpdateCompanyStatusParams{
 			ID:     uuid.UUID(sug.CompanyID.Bytes),
 			Status: *sug.ProposedValue,
@@ -326,7 +326,7 @@ func approveCompanyStatusTx(ctx context.Context, qtx *db.Queries, suggestionID, 
 	if err != nil {
 		return err
 	}
-	if sug.ProposedValue != nil {
+	if sug.ProposedValue != nil && sug.StatusField == "lifecycle_status" {
 		if err := qtx.UpdateCompanyStatus(ctx, db.UpdateCompanyStatusParams{
 			ID:     targetID,
 			Status: *sug.ProposedValue,
