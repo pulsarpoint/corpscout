@@ -11,7 +11,7 @@ The intended flow is:
 ```text
 source configuration and sync state
 -> source pull run
--> source-specific raw input table
+-> source-specific raw input table or source-compatible input schema
 -> source-specific processor
 -> entity/root suggestions and section suggestions
 -> review approval or rejection
@@ -67,8 +67,8 @@ Every external source that stores raw data should own a specific input table.
 
 Examples:
 
-- `cpe_raw_inputs`
-- `cve_raw_inputs`
+- NVD/CVE compatibility tables such as `nvds`, `nvd_descriptions`, `nvd_references`, `nvd_config_nodes`, and `nvd_config_match_criteria`
+- CPE compatibility tables such as `cpe_dictionary`, `cpe_match_criteria`, and `cpe_match_criteria_names`
 - `gleif_company_raw_inputs`
 - `company_registry_raw_inputs`
 - `github_owner_raw_inputs`
@@ -78,6 +78,8 @@ Examples:
 - `manual_research_raw_inputs`
 
 Each table can keep source-native fields that matter for that source. A GLEIF input table should keep LEI and registry metadata. A GitHub input table should keep owner, repository, organization, and API response metadata. An AI profile input table should keep the prompt version, model, normalized website, and response payload.
+
+For sources that already have a mature importer in backoffice-v2, prefer schema-compatible source tables and the same loader contract over inventing a new Corpscout-only raw shape. For CPE and CVE specifically, do not introduce simplified `cpe_raw_inputs` or `cve_raw_inputs` tables in the first implementation. Mirror the loader-owned NVD/CPE schema used by backoffice-v2 and let Corpscout processors read from those tables to create entity-link suggestions.
 
 ### Pull State Is Shared Operational Metadata
 
@@ -160,7 +162,7 @@ CREATE TABLE source_definitions (
 Rules:
 
 - `source_name` is stable and used in logs, runs, and source links.
-- `input_table_name` points to the source-specific raw input table.
+- `input_table_name` points to the source-specific raw input table or to the primary table in a source-compatible schema.
 - `schedule_expression` is interpreted by the scheduler for `interval` or `cron` sources.
 - `metadata` can store source configuration that is safe to persist. Do not store secrets.
 
@@ -249,13 +251,53 @@ CREATE INDEX idx_source_pull_runs_source_started
 Rules:
 
 - Every pull attempt creates a run row.
-- Raw input rows inserted by the pull should reference `source_pull_runs.id`.
+- Corpscout-owned raw input rows inserted by the pull should reference `source_pull_runs.id`.
+- Compatibility schemas that cannot add a pull-run foreign key should record counts, cursor metadata, and source artifact details on `source_pull_runs`.
 - A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
 - Pullers update `source_sync_states` only after a successful run.
+
+### `source_processor_states`
+
+`source_processor_states` stores mutable processor state when a processor cannot mark individual raw input rows. This is needed for compatibility schemas such as NVD/CPE, where Corpscout should not add queue columns to tables that are loaded by the shared backoffice-compatible importer.
+
+```sql
+CREATE TABLE source_processor_states (
+    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    processor_name TEXT NOT NULL,
+    last_started_at TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    last_failed_at TIMESTAMPTZ,
+    last_cursor JSONB NOT NULL DEFAULT '{}'::jsonb,
+    last_watermark_at TIMESTAMPTZ,
+    last_source_pull_run_id UUID REFERENCES source_pull_runs(id),
+    last_error TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    leased_by TEXT,
+    leased_until TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (source_name, processor_name),
+    CONSTRAINT chk_source_processor_states_cursor_object CHECK (
+        jsonb_typeof(last_cursor) = 'object'
+    ),
+    CONSTRAINT chk_source_processor_states_failures CHECK (
+        consecutive_failures >= 0
+    )
+);
+```
+
+Rules:
+
+- Row-queue processors should use the `processing_status` fields on their source-specific input table.
+- Compatibility-schema processors should use `source_processor_states` for leases, retry state, and incremental cursors.
+- CPE processors can store a cursor over `cpe_dictionary.updated_at` and `cpe_dictionary.id`.
+- CVE processors can store a cursor over `nvds.last_modified_date`, `nvds.id`, or the last successful NVD pull run.
+- Processor cursors are independent from puller cursors. A pull can succeed while the downstream processor still has pending work.
 
 ## Source-Specific Raw Input Tables
 
 Every source-specific raw input table should include common operational columns, plus source-specific columns.
+
+This pattern applies to sources where Corpscout owns the raw input table shape. It does not apply to compatibility schemas that must stay aligned with an existing loader contract, such as the NVD/CPE tables copied from backoffice-v2.
 
 Common operational columns:
 
@@ -298,41 +340,63 @@ Rules:
 - Processors claim rows with `processing_status = 'pending'` using a lease.
 - Failed rows remain available for retry based on attempts and lease expiry.
 
-### Example: CPE Raw Inputs
+### CPE/CVE Raw Inputs: Backoffice-V2 Compatibility
 
-```sql
-CREATE TABLE cpe_raw_inputs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
-    source_native_id TEXT,
-    cpe_uri TEXT NOT NULL,
-    cpe_vendor_token TEXT NOT NULL,
-    cpe_product_token TEXT,
-    cpe_version TEXT,
-    source_updated_at TIMESTAMPTZ,
-    raw_payload JSONB NOT NULL,
-    payload_hash TEXT NOT NULL,
-    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    processing_status TEXT NOT NULL DEFAULT 'pending',
-    processing_attempts INTEGER NOT NULL DEFAULT 0,
-    processing_error TEXT,
-    processing_lease_by TEXT,
-    processing_lease_until TIMESTAMPTZ,
-    processed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_cpe_raw_inputs_status CHECK (
-        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
-    ),
-    CONSTRAINT chk_cpe_raw_inputs_attempts CHECK (processing_attempts >= 0),
-    CONSTRAINT chk_cpe_raw_inputs_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
-    CONSTRAINT uq_cpe_raw_inputs_payload UNIQUE (cpe_uri, payload_hash)
-);
+CPE and CVE input data should use the same loader-owned schema shape as backoffice-v2. This keeps the NVD import path proven, avoids duplicate parsing logic, and lets future fixes to the feed loader be shared between products.
 
-CREATE INDEX idx_cpe_raw_inputs_processing
-    ON cpe_raw_inputs(processing_status, processing_lease_until, created_at);
-```
+Do not create simplified `cpe_raw_inputs` or `cve_raw_inputs` tables for the first Corpscout implementation.
+
+Mirror these final tables from the backoffice-v2 NVD/CPE schema:
+
+- `nvds`
+- `nvd_descriptions`
+- `nvd_references`
+- `cwes`
+- `nvd_cwes`
+- `nvd_cvss3`
+- `nvd_cvss40`
+- `nvd_cvss2_extras`
+- `cpe_dictionary`
+- `cpe_match_criteria`
+- `cpe_match_criteria_names`
+- `nvd_config_nodes`
+- `nvd_config_match_criteria`
+- `intel_cve_kev`, if KEV is loaded in Corpscout
+
+Use the backoffice-v2 NVD/CPE migrations and loader code as the implementation source of truth, starting from `database/migrations/000002_nvd_intel_schema.up.sql` and including later loader-owned NVD/CPE additions such as vulnerability-state indexes. If the shared loader requires a column, constraint, or index, Corpscout should carry the same definition.
+
+Mirror the loader staging contract for NVD bulk CVE imports:
+
+- `stg_nvds`
+- `stg_nvd_descriptions`
+- `stg_nvd_references`
+- `stg_nvd_cwes`
+- `stg_nvd_cvss3`
+- `stg_nvd_cvss40`
+- `stg_nvd_cvss2_extras`
+- `stg_cpe_match_criteria`
+- `stg_nvd_config_nodes`
+- `stg_nvd_config_match_criteria`
+
+The staging tables are temporary tables created inside the loader transaction. They are listed here because Corpscout should preserve the same copy-from and merge contract, not because they need permanent migrations.
+
+Backoffice-v2 loading behavior to preserve:
+
+- NVD CVE feed files are flattened into staging rows, copied with `pgx.CopyFrom`, then merged into `nvds` and child NVD tables.
+- Changed CVEs replace their child rows in one transaction.
+- CPE dictionary pages upsert into `cpe_dictionary` by `cpe_fs`.
+- CPE match pages upsert into `cpe_match_criteria` by `match_criteria_id`.
+- CPE match names link `cpe_match_criteria` to `cpe_dictionary` through `cpe_match_criteria_names`.
+- CPE/CVE feed metadata and pull attempts are still tracked in Corpscout `source_pull_runs`.
+
+Backoffice-v2 product/catalog tables and views should not be copied into Corpscout as part of this input schema. Examples that remain outside this design include `cpe_catalog_connections`, `product_cpe_bindings`, `product_cve_bindings`, `product_cpe_cve_matches`, product exposure views, and catalog candidate workflows. Corpscout only needs the CPE/CVE source data and entity-link suggestion output.
+
+Processor rules for this compatibility schema:
+
+- CPE processors read from `cpe_dictionary`, not from a Corpscout-only CPE queue table.
+- CVE processors read from `nvds`, NVD child tables, `cpe_match_criteria`, `cpe_match_criteria_names`, and `nvd_config_match_criteria`.
+- Processors track leases, retries, and incremental watermarks in `source_processor_states`.
+- Suggestions link back to these tables through `suggestion_source_links.source_input_key`, using the source table primary key serialized as text.
 
 ### Example: GLEIF Company Raw Inputs
 
@@ -712,7 +776,7 @@ CREATE TABLE suggestion_source_links (
     suggestion_id UUID NOT NULL,
     source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
     source_input_table TEXT NOT NULL,
-    source_input_id UUID NOT NULL,
+    source_input_key TEXT NOT NULL,
     source_pull_run_id UUID REFERENCES source_pull_runs(id),
     confidence REAL,
     evidence_excerpt TEXT,
@@ -726,7 +790,7 @@ CREATE INDEX idx_suggestion_source_links_suggestion
     ON suggestion_source_links(suggestion_table, suggestion_id);
 
 CREATE INDEX idx_suggestion_source_links_source
-    ON suggestion_source_links(source_name, source_input_table, source_input_id);
+    ON suggestion_source_links(source_name, source_input_table, source_input_key);
 ```
 
 This table is generic by design because it is not raw input data and it is not resolved profile data. It is only provenance glue between source-specific input tables and source-specific suggestion tables.
@@ -735,7 +799,8 @@ Rules:
 
 - A suggestion can have multiple source links.
 - Multiple sources can support the same suggestion.
-- The service layer validates that `source_input_table` and `source_input_id` point to an existing source-specific input row.
+- The service layer validates that `source_input_table` and `source_input_key` point to an existing source-specific input row.
+- `source_input_key` stores the source input primary key in text form. For UUID raw input tables this is the UUID string; for NVD/CPE compatibility tables this is the numeric primary key string; for composite source keys the processor must use a stable canonical key.
 - Do not copy full raw payloads into `evidence_excerpt`.
 - Use `evidence_excerpt` only for short UI summaries.
 
@@ -751,6 +816,7 @@ Rules:
 - Same native ID and different payload hash: insert a new raw input row.
 - No native ID: dedupe by a stable normalized key and payload hash.
 - Never merge raw input rows across different sources.
+- Compatibility schemas use their own natural constraints instead. For NVD/CPE this means keys such as `nvds.cve_id`, `cpe_dictionary.cpe_fs`, `cpe_match_criteria.match_criteria_id`, and `cpe_match_criteria_names` link uniqueness.
 
 ### Suggestion Deduplication
 
@@ -881,9 +947,9 @@ Scheduling rules:
 
 - Scheduler reads `source_definitions` and `source_sync_states`.
 - Scheduler creates a `source_pull_runs` row.
-- Puller writes source-specific raw input rows.
+- Puller writes source-specific raw input rows or updates a source-compatible input schema.
 - Puller updates `source_pull_runs` and `source_sync_states`.
-- Processor workers read pending rows from source-specific raw input tables.
+- Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor watermark.
 - Processor workers create suggestions and source links.
 
 Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the boundary should remain clear in code.
@@ -898,12 +964,13 @@ Pullers:
 
 Processors:
 
-- claim raw rows with `processing_status = 'pending'`
-- set `processing_status = 'processing'`
-- set `processing_lease_by` and `processing_lease_until`
-- increment `processing_attempts`
-- mark row `processed`, `ignored`, or `failed`
-- retry failed rows only when attempts and backoff policy allow
+- for row-queue tables, claim raw rows with `processing_status = 'pending'`
+- for row-queue tables, set `processing_status = 'processing'`
+- for row-queue tables, set `processing_lease_by` and `processing_lease_until`
+- for row-queue tables, increment `processing_attempts`
+- for row-queue tables, mark row `processed`, `ignored`, or `failed`
+- for compatibility schemas, use `source_processor_states.leased_by`, `leased_until`, cursors, and watermarks
+- retry failed processor work only when attempts and backoff policy allow
 
 Approval:
 
@@ -966,14 +1033,15 @@ Processor behavior:
 
 Input:
 
-- CPE URI
-- vendor token
-- product token
-- version
+- backoffice-compatible `cpe_dictionary` rows
+- backoffice-compatible `cpe_match_criteria` rows
+- `cpe_match_criteria_names` links from match criteria to dictionary names
 
 Processor behavior:
 
+- read CPE rows from the mirrored CPE schema using `source_processor_states` watermarks
 - create `cpe_entity_link_suggestions`
+- link suggestions back to `cpe_dictionary` or `cpe_match_criteria` with `suggestion_source_links`
 - do not create product records in Corpscout
 - approve into `cpe_entity_links` only after review or trusted approval path
 
@@ -981,28 +1049,31 @@ Processor behavior:
 
 Input:
 
-- CVE ID
-- affected product context
-- source references
+- backoffice-compatible `nvds` rows
+- NVD child rows for descriptions, references, CWEs, CVSS, and configurations
+- CPE match criteria connected through `nvd_config_match_criteria` and `cpe_match_criteria_names`
 
 Processor behavior:
 
+- read CVE rows from the mirrored NVD schema using `source_processor_states` watermarks
 - create `cve_entity_link_suggestions` only for entity-level relevance
+- link suggestions back to `nvds`, `nvd_config_match_criteria`, or related CPE tables with `suggestion_source_links`
 - approve into `cve_entity_links` after review
 - keep product-level applicability outside Corpscout
 
 ## Migration Strategy
 
-1. Add `source_definitions`, `source_sync_states`, and `source_pull_runs`.
-2. Add the first source-specific raw input tables for sources already being pulled.
-3. Add `suggestion_source_links`.
-4. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
-5. Add initial company section suggestion tables for domains, contacts, status, and relationships.
-6. Add initial organization and open-source project section suggestion tables only for sections needed by active processors.
-7. Wire CPE/CVE processors to raw input tables and existing CPE/CVE suggestion/link tables.
-8. Add processors for each additional source one at a time.
-9. Add UI review screens grouped by root entity suggestions and section suggestions.
-10. Keep external consumer API work deferred to the phase-two CPE lookup design.
+1. Add `source_definitions`, `source_sync_states`, `source_processor_states`, and `source_pull_runs`.
+2. Add the backoffice-compatible NVD/CPE schema for CPE and CVE input, using the backoffice-v2 loader-owned migrations as the source of truth.
+3. Add the first Corpscout-owned source-specific raw input tables for non-CPE/CVE sources already being pulled.
+4. Add `suggestion_source_links`.
+5. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
+6. Add initial company section suggestion tables for domains, contacts, status, and relationships.
+7. Add initial organization and open-source project section suggestion tables only for sections needed by active processors.
+8. Wire CPE/CVE processors to the mirrored NVD/CPE tables and existing CPE/CVE suggestion/link tables.
+9. Add processors for each additional source one at a time.
+10. Add UI review screens grouped by root entity suggestions and section suggestions.
+11. Keep external consumer API work deferred to the phase-two CPE lookup design.
 
 ## Testing Plan
 
@@ -1010,9 +1081,12 @@ Database tests:
 
 - source definitions enforce valid schedule and source groups
 - sync state stores cursors and lease metadata
+- processor state stores independent cursors and lease metadata
 - pull runs track status, cursors, row counts, and errors
 - source-specific raw input tables dedupe by native ID and payload hash
 - source-specific raw input tables allow multiple versions of the same source-native entity
+- mirrored NVD/CPE tables stay schema-compatible with the backoffice-v2 loader-owned schema
+- `suggestion_source_links.source_input_key` supports UUID, numeric, and canonical composite input keys
 - section suggestions require exactly one target: existing entity or root suggestion
 - approved root suggestions require a created resolved entity ID
 - suggestion source links can attach multiple sources to one suggestion
@@ -1022,7 +1096,8 @@ Processor tests:
 
 - pullers update source run metadata correctly
 - processors claim rows with leases
-- processors are idempotent on repeated raw input rows
+- CPE/CVE processors use `source_processor_states` instead of mutating mirrored NVD/CPE input tables
+- processors are idempotent on repeated raw input rows or repeated compatibility-table scans
 - processors create root suggestions when no resolved entity exists
 - processors create section suggestions when resolved entity values differ
 - processors add source links to existing pending suggestions instead of duplicating them
@@ -1049,6 +1124,7 @@ UI tests:
 ## Implementation Defaults
 
 - Prefer source-specific raw input tables over a generic catch-all table.
+- For CPE/CVE, prefer the backoffice-compatible NVD/CPE schema and loader contract over Corpscout-only raw input tables.
 - Preserve raw source payloads for traceability.
 - Never store secrets in source metadata, raw payloads, logs, or errors.
 - Treat pullers and processors as separate responsibilities, even when implemented in the same worker.
