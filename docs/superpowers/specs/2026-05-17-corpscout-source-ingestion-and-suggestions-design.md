@@ -1,0 +1,1060 @@
+# Corpscout Source Ingestion And Suggestions Design
+
+## Goal
+
+Design the Corpscout pipeline for pulling external data, storing raw source-specific input, processing that input, and creating reviewable suggestions for resolved entities.
+
+The pipeline must support many independent sources with different schedules, cursors, payload shapes, confidence rules, and processors. CPE and CVE are only two sources. They must not become the universal ingestion model.
+
+The intended flow is:
+
+```text
+source configuration and sync state
+-> source pull run
+-> source-specific raw input table
+-> source-specific processor
+-> entity/root suggestions and section suggestions
+-> review approval or rejection
+-> resolved company, organization, or open-source project tables
+```
+
+## Related Design
+
+This document extends:
+
+- `docs/superpowers/specs/2026-05-16-corpscout-resolved-entity-tables-design.md`
+
+That resolved-entity design established these decisions:
+
+- Corpscout has three resolved root entity types: `companies`, `organizations`, and `open_source_projects`.
+- There is no generic `entries` table.
+- There is no generic `identity_observations` table.
+- Source-specific candidate and suggestion tables should be used instead.
+- CPE/CVE approved links are compact operational mapping tables, while evidence and review state live in suggestion tables.
+
+## Scope
+
+This design covers:
+
+- source configuration and pull state
+- source pull run metadata
+- source-specific raw input tables
+- raw input processing lifecycle
+- new entity suggestions
+- existing entity field or section suggestions
+- linking suggestions back to source inputs
+- approval and rejection workflow
+- deduplication and idempotency rules
+- scheduling and processing boundaries
+- UI review grouping rules
+- testing requirements
+
+## Non-Goals
+
+- Do not design a generic raw input table for all sources.
+- Do not design a generic `identity_observations` table.
+- Do not write raw source data directly into resolved entity tables.
+- Do not force all sources to use the same payload columns.
+- Do not force companies, organizations, and open-source projects to have identical suggestion sections.
+- Do not implement external consumer integrations in this phase.
+- Do not design the phase-two CPE lookup API contract here.
+
+## Core Decisions
+
+### Source Inputs Are Source-Specific
+
+Every external source that stores raw data should own a specific input table.
+
+Examples:
+
+- `cpe_raw_inputs`
+- `cve_raw_inputs`
+- `gleif_company_raw_inputs`
+- `company_registry_raw_inputs`
+- `github_owner_raw_inputs`
+- `domain_discovery_raw_inputs`
+- `website_crawl_raw_inputs`
+- `ai_company_profile_raw_inputs`
+- `manual_research_raw_inputs`
+
+Each table can keep source-native fields that matter for that source. A GLEIF input table should keep LEI and registry metadata. A GitHub input table should keep owner, repository, organization, and API response metadata. An AI profile input table should keep the prompt version, model, normalized website, and response payload.
+
+### Pull State Is Shared Operational Metadata
+
+Scheduling and cursor metadata are operational concerns. They can be stored in shared source state tables because they describe the puller, not the identity data.
+
+Use shared tables for:
+
+- source definitions
+- source sync state
+- source pull runs
+
+Do not use shared tables for raw source payloads.
+
+### Processing Reads From The Source Input Table
+
+Each source has one or more processors. A processor reads only its source-specific input table, interprets raw payloads, and creates suggestions.
+
+Processors should not directly mutate resolved entity tables. The default and expected path is to create suggestions and wait for review.
+
+### Suggestions Are Section-Specific
+
+Suggestion tables should be specific to the entity type and profile section they update.
+
+Examples:
+
+- `company_suggestions`
+- `company_domain_suggestions`
+- `company_contact_suggestions`
+- `company_financial_suggestions`
+- `company_relationship_suggestions`
+- `company_status_suggestions`
+- `organization_suggestions`
+- `organization_contact_suggestions`
+- `open_source_project_suggestions`
+- `open_source_project_repository_suggestions`
+
+A new entity suggestion is represented by a root suggestion row plus optional child section suggestion rows. Existing entity updates are represented by section suggestion rows that point directly to the existing entity.
+
+## Source Operational Tables
+
+### `source_definitions`
+
+`source_definitions` describes known sources and their ingestion behavior.
+
+```sql
+CREATE TABLE source_definitions (
+    source_name TEXT PRIMARY KEY,
+    source_group TEXT NOT NULL,
+    input_table_name TEXT NOT NULL,
+    puller_name TEXT NOT NULL,
+    processor_name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    schedule_kind TEXT NOT NULL DEFAULT 'manual',
+    schedule_expression TEXT,
+    owner TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_source_definitions_source_group CHECK (
+        source_group IN (
+            'security_identifier',
+            'registry',
+            'domain',
+            'website',
+            'github',
+            'ai_research',
+            'manual',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_source_definitions_schedule_kind CHECK (
+        schedule_kind IN ('manual', 'interval', 'cron', 'event')
+    ),
+    CONSTRAINT chk_source_definitions_metadata_object CHECK (
+        jsonb_typeof(metadata) = 'object'
+    )
+);
+```
+
+Rules:
+
+- `source_name` is stable and used in logs, runs, and source links.
+- `input_table_name` points to the source-specific raw input table.
+- `schedule_expression` is interpreted by the scheduler for `interval` or `cron` sources.
+- `metadata` can store source configuration that is safe to persist. Do not store secrets.
+
+### `source_sync_states`
+
+`source_sync_states` stores mutable pull state for each source.
+
+```sql
+CREATE TABLE source_sync_states (
+    source_name TEXT PRIMARY KEY REFERENCES source_definitions(source_name),
+    last_started_at TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    last_failed_at TIMESTAMPTZ,
+    last_cursor JSONB NOT NULL DEFAULT '{}'::jsonb,
+    last_watermark_at TIMESTAMPTZ,
+    last_error TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    leased_by TEXT,
+    leased_until TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_source_sync_states_cursor_object CHECK (
+        jsonb_typeof(last_cursor) = 'object'
+    ),
+    CONSTRAINT chk_source_sync_states_failures CHECK (
+        consecutive_failures >= 0
+    )
+);
+```
+
+Rules:
+
+- Pullers use `leased_by` and `leased_until` to avoid duplicate source pulls.
+- Incremental sources store cursors or watermarks in `last_cursor` and `last_watermark_at`.
+- Full-refresh sources can leave `last_cursor` empty.
+- `last_error` must be safe for operators and must not include secrets.
+
+### `source_pull_runs`
+
+`source_pull_runs` records each source pull attempt.
+
+```sql
+CREATE TABLE source_pull_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    trigger_type TEXT NOT NULL DEFAULT 'scheduled',
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ,
+    cursor_before JSONB NOT NULL DEFAULT '{}'::jsonb,
+    cursor_after JSONB NOT NULL DEFAULT '{}'::jsonb,
+    window_start_at TIMESTAMPTZ,
+    window_end_at TIMESTAMPTZ,
+    rows_seen INTEGER NOT NULL DEFAULT 0,
+    rows_inserted INTEGER NOT NULL DEFAULT 0,
+    rows_updated INTEGER NOT NULL DEFAULT 0,
+    rows_unchanged INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    CONSTRAINT chk_source_pull_runs_trigger_type CHECK (
+        trigger_type IN ('scheduled', 'manual', 'retry', 'backfill', 'event')
+    ),
+    CONSTRAINT chk_source_pull_runs_status CHECK (
+        status IN ('running', 'succeeded', 'failed', 'cancelled')
+    ),
+    CONSTRAINT chk_source_pull_runs_counts CHECK (
+        rows_seen >= 0
+        AND rows_inserted >= 0
+        AND rows_updated >= 0
+        AND rows_unchanged >= 0
+    ),
+    CONSTRAINT chk_source_pull_runs_cursor_before_object CHECK (
+        jsonb_typeof(cursor_before) = 'object'
+    ),
+    CONSTRAINT chk_source_pull_runs_cursor_after_object CHECK (
+        jsonb_typeof(cursor_after) = 'object'
+    ),
+    CONSTRAINT chk_source_pull_runs_metadata_object CHECK (
+        jsonb_typeof(metadata) = 'object'
+    )
+);
+
+CREATE INDEX idx_source_pull_runs_source_started
+    ON source_pull_runs(source_name, started_at DESC);
+```
+
+Rules:
+
+- Every pull attempt creates a run row.
+- Raw input rows inserted by the pull should reference `source_pull_runs.id`.
+- A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
+- Pullers update `source_sync_states` only after a successful run.
+
+## Source-Specific Raw Input Tables
+
+Every source-specific raw input table should include common operational columns, plus source-specific columns.
+
+Common operational columns:
+
+```text
+id
+source_pull_run_id
+source_native_id
+source_updated_at
+raw_payload
+payload_hash
+first_seen_at
+last_seen_at
+processing_status
+processing_attempts
+processing_error
+processing_lease_by
+processing_lease_until
+processed_at
+created_at
+updated_at
+```
+
+Recommended status values:
+
+```text
+pending
+processing
+processed
+failed
+ignored
+superseded
+```
+
+Rules:
+
+- Use `source_native_id` when the source provides a stable ID.
+- Use `payload_hash` to detect changed payloads.
+- Preserve raw payload history by inserting a new row when the same native ID has a new payload hash.
+- Update `last_seen_at` when the same native ID and payload hash is seen again.
+- Processors claim rows with `processing_status = 'pending'` using a lease.
+- Failed rows remain available for retry based on attempts and lease expiry.
+
+### Example: CPE Raw Inputs
+
+```sql
+CREATE TABLE cpe_raw_inputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
+    source_native_id TEXT,
+    cpe_uri TEXT NOT NULL,
+    cpe_vendor_token TEXT NOT NULL,
+    cpe_product_token TEXT,
+    cpe_version TEXT,
+    source_updated_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL DEFAULT 'pending',
+    processing_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_error TEXT,
+    processing_lease_by TEXT,
+    processing_lease_until TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_cpe_raw_inputs_status CHECK (
+        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
+    ),
+    CONSTRAINT chk_cpe_raw_inputs_attempts CHECK (processing_attempts >= 0),
+    CONSTRAINT chk_cpe_raw_inputs_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
+    CONSTRAINT uq_cpe_raw_inputs_payload UNIQUE (cpe_uri, payload_hash)
+);
+
+CREATE INDEX idx_cpe_raw_inputs_processing
+    ON cpe_raw_inputs(processing_status, processing_lease_until, created_at);
+```
+
+### Example: GLEIF Company Raw Inputs
+
+```sql
+CREATE TABLE gleif_company_raw_inputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
+    lei TEXT NOT NULL,
+    legal_name TEXT,
+    registration_status TEXT,
+    headquarters_country_code TEXT,
+    parent_lei TEXT,
+    ultimate_parent_lei TEXT,
+    source_updated_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL DEFAULT 'pending',
+    processing_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_error TEXT,
+    processing_lease_by TEXT,
+    processing_lease_until TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_gleif_company_raw_inputs_status CHECK (
+        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
+    ),
+    CONSTRAINT chk_gleif_company_raw_inputs_attempts CHECK (processing_attempts >= 0),
+    CONSTRAINT chk_gleif_company_raw_inputs_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
+    CONSTRAINT uq_gleif_company_raw_inputs_payload UNIQUE (lei, payload_hash)
+);
+
+CREATE INDEX idx_gleif_company_raw_inputs_processing
+    ON gleif_company_raw_inputs(processing_status, processing_lease_until, created_at);
+```
+
+### Example: AI Company Profile Raw Inputs
+
+```sql
+CREATE TABLE ai_company_profile_raw_inputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
+    normalized_website TEXT,
+    normalized_domain TEXT,
+    requested_company_name TEXT,
+    model_name TEXT,
+    prompt_version TEXT,
+    source_updated_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL DEFAULT 'pending',
+    processing_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_error TEXT,
+    processing_lease_by TEXT,
+    processing_lease_until TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_ai_company_profile_raw_inputs_status CHECK (
+        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
+    ),
+    CONSTRAINT chk_ai_company_profile_raw_inputs_attempts CHECK (processing_attempts >= 0),
+    CONSTRAINT chk_ai_company_profile_raw_inputs_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
+    CONSTRAINT uq_ai_company_profile_raw_inputs_payload UNIQUE (normalized_domain, prompt_version, payload_hash)
+);
+
+CREATE INDEX idx_ai_company_profile_raw_inputs_processing
+    ON ai_company_profile_raw_inputs(processing_status, processing_lease_until, created_at);
+```
+
+## Processor Contract
+
+Each source processor has the same responsibilities:
+
+1. Claim pending raw input rows from its source table.
+2. Parse and validate the raw payload.
+3. Normalize identity hints such as names, domains, websites, LEIs, GitHub owners, CPE tokens, or CVE IDs.
+4. Try to match the input to existing resolved entities.
+5. If the input describes an existing entity, create section suggestions for fields that differ.
+6. If the input describes a missing entity, create a root entity suggestion and child section suggestions for the data the source provides.
+7. Link created suggestions back to the raw input row.
+8. Mark the raw input row as processed, ignored, or failed.
+
+Processors must be idempotent. Reprocessing the same raw input row must not create duplicate pending suggestions.
+
+Processor output should be suggestions, not direct mutations.
+
+## Root Entity Suggestions
+
+Root entity suggestions represent proposed new entities.
+
+Use separate root suggestion tables for each resolved entity type:
+
+- `company_suggestions`
+- `organization_suggestions`
+- `open_source_project_suggestions`
+
+### `company_suggestions`
+
+```sql
+CREATE TABLE company_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposed_display_name TEXT NOT NULL,
+    proposed_legal_name TEXT,
+    proposed_website TEXT,
+    proposed_canonical_slug TEXT,
+    proposed_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_suggestions_profile_object CHECK (
+        jsonb_typeof(proposed_profile) = 'object'
+    ),
+    CONSTRAINT chk_company_suggestions_created_company_when_approved CHECK (
+        status <> 'approved' OR created_company_id IS NOT NULL
+    )
+);
+
+CREATE INDEX idx_company_suggestions_review
+    ON company_suggestions(status, proposed_display_name);
+```
+
+Rules:
+
+- `company_suggestions` is for new company proposals.
+- Existing company updates should use section-specific suggestion tables that point to `companies.id`.
+- `created_company_id` is set when the suggestion is approved and the company row is created.
+- Child suggestions can point to `company_suggestions.id` before the company exists.
+
+### Organization And Open-Source Project Root Suggestions
+
+Use the same root-suggestion pattern for:
+
+- `organization_suggestions`
+- `open_source_project_suggestions`
+
+Each table should use fields natural for that entity type.
+
+Examples:
+
+- `organization_suggestions` should include `proposed_organization_type`, `proposed_website`, and `proposed_profile`.
+- `open_source_project_suggestions` should include `proposed_repository_url`, `proposed_license`, `proposed_website`, and `proposed_profile`.
+
+Do not force organization or open-source project suggestions to share company-only fields such as legal name, LEI, revenue, or headquarters.
+
+## Section Suggestion Tables
+
+Section suggestion tables represent proposed changes to one profile section.
+
+A section suggestion has exactly one target:
+
+- an existing resolved entity, or
+- a root suggestion for a new entity that does not exist yet
+
+For company suggestions, that means exactly one of:
+
+- `company_id`
+- `company_suggestion_id`
+
+For organization suggestions, exactly one of:
+
+- `organization_id`
+- `organization_suggestion_id`
+
+For open-source project suggestions, exactly one of:
+
+- `open_source_project_id`
+- `open_source_project_suggestion_id`
+
+### Common Section Suggestion Columns
+
+Every section suggestion table should include this logical shape:
+
+```text
+id
+resolved entity target, nullable
+root suggestion target, nullable
+operation
+current_payload
+proposed_payload
+confidence
+status
+reviewed_by
+reviewed_at
+review_note
+created_at
+updated_at
+```
+
+Recommended operations:
+
+```text
+add
+update
+remove
+replace
+```
+
+Recommended statuses:
+
+```text
+pending
+approved
+rejected
+superseded
+```
+
+`current_payload` should store the current value snapshot the processor compared against. Reviewers need this to understand what changed. It also helps detect stale suggestions when resolved data changes before approval.
+
+`proposed_payload` should store the new section value or values.
+
+### `company_domain_suggestions`
+
+```sql
+CREATE TABLE company_domain_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    current_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    proposed_payload JSONB NOT NULL,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_domain_suggestions_target CHECK (
+        (company_id IS NOT NULL AND company_suggestion_id IS NULL)
+        OR (company_id IS NULL AND company_suggestion_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_company_domain_suggestions_operation CHECK (
+        operation IN ('add', 'update', 'remove', 'replace')
+    ),
+    CONSTRAINT chk_company_domain_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_domain_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_domain_suggestions_current_object CHECK (
+        jsonb_typeof(current_payload) = 'object'
+    ),
+    CONSTRAINT chk_company_domain_suggestions_proposed_object CHECK (
+        jsonb_typeof(proposed_payload) = 'object'
+    )
+);
+
+CREATE INDEX idx_company_domain_suggestions_existing_target
+    ON company_domain_suggestions(company_id, status)
+    WHERE company_id IS NOT NULL;
+
+CREATE INDEX idx_company_domain_suggestions_new_target
+    ON company_domain_suggestions(company_suggestion_id, status)
+    WHERE company_suggestion_id IS NOT NULL;
+```
+
+### `company_contact_suggestions`
+
+`company_contact_suggestions` covers email, phone, website, social link, and other company contact changes.
+
+```sql
+CREATE TABLE company_contact_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    contact_kind TEXT NOT NULL,
+    current_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    proposed_payload JSONB NOT NULL,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_contact_suggestions_target CHECK (
+        (company_id IS NOT NULL AND company_suggestion_id IS NULL)
+        OR (company_id IS NULL AND company_suggestion_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_company_contact_suggestions_operation CHECK (
+        operation IN ('add', 'update', 'remove', 'replace')
+    ),
+    CONSTRAINT chk_company_contact_suggestions_contact_kind CHECK (
+        contact_kind IN ('email', 'phone', 'website', 'social', 'other')
+    ),
+    CONSTRAINT chk_company_contact_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_contact_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_contact_suggestions_current_object CHECK (
+        jsonb_typeof(current_payload) = 'object'
+    ),
+    CONSTRAINT chk_company_contact_suggestions_proposed_object CHECK (
+        jsonb_typeof(proposed_payload) = 'object'
+    )
+);
+```
+
+### Additional Company Section Tables
+
+Use the same section-suggestion pattern for:
+
+- `company_location_suggestions`
+- `company_market_suggestions`
+- `company_service_suggestions`
+- `company_industry_suggestions`
+- `company_financial_suggestions`
+- `company_relationship_suggestions`
+- `company_status_suggestions`
+
+Each table should use typed columns for fields that are frequently filtered in the UI. Less frequently used structured data can remain in `proposed_payload`.
+
+Examples:
+
+- `company_financial_suggestions` should include `financial_kind`, `currency`, `period_year`, and `amount` when available.
+- `company_relationship_suggestions` should include relationship type and related company target when known.
+- `company_status_suggestions` should include the proposed company lifecycle/status field being changed.
+
+### Organization Section Suggestions
+
+Organizations should have their own section suggestion tables. Do not reuse company section tables.
+
+Recommended initial organization tables:
+
+- `organization_website_suggestions`
+- `organization_contact_suggestions`
+- `organization_location_suggestions`
+- `organization_governance_suggestions`
+- `organization_project_suggestions`
+- `organization_social_link_suggestions`
+
+### Open-Source Project Section Suggestions
+
+Open-source projects should have project-specific section suggestion tables.
+
+Recommended initial project tables:
+
+- `open_source_project_repository_suggestions`
+- `open_source_project_package_suggestions`
+- `open_source_project_maintainer_suggestions`
+- `open_source_project_security_contact_suggestions`
+- `open_source_project_license_suggestions`
+- `open_source_project_forum_suggestions`
+- `open_source_project_release_suggestions`
+
+## Suggestion Source Links
+
+Suggestions should link back to the source input rows that produced them.
+
+Use a small operational provenance table:
+
+```sql
+CREATE TABLE suggestion_source_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    suggestion_table TEXT NOT NULL,
+    suggestion_id UUID NOT NULL,
+    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    source_input_table TEXT NOT NULL,
+    source_input_id UUID NOT NULL,
+    source_pull_run_id UUID REFERENCES source_pull_runs(id),
+    confidence REAL,
+    evidence_excerpt TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_suggestion_source_links_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    )
+);
+
+CREATE INDEX idx_suggestion_source_links_suggestion
+    ON suggestion_source_links(suggestion_table, suggestion_id);
+
+CREATE INDEX idx_suggestion_source_links_source
+    ON suggestion_source_links(source_name, source_input_table, source_input_id);
+```
+
+This table is generic by design because it is not raw input data and it is not resolved profile data. It is only provenance glue between source-specific input tables and source-specific suggestion tables.
+
+Rules:
+
+- A suggestion can have multiple source links.
+- Multiple sources can support the same suggestion.
+- The service layer validates that `source_input_table` and `source_input_id` point to an existing source-specific input row.
+- Do not copy full raw payloads into `evidence_excerpt`.
+- Use `evidence_excerpt` only for short UI summaries.
+
+## Deduplication Rules
+
+### Raw Input Deduplication
+
+Raw source input tables dedupe by source-native identity and payload hash.
+
+Rules:
+
+- Same native ID and same payload hash: update `last_seen_at`.
+- Same native ID and different payload hash: insert a new raw input row.
+- No native ID: dedupe by a stable normalized key and payload hash.
+- Never merge raw input rows across different sources.
+
+### Suggestion Deduplication
+
+Processors should avoid duplicate pending suggestions.
+
+Recommended dedupe key:
+
+```text
+entity type
+section table
+existing target or root suggestion target
+operation
+normalized proposed payload hash
+status = pending
+```
+
+If a matching pending suggestion exists, add a new `suggestion_source_links` row instead of creating another suggestion.
+
+If an approved or rejected suggestion exists, create a new suggestion only when the new evidence or proposed payload materially differs.
+
+## Approval Workflow
+
+### Approving A New Entity Suggestion
+
+For a new company suggestion:
+
+1. Lock the `company_suggestions` row.
+2. Verify status is `pending`.
+3. Create the `companies` row.
+4. Set `company_suggestions.status = 'approved'`.
+5. Set `company_suggestions.created_company_id` to the new company ID.
+6. Optionally approve selected child section suggestions in the same transaction.
+7. Leave rejected or unreviewed child suggestions unchanged.
+
+The same pattern applies to organization and open-source project root suggestions.
+
+### Approving A Section Suggestion For An Existing Entity
+
+1. Lock the section suggestion row.
+2. Verify status is `pending`.
+3. Verify the target resolved entity still exists.
+4. Compare `current_payload` with the current resolved data.
+5. If the resolved data changed materially, mark the suggestion `superseded` and create a fresh suggestion if needed.
+6. Apply the `proposed_payload` to the resolved table or child table.
+7. Mark the suggestion `approved`.
+8. Store reviewer metadata.
+
+### Approving A Section Suggestion For A New Entity
+
+1. Lock the section suggestion row.
+2. Verify status is `pending`.
+3. Load the parent root suggestion.
+4. Verify the parent root suggestion is approved and has a created entity ID.
+5. Apply the section suggestion to that created entity.
+6. Mark the section suggestion `approved`.
+
+A child section suggestion cannot be applied before its root entity suggestion creates the resolved entity.
+
+### Rejecting Suggestions
+
+Rejecting a suggestion:
+
+- sets `status = 'rejected'`
+- stores `reviewed_by`, `reviewed_at`, and `review_note`
+- does not delete source links
+- does not delete raw input rows
+
+Rejected suggestions become durable negative evidence. Processors should check rejected suggestions before recreating similar pending suggestions.
+
+## UI Review Model
+
+### New Entity Review
+
+The UI should show a new company suggestion as one request:
+
+```text
+company_suggestions row
+-> company_domain_suggestions rows
+-> company_contact_suggestions rows
+-> company_financial_suggestions rows
+-> company_relationship_suggestions rows
+-> other company section suggestions
+```
+
+Reviewers can:
+
+- approve the root entity
+- approve selected child sections
+- reject selected child sections
+- reject the whole suggestion
+
+If the root entity is rejected, child suggestions should be marked `rejected` or `superseded` in the same review action.
+
+Child suggestions attached to a root suggestion should appear under that new-entity review request. They should not appear in existing-entity update queues because they do not target a resolved entity yet.
+
+### Existing Entity Review
+
+Existing entity updates should be grouped by:
+
+- entity type
+- entity ID
+- section
+- source
+
+Examples:
+
+- contact updates for one company
+- domain updates for one company
+- financial updates for one company
+- repository updates for one open-source project
+
+The UI should show source evidence through `suggestion_source_links`.
+
+## Source Pull And Processing Scheduling
+
+Sources can run on different schedules.
+
+Examples:
+
+- CPE source: scheduled daily or weekly
+- CVE source: scheduled frequently
+- GLEIF source: scheduled daily or weekly depending on feed cadence
+- website crawl source: scheduled with rate limits
+- AI profile source: manual or queue-driven
+- manual research source: event-driven
+
+Scheduling rules:
+
+- Scheduler reads `source_definitions` and `source_sync_states`.
+- Scheduler creates a `source_pull_runs` row.
+- Puller writes source-specific raw input rows.
+- Puller updates `source_pull_runs` and `source_sync_states`.
+- Processor workers read pending rows from source-specific raw input tables.
+- Processor workers create suggestions and source links.
+
+Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the boundary should remain clear in code.
+
+## Concurrency And Retry Rules
+
+Pullers:
+
+- use `source_sync_states.leased_by` and `leased_until`
+- update cursor only after successful pull completion
+- record failed runs without losing prior successful cursor
+
+Processors:
+
+- claim raw rows with `processing_status = 'pending'`
+- set `processing_status = 'processing'`
+- set `processing_lease_by` and `processing_lease_until`
+- increment `processing_attempts`
+- mark row `processed`, `ignored`, or `failed`
+- retry failed rows only when attempts and backoff policy allow
+
+Approval:
+
+- locks suggestion rows before applying changes
+- checks that the suggestion is still pending
+- performs resolved table writes and suggestion status updates in one transaction
+
+## Source Examples
+
+### AI Company Profile Source
+
+Input:
+
+- website
+- optional company name
+- AI response payload
+
+Processor behavior:
+
+- normalize website and domain
+- search for existing company by domain and website
+- if company exists, create section suggestions for changed contact, domain, market, service, financial, or relationship data
+- if company does not exist, create `company_suggestions` plus child company section suggestions for available data
+- link every suggestion to `ai_company_profile_raw_inputs`
+
+### GLEIF Source
+
+Input:
+
+- LEI
+- legal name
+- registration status
+- headquarters data
+- direct parent LEI
+- ultimate parent LEI
+
+Processor behavior:
+
+- match existing company by LEI
+- create company status, legal name, location, and relationship suggestions when values differ
+- create `company_suggestions` only when a reviewed import policy allows new companies from GLEIF
+- link suggestions to `gleif_company_raw_inputs`
+
+### Domain Discovery Source
+
+Input:
+
+- discovered domain
+- source page or signal
+- confidence score
+
+Processor behavior:
+
+- match domain to existing company, organization, or open-source project
+- create domain suggestions for existing entities
+- create root entity suggestions only when there is enough identity evidence
+- keep weak discoveries in the domain-specific raw input table as ignored or failed review candidates
+
+### CPE Source
+
+Input:
+
+- CPE URI
+- vendor token
+- product token
+- version
+
+Processor behavior:
+
+- create `cpe_entity_link_suggestions`
+- do not create product records in Corpscout
+- approve into `cpe_entity_links` only after review or trusted approval path
+
+### CVE Source
+
+Input:
+
+- CVE ID
+- affected product context
+- source references
+
+Processor behavior:
+
+- create `cve_entity_link_suggestions` only for entity-level relevance
+- approve into `cve_entity_links` after review
+- keep product-level applicability outside Corpscout
+
+## Migration Strategy
+
+1. Add `source_definitions`, `source_sync_states`, and `source_pull_runs`.
+2. Add the first source-specific raw input tables for sources already being pulled.
+3. Add `suggestion_source_links`.
+4. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
+5. Add initial company section suggestion tables for domains, contacts, status, and relationships.
+6. Add initial organization and open-source project section suggestion tables only for sections needed by active processors.
+7. Wire CPE/CVE processors to raw input tables and existing CPE/CVE suggestion/link tables.
+8. Add processors for each additional source one at a time.
+9. Add UI review screens grouped by root entity suggestions and section suggestions.
+10. Keep external consumer API work deferred to the phase-two CPE lookup design.
+
+## Testing Plan
+
+Database tests:
+
+- source definitions enforce valid schedule and source groups
+- sync state stores cursors and lease metadata
+- pull runs track status, cursors, row counts, and errors
+- source-specific raw input tables dedupe by native ID and payload hash
+- source-specific raw input tables allow multiple versions of the same source-native entity
+- section suggestions require exactly one target: existing entity or root suggestion
+- approved root suggestions require a created resolved entity ID
+- suggestion source links can attach multiple sources to one suggestion
+- rejected suggestions retain source links
+
+Processor tests:
+
+- pullers update source run metadata correctly
+- processors claim rows with leases
+- processors are idempotent on repeated raw input rows
+- processors create root suggestions when no resolved entity exists
+- processors create section suggestions when resolved entity values differ
+- processors add source links to existing pending suggestions instead of duplicating them
+- failed processing rows are retryable
+- ignored rows do not create suggestions
+
+Approval tests:
+
+- approving a company root suggestion creates one company row
+- approving child suggestions for a new company writes to the created company
+- approving section suggestions for existing companies updates only the intended section
+- stale suggestions are superseded when current resolved data no longer matches the captured snapshot
+- rejecting suggestions does not mutate resolved data
+- approving duplicate pending suggestions is prevented by service-layer checks
+
+UI tests:
+
+- new company suggestion shows root and child section suggestions as one review request
+- existing company suggestions group by company and section
+- source evidence is visible through source links
+- reviewers can approve or reject child sections independently
+- rejecting a root suggestion rejects or supersedes its child suggestions
+
+## Implementation Defaults
+
+- Prefer source-specific raw input tables over a generic catch-all table.
+- Preserve raw source payloads for traceability.
+- Never store secrets in source metadata, raw payloads, logs, or errors.
+- Treat pullers and processors as separate responsibilities, even when implemented in the same worker.
+- Keep suggestion tables reviewable and durable; do not delete rejected suggestions.
+- Use `suggestion_source_links` for provenance instead of copying full source payloads into suggestion tables.
+- Use section-specific suggestion tables so approvals can be reviewed and applied independently.
+- Use root entity suggestions only for creating new companies, organizations, or open-source projects.
+- Existing entity updates should go directly to section suggestion tables.
+- CPE/CVE suggestions are source-specific mapping suggestions, not the universal source model.
