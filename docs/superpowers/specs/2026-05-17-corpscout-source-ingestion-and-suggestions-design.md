@@ -641,19 +641,102 @@ Rules:
 
 ### Organization And Open-Source Project Root Suggestions
 
-Use the same root-suggestion pattern for:
+`organization_suggestions` is for proposed new organizations.
 
-- `organization_suggestions`
-- `open_source_project_suggestions`
+```sql
+CREATE TABLE organization_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposed_display_name TEXT NOT NULL,
+    proposed_organization_type TEXT NOT NULL,
+    proposed_website TEXT,
+    proposed_canonical_slug TEXT,
+    proposed_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_organization_suggestions_type CHECK (
+        proposed_organization_type IN (
+            'foundation',
+            'standards_body',
+            'nonprofit',
+            'government',
+            'university',
+            'community',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_organization_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_organization_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_organization_suggestions_profile_object CHECK (
+        jsonb_typeof(proposed_profile) = 'object'
+    ),
+    CONSTRAINT chk_organization_suggestions_created_org_when_approved CHECK (
+        status <> 'approved' OR created_organization_id IS NOT NULL
+    )
+);
 
-Each table should use fields natural for that entity type.
+CREATE INDEX idx_organization_suggestions_review
+    ON organization_suggestions(status, proposed_display_name);
+```
 
-Examples:
+`open_source_project_suggestions` is for proposed new open-source projects.
 
-- `organization_suggestions` should include `proposed_organization_type`, `proposed_website`, and `proposed_profile`.
-- `open_source_project_suggestions` should include `proposed_repository_url`, `proposed_license`, `proposed_website`, and `proposed_profile`.
+```sql
+CREATE TABLE open_source_project_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposed_display_name TEXT NOT NULL,
+    proposed_repository_url TEXT,
+    proposed_website TEXT,
+    proposed_license TEXT,
+    proposed_lifecycle_status TEXT,
+    proposed_canonical_slug TEXT,
+    proposed_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_open_source_project_id UUID REFERENCES open_source_projects(id) ON DELETE SET NULL,
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_open_source_project_suggestions_lifecycle CHECK (
+        proposed_lifecycle_status IS NULL
+        OR proposed_lifecycle_status IN ('active', 'maintenance', 'deprecated', 'unknown')
+    ),
+    CONSTRAINT chk_open_source_project_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_open_source_project_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_open_source_project_suggestions_profile_object CHECK (
+        jsonb_typeof(proposed_profile) = 'object'
+    ),
+    CONSTRAINT chk_open_source_project_suggestions_created_project_when_approved CHECK (
+        status <> 'approved' OR created_open_source_project_id IS NOT NULL
+    )
+);
+
+CREATE INDEX idx_open_source_project_suggestions_review
+    ON open_source_project_suggestions(status, proposed_display_name);
+```
 
 Do not force organization or open-source project suggestions to share company-only fields such as legal name, LEI, revenue, or headquarters.
+
+Rules:
+
+- `proposed_canonical_slug` is only a review hint for both tables.
+- Approval services must generate final slugs at approval time using the same slug collision strategy as company suggestions.
+- `created_organization_id` and `created_open_source_project_id` are set when approval creates the resolved row.
 
 ## Section Suggestion Tables
 
