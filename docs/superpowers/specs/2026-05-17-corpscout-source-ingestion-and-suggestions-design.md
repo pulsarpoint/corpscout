@@ -113,9 +113,20 @@ River pull task
 -> resolved entity writes
 ```
 
-There is no permanent mixed mode where old sources write directly and only new sources use suggestions. A temporary migration bridge may exist inside a single implementation phase, but the completed phase must route all source-derived company/profile changes through suggestions.
+There is no mixed mode in the MVP target. Old source workers, new source workers, crawlers, and processors must all route source-derived company/profile changes through suggestions before the MVP is considered complete.
 
 Approval services may still write to resolved tables after review. That is not considered source ingestion; it is the explicit reviewed mutation boundary.
+
+### SourceCrawlWorker MVP Refactor Scope
+
+The current `SourceCrawlWorker` direct-write body should be replaced, not preserved. MVP uses two River responsibilities:
+
+- `SourcePullWorker` calls the external crawler or source adapter, creates a `source_pull_runs` row, writes only source-specific raw input rows or compatibility-schema rows, updates successful source markers, and enqueues the configured `processor_task_type`.
+- `SourceProcessWorker` reads pending raw input rows for one source or scans compatibility tables from `source_processor_states`, creates root and section suggestions, writes `suggestion_source_links`, and marks raw input rows or processor state as processed, ignored, or failed.
+
+Pulling and processing may share packages and normalization helpers, but they should be separate River task types in the MVP. This gives retries, monitoring, and failure handling a clear boundary. The one-job pull-and-process option is not used for the first implementation.
+
+Existing helper paths that upsert `companies`, `company_locations`, `company_phones`, `company_emails`, `company_aliases`, `company_sources`, or `company_domains` should be removed from source ingestion. Equivalent data becomes `company_suggestions` or section suggestions.
 
 ### Suggestions Are Section-Specific
 
@@ -197,7 +208,7 @@ Rules:
 - `data_sources.name` stays the stable source name used in logs, runs, and UI.
 - `input_table_name` points to the source-specific raw input table or the primary table in a source-compatible schema.
 - `pull_task_type` is the River task type used to pull the source.
-- `processor_task_type` is the River task type used to process pulled input when processing is a separate task.
+- `processor_task_type` is the River task type used to process pulled input. MVP active sources should use a separate processor task when this field is set.
 - `config` remains the place for safe source-specific configuration and documentation metadata. Do not store secrets.
 - Pullers should write `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
 - The marker can be an ETag, checksum, feed version, last modified timestamp string, or another source-native version token.
@@ -515,6 +526,96 @@ CREATE TABLE gleif_company_raw_inputs (
 
 CREATE INDEX idx_gleif_company_raw_inputs_processing
     ON gleif_company_raw_inputs(processing_status, processing_lease_until, created_at);
+```
+
+### Companies House Company Raw Inputs
+
+Companies House has a stable native identifier: company number. Store it as both `source_native_id` and `company_number`.
+
+```sql
+CREATE TABLE companies_house_company_raw_inputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
+    source_native_id TEXT NOT NULL,
+    company_number TEXT NOT NULL,
+    company_name TEXT,
+    company_status TEXT,
+    company_type TEXT,
+    country_iso2 TEXT DEFAULT 'GB',
+    source_updated_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL DEFAULT 'pending',
+    processing_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_error TEXT,
+    processing_lease_by TEXT,
+    processing_lease_until TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_companies_house_raw_source_native CHECK (
+        source_native_id = company_number
+    ),
+    CONSTRAINT chk_companies_house_raw_status CHECK (
+        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
+    ),
+    CONSTRAINT chk_companies_house_raw_attempts CHECK (processing_attempts >= 0),
+    CONSTRAINT chk_companies_house_raw_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
+    CONSTRAINT uq_companies_house_raw_payload UNIQUE (company_number, payload_hash)
+);
+
+CREATE INDEX idx_companies_house_raw_processing
+    ON companies_house_company_raw_inputs(processing_status, processing_lease_until, created_at);
+
+CREATE INDEX idx_companies_house_raw_company_number
+    ON companies_house_company_raw_inputs(company_number);
+```
+
+### Brreg Company Raw Inputs
+
+Brreg has a stable native identifier: `organisasjonsnummer`. Store it as both `source_native_id` and `organization_number`.
+
+```sql
+CREATE TABLE brreg_company_raw_inputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_pull_run_id UUID NOT NULL REFERENCES source_pull_runs(id),
+    source_native_id TEXT NOT NULL,
+    organization_number TEXT NOT NULL,
+    organization_name TEXT,
+    registration_status TEXT,
+    website TEXT,
+    country_iso2 TEXT DEFAULT 'NO',
+    source_updated_at TIMESTAMPTZ,
+    raw_payload JSONB NOT NULL,
+    payload_hash TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processing_status TEXT NOT NULL DEFAULT 'pending',
+    processing_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_error TEXT,
+    processing_lease_by TEXT,
+    processing_lease_until TIMESTAMPTZ,
+    processed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_brreg_raw_source_native CHECK (
+        source_native_id = organization_number
+    ),
+    CONSTRAINT chk_brreg_raw_status CHECK (
+        processing_status IN ('pending', 'processing', 'processed', 'failed', 'ignored', 'superseded')
+    ),
+    CONSTRAINT chk_brreg_raw_attempts CHECK (processing_attempts >= 0),
+    CONSTRAINT chk_brreg_raw_payload_object CHECK (jsonb_typeof(raw_payload) = 'object'),
+    CONSTRAINT uq_brreg_raw_payload UNIQUE (organization_number, payload_hash)
+);
+
+CREATE INDEX idx_brreg_raw_processing
+    ON brreg_company_raw_inputs(processing_status, processing_lease_until, created_at);
+
+CREATE INDEX idx_brreg_raw_organization_number
+    ON brreg_company_raw_inputs(organization_number);
 ```
 
 ### Example: AI Company Profile Raw Inputs
@@ -1265,6 +1366,30 @@ Minimum route surface to design:
 
 The existing domain review endpoints are not enough for the new suggestion model. They should be removed or replaced by suggestion APIs that call service-layer approval methods rather than writing table-specific status updates directly in handlers.
 
+### Domain Review Replacement
+
+The old domain review surface is part of the direct-write ingestion model and is not preserved in MVP.
+
+Rules:
+
+- Drop `company_domain_reviews` from the active MVP schema.
+- Replace domain review endpoints with the generic suggestion review endpoints.
+- Remove `DomainResolveWorker` direct writes to `company_domains`.
+- Domain discovery should write `domain_discovery_raw_inputs` and then create `company_domain_suggestions`.
+- Approved domain suggestions are applied by the approval service into `company_domains`.
+
+### Source API Replacement
+
+The existing source API handlers must be rewritten for the clean MVP `data_sources` schema. The old API shape references columns from the direct-write scheduler model and should not be preserved.
+
+Handler rules:
+
+- `GET /api/v1/sources` returns the new source registry fields: `name`, `display_name`, `description`, `source_group`, `input_table_name`, `pull_task_type`, `processor_task_type`, `enabled`, `schedule_kind`, `schedule_expression`, `last_started_at`, `last_success_at`, `last_failed_at`, `last_source_marker_type`, `last_source_marker`, `last_source_modified_at`, `last_error`, and `consecutive_failures`.
+- `PATCH /api/v1/sources/:name` updates MVP-editable fields only: `enabled`, `schedule_kind`, `schedule_expression`, safe `config`, `display_name`, and `description`.
+- `POST /api/v1/sources/:name/trigger` validates that the source exists and is enabled, then enqueues `data_sources.pull_task_type` with River uniqueness on source name and task type.
+- `source_pull_runs` rows are created by the pull worker, not by the HTTP handler, so manual trigger failure before River enqueue does not create a run row.
+- Remove handler and query references to old columns such as `adapter_type`, `crawl_interval_hours`, `last_crawled_at`, and `last_cursor`.
+
 ## UI Review Model
 
 ### New Entity Review
@@ -1330,10 +1455,11 @@ Scheduling rules:
 - The River pull task creates a `source_pull_runs` row when it starts.
 - The pull task writes source-specific raw input rows or updates a source-compatible input schema only.
 - The pull task updates `source_pull_runs` and, on success, `data_sources` marker fields.
+- The pull task enqueues `data_sources.processor_task_type` when processing is configured separately.
 - Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor marker.
 - Processor workers create suggestions and source links.
 
-Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the write boundary must remain clear in code: source work stops at raw input and suggestions; reviewed approval applies resolved data changes.
+MVP active sources use separate pull and process River tasks. The source work boundary is explicit: pull tasks stop at raw input, process tasks stop at suggestions, and reviewed approval applies resolved data changes.
 
 ## Concurrency And Retry Rules
 
@@ -1450,30 +1576,34 @@ Processor behavior:
 1. Replace the old source-ingestion implementation with the MVP target schema; do not preserve direct-write compatibility.
 2. Create clean `data_sources` and `source_pull_runs` tables and seed MVP sources.
 3. Add `source_processor_states`.
-4. Add the first Corpscout-owned source-specific raw input tables for non-CPE/CVE sources already being pulled.
+4. Add the first Corpscout-owned source-specific raw input tables for active non-CPE/CVE sources: `gleif_company_raw_inputs`, `companies_house_company_raw_inputs`, `brreg_company_raw_inputs`, `ai_company_profile_raw_inputs`, and any active domain discovery input table.
 5. Add `suggestion_source_links`.
 6. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
 7. Add initial company section suggestion tables for domains, contacts, locations, status, and relationships.
-8. Drop old direct-ingestion tables such as `company_sources` and `source_snapshots`.
-9. Remove old direct-write source worker behavior and replace it with raw-input plus suggestion processors.
-10. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
-11. Add service-layer approval and rejection methods, including slug collision handling.
-12. Add an HTTP API design task for the suggestion review workflow before UI work starts.
-13. Add UI review screens grouped by root entity suggestions and section suggestions.
-14. Run a dedicated NVD/CPE schema estimation pass, then add the backoffice-compatible schema in multiple migrations by logical group.
-15. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
-16. Keep external consumer API work deferred to the phase-two CPE lookup design.
+8. Drop old direct-ingestion tables such as `company_sources`, `source_snapshots`, and `company_domain_reviews`.
+9. Remove old direct-write source worker behavior and replace `SourceCrawlWorker` with `SourcePullWorker` plus `SourceProcessWorker` responsibilities.
+10. Remove `DomainResolveWorker` direct writes and replace domain review flows with domain raw inputs plus `company_domain_suggestions`.
+11. Update existing `/api/v1/sources` handlers and queries to the clean `data_sources` schema.
+12. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
+13. Add service-layer approval and rejection methods, including slug collision handling.
+14. Add an HTTP API design task for the suggestion review workflow before UI work starts.
+15. Add UI review screens grouped by root entity suggestions and section suggestions.
+16. Run a dedicated NVD/CPE schema estimation pass, then add the backoffice-compatible schema in multiple migrations by logical group.
+17. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
+18. Keep external consumer API work deferred to the phase-two CPE lookup design.
 
 MVP implementation scope:
 
 - clean source registry and pull-run schema
 - `source_processor_states`
 - `suggestion_source_links`
+- GLEIF, Companies House, Brreg, AI company profile, and active domain discovery raw input tables
 - company root suggestions
 - company domain, contact, location, status, and relationship suggestions
 - all active non-CPE source paths emit suggestions only
 - old direct-write source worker paths removed and replaced
-- `company_sources` and `source_snapshots` removed from active writes and active reads
+- `company_sources`, `source_snapshots`, and `company_domain_reviews` removed from active writes and active reads
+- existing source API handlers updated to the clean `data_sources` schema
 - service-layer approval/rejection for company root and initial company section suggestions
 
 Out of first implementation scope:
@@ -1483,6 +1613,7 @@ Out of first implementation scope:
 - organization and open-source project section tables not emitted by the first processor
 - phase-two external lookup API
 - preserving old source-ingestion behavior for compatibility
+- preserving the old `/api/v1/sources` response shape or old scheduler column names
 
 ## Testing Plan
 
@@ -1492,9 +1623,11 @@ Database tests:
 - `data_sources` stores last successful source marker metadata
 - processor state stores independent last processed marker metadata
 - pull runs track River job ID, task type, status, row counts, and errors
-- old `company_sources` and `source_snapshots` are not part of the active MVP schema
+- old `company_sources`, `source_snapshots`, and `company_domain_reviews` are not part of the active MVP schema
 - source-specific raw input tables dedupe by native ID and payload hash
 - source-specific raw input tables allow multiple versions of the same source-native entity
+- Companies House raw inputs require `source_native_id = company_number`
+- Brreg raw inputs require `source_native_id = organization_number`
 - company root suggestion approval handles canonical slug collisions
 - mirrored NVD/CPE tables stay schema-compatible with the backoffice-v2 loader-owned schema
 - `suggestion_source_links.source_input_key` supports UUID, numeric, and canonical composite input keys
@@ -1503,12 +1636,15 @@ Database tests:
 - suggestion source links can attach multiple sources to one suggestion
 - rejected suggestions retain source links
 
-Processor tests:
+Worker and processor tests:
 
 - pullers update source run metadata correctly
+- `SourcePullWorker` writes raw input rows only and enqueues the configured processor task
+- `SourceProcessWorker` reads raw input rows and writes suggestions plus source links only
 - row-queue processors claim rows with processing leases when using Corpscout-owned raw input tables
 - CPE/CVE processors use `source_processor_states` instead of mutating mirrored NVD/CPE input tables
-- source processors do not write `companies`, company profile tables, `company_sources`, or `source_snapshots`
+- source processors do not write `companies`, company profile tables, `company_sources`, `source_snapshots`, or `company_domain_reviews`
+- domain discovery does not write `company_domains` directly and emits `company_domain_suggestions`
 - processors are idempotent on repeated raw input rows or repeated compatibility-table scans
 - processors create root suggestions when no resolved entity exists
 - processors create section suggestions when resolved entity values differ
@@ -1528,6 +1664,9 @@ Approval tests:
 
 API tests:
 
+- `GET /api/v1/sources` returns clean `data_sources` fields and no old scheduler fields
+- `PATCH /api/v1/sources/:name` updates only MVP-editable source fields
+- `POST /api/v1/sources/:name/trigger` enqueues the configured pull task with source uniqueness
 - review list endpoint returns grouped root and section suggestions
 - review detail endpoint includes child suggestions and source links
 - approve endpoint calls the service layer and records reviewer metadata
