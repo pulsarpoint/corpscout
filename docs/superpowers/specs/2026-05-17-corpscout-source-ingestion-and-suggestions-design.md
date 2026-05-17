@@ -87,9 +87,9 @@ Scheduling and last-pulled source markers are operational concerns. They can be 
 
 Use shared tables for:
 
-- source definitions
-- source sync state
-- source pull runs
+- `data_sources`, which already stores source definitions and source sync state
+- `source_pull_runs`, which already stores pull audit rows
+- `source_processor_states`, added by this design only for processors that need independent progress markers
 
 River owns task claiming and execution. Corpscout should not duplicate River's job locking with source-level lease columns. If a source must not have two active pull jobs, enqueue it with a River uniqueness rule based on the source name and task type.
 
@@ -122,138 +122,159 @@ A new entity suggestion is represented by a root suggestion row plus optional ch
 
 ## Source Operational Tables
 
-### `source_definitions`
+### `data_sources`
 
-`source_definitions` describes known sources and their ingestion behavior.
+Corpscout already has `data_sources`. This design evolves that table instead of creating a parallel `source_definitions` table or a separate `source_sync_states` table.
 
 ```sql
-CREATE TABLE source_definitions (
-    source_name TEXT PRIMARY KEY,
-    source_group TEXT NOT NULL,
-    input_table_name TEXT NOT NULL,
-    pull_task_type TEXT NOT NULL,
-    processor_task_type TEXT,
-    enabled BOOLEAN NOT NULL DEFAULT true,
-    schedule_kind TEXT NOT NULL DEFAULT 'manual',
-    schedule_expression TEXT,
-    owner TEXT,
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_source_definitions_source_group CHECK (
-        source_group IN (
-            'security_identifier',
-            'registry',
-            'domain',
-            'website',
-            'github',
-            'ai_research',
-            'manual',
-            'other'
-        )
-    ),
-    CONSTRAINT chk_source_definitions_schedule_kind CHECK (
-        schedule_kind IN ('manual', 'interval', 'cron', 'event')
-    ),
-    CONSTRAINT chk_source_definitions_metadata_object CHECK (
-        jsonb_typeof(metadata) = 'object'
-    )
-);
+ALTER TABLE data_sources
+    ADD COLUMN IF NOT EXISTS source_group TEXT,
+    ADD COLUMN IF NOT EXISTS input_table_name TEXT,
+    ADD COLUMN IF NOT EXISTS pull_task_type TEXT,
+    ADD COLUMN IF NOT EXISTS processor_task_type TEXT,
+    ADD COLUMN IF NOT EXISTS last_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_source_marker_type TEXT,
+    ADD COLUMN IF NOT EXISTS last_source_marker TEXT,
+    ADD COLUMN IF NOT EXISTS last_source_modified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS last_error TEXT,
+    ADD COLUMN IF NOT EXISTS consecutive_failures INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE data_sources
+    ADD CONSTRAINT chk_data_sources_source_group
+        CHECK (
+            source_group IS NULL OR source_group IN (
+                'security_identifier',
+                'registry',
+                'domain',
+                'website',
+                'github',
+                'ai_research',
+                'manual',
+                'other'
+            )
+        ),
+    ADD CONSTRAINT chk_data_sources_marker_pair
+        CHECK (
+            (last_source_marker_type IS NULL AND last_source_marker IS NULL)
+            OR (last_source_marker_type IS NOT NULL AND last_source_marker IS NOT NULL)
+        ),
+    ADD CONSTRAINT chk_data_sources_failures
+        CHECK (consecutive_failures >= 0);
+```
+
+Existing columns remain in place:
+
+```text
+name
+source_type
+adapter_type
+country_id
+enabled
+crawl_interval_hours
+last_crawled_at
+last_cursor
+config
+display_name
+description
 ```
 
 Rules:
 
-- `source_name` is stable and used in logs, runs, and source links.
-- `input_table_name` points to the source-specific raw input table or to the primary table in a source-compatible schema.
+- `data_sources.name` stays the stable source name used in logs, runs, and UI.
+- Existing foreign keys to `data_sources.id` remain valid.
+- `source_group` is a broader grouping for new security and AI sources; existing `source_type` remains for registry semantics.
+- `input_table_name` points to the source-specific raw input table or the primary table in a source-compatible schema.
 - `pull_task_type` is the River task type used to pull the source.
 - `processor_task_type` is the River task type used to process pulled input when processing is a separate task.
-- `schedule_expression` is interpreted by the scheduler for `interval` or `cron` sources.
-- `metadata` can store source configuration that is safe to persist. Do not store secrets.
-
-### `source_sync_states`
-
-`source_sync_states` stores mutable pull state for each source.
-
-```sql
-CREATE TABLE source_sync_states (
-    source_name TEXT PRIMARY KEY REFERENCES source_definitions(source_name),
-    last_started_at TIMESTAMPTZ,
-    last_success_at TIMESTAMPTZ,
-    last_failed_at TIMESTAMPTZ,
-    last_source_marker_type TEXT,
-    last_source_marker TEXT,
-    last_source_modified_at TIMESTAMPTZ,
-    last_error TEXT,
-    consecutive_failures INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_source_sync_states_marker_pair CHECK (
-        (last_source_marker_type IS NULL AND last_source_marker IS NULL)
-        OR (last_source_marker_type IS NOT NULL AND last_source_marker IS NOT NULL)
-    ),
-    CONSTRAINT chk_source_sync_states_failures CHECK (
-        consecutive_failures >= 0
-    )
-);
-```
-
-Rules:
-
-- River task uniqueness prevents duplicate active pull jobs for the same source.
-- Pullers update `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
+- `config` remains the place for safe source-specific configuration and documentation metadata. Do not store secrets.
+- Existing `last_cursor` and `last_crawled_at` are legacy scheduler state. New pullers should write `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
 - The marker can be an ETag, checksum, feed version, last modified timestamp string, or another source-native version token.
 - Full-refresh sources can leave marker fields empty.
+- River task uniqueness prevents duplicate active pull jobs for the same source.
 - `last_error` must be safe for operators and must not include secrets.
+
+The first migration must backfill source metadata for existing rows. Minimum seed values:
+
+```sql
+UPDATE data_sources
+SET
+    source_group = CASE WHEN name = 'wikidata' THEN 'other' ELSE 'registry' END,
+    input_table_name = name || '_company_raw_inputs',
+    pull_task_type = 'source_crawl',
+    processor_task_type = NULL,
+    last_source_marker_type = CASE WHEN last_cursor IS NULL THEN NULL ELSE 'legacy_cursor' END,
+    last_source_marker = last_cursor
+WHERE name IN ('gleif', 'wikidata', 'opencorporates', 'companies_house', 'brreg', 'cvr', 'ariregister');
+
+INSERT INTO data_sources (
+    name,
+    source_type,
+    adapter_type,
+    enabled,
+    crawl_interval_hours,
+    source_group,
+    input_table_name,
+    pull_task_type,
+    processor_task_type,
+    config
+)
+VALUES
+    ('nvd_cpe', 'global_aggregator', 'api', false, 24, 'security_identifier', 'cpe_dictionary', 'nvd_cpe_sync', 'nvd_cpe_process', '{}'::jsonb),
+    ('nvd_cve', 'global_aggregator', 'api', false, 6, 'security_identifier', 'nvds', 'nvd_cve_sync', 'nvd_cve_process', '{}'::jsonb)
+ON CONFLICT (name) DO UPDATE SET
+    source_group = EXCLUDED.source_group,
+    input_table_name = EXCLUDED.input_table_name,
+    pull_task_type = EXCLUDED.pull_task_type,
+    processor_task_type = EXCLUDED.processor_task_type,
+    updated_at = now();
+```
 
 ### `source_pull_runs`
 
-`source_pull_runs` records each source pull attempt.
+Corpscout already has `source_pull_runs`. This design evolves that table instead of replacing it.
+
+Existing shape:
+
+```text
+id
+source_id
+river_job_id
+started_at
+completed_at
+status
+cursor_start
+cursor_end
+snapshot_date
+records_fetched
+records_upserted
+error_message
+created_at
+```
+
+Add only the fields needed for River task audit and optional source-specific metadata:
 
 ```sql
-CREATE TABLE source_pull_runs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
-    river_job_id BIGINT,
-    task_type TEXT NOT NULL,
-    trigger_type TEXT NOT NULL DEFAULT 'scheduled',
-    status TEXT NOT NULL DEFAULT 'running',
-    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    finished_at TIMESTAMPTZ,
-    rows_seen INTEGER NOT NULL DEFAULT 0,
-    rows_inserted INTEGER NOT NULL DEFAULT 0,
-    rows_updated INTEGER NOT NULL DEFAULT 0,
-    rows_unchanged INTEGER NOT NULL DEFAULT 0,
-    error_message TEXT,
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    CONSTRAINT chk_source_pull_runs_trigger_type CHECK (
-        trigger_type IN ('scheduled', 'manual', 'retry', 'backfill', 'event')
-    ),
-    CONSTRAINT chk_source_pull_runs_status CHECK (
-        status IN ('running', 'succeeded', 'failed', 'cancelled')
-    ),
-    CONSTRAINT chk_source_pull_runs_counts CHECK (
-        rows_seen >= 0
-        AND rows_inserted >= 0
-        AND rows_updated >= 0
-        AND rows_unchanged >= 0
-    ),
-    CONSTRAINT chk_source_pull_runs_metadata_object CHECK (
-        jsonb_typeof(metadata) = 'object'
-    )
-);
-
-CREATE INDEX idx_source_pull_runs_source_started
-    ON source_pull_runs(source_name, started_at DESC);
+ALTER TABLE source_pull_runs
+    ADD COLUMN IF NOT EXISTS task_type TEXT,
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD CONSTRAINT chk_source_pull_runs_metadata_object
+        CHECK (jsonb_typeof(metadata) = 'object');
 ```
 
 Rules:
 
 - Every pull attempt creates a run row.
+- `source_id` continues to reference `data_sources(id)`.
 - `river_job_id` links the audit row to the River job when available.
 - `task_type` records the River task type that performed the pull.
+- Keep existing `records_fetched` and `records_upserted` names to avoid breaking stats and UI queries.
+- Existing `cursor_start` and `cursor_end` can remain during migration for compatibility, but new source marker state belongs in `data_sources`.
 - Corpscout-owned raw input rows inserted by the pull should reference `source_pull_runs.id`.
-- Compatibility schemas that cannot add a pull-run foreign key should record counts and source artifact details on `source_pull_runs`.
+- Compatibility schemas that cannot add a pull-run foreign key should record counts and source artifact details on `source_pull_runs.metadata`.
 - A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
-- Pullers update `source_sync_states` only after a successful run.
+- Pullers update `data_sources` marker fields only after a successful run.
 
 ### `source_processor_states`
 
@@ -261,7 +282,7 @@ Rules:
 
 ```sql
 CREATE TABLE source_processor_states (
-    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    source_id UUID NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
     processor_task_type TEXT NOT NULL,
     last_started_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
@@ -273,7 +294,7 @@ CREATE TABLE source_processor_states (
     last_error TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (source_name, processor_task_type),
+    PRIMARY KEY (source_id, processor_task_type),
     CONSTRAINT chk_source_processor_states_marker_pair CHECK (
         (last_processed_marker_type IS NULL AND last_processed_marker IS NULL)
         OR (last_processed_marker_type IS NOT NULL AND last_processed_marker IS NOT NULL)
@@ -364,6 +385,15 @@ Mirror these final tables from the backoffice-v2 NVD/CPE schema:
 - `intel_cve_kev`, if KEV is loaded in Corpscout
 
 Use the backoffice-v2 NVD/CPE migrations and loader code as the implementation source of truth, starting from `database/migrations/000002_nvd_intel_schema.up.sql` and including later loader-owned NVD/CPE additions such as vulnerability-state indexes. If the shared loader requires a column, constraint, or index, Corpscout should carry the same definition.
+
+The NVD/CPE schema is large enough that the implementation plan must include a dedicated estimation and migration-splitting pass before writing SQL. Do not put the whole compatibility schema into one migration. Use separate migrations by logical group:
+
+- CVE/NVD core: `nvds`, descriptions, references, CWE, CVSS, config nodes, and config match criteria.
+- CPE core: `cpe_dictionary`, `cpe_match_criteria`, and `cpe_match_criteria_names`.
+- NVD/CPE lookup and state indexes, including vulnerability-state additions.
+- Optional enrichment feeds such as `intel_cve_kev`.
+
+Temporary staging tables should be documented in the loader code or migration comments, but they should not be created as permanent database tables.
 
 Mirror the loader staging contract for NVD bulk CVE imports:
 
@@ -540,6 +570,8 @@ Rules:
 - Existing company updates should use section-specific suggestion tables that point to `companies.id`.
 - `created_company_id` is set when the suggestion is approved and the company row is created.
 - Child suggestions can point to `company_suggestions.id` before the company exists.
+- `proposed_canonical_slug` is only a review hint. The approval service must generate the final `companies.canonical_slug` at approval time using the existing slug generation rules.
+- If the generated slug collides with an existing company, approval must retry with a deterministic suffix such as the first 12 UUID characters. Pending suggestions do not reserve slugs.
 
 ### Organization And Open-Source Project Root Suggestions
 
@@ -716,25 +748,208 @@ CREATE TABLE company_contact_suggestions (
 );
 ```
 
+### `company_location_suggestions`
+
+`company_location_suggestions` covers headquarters, registered office, branch, and other address changes.
+
+```sql
+CREATE TABLE company_location_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    location_kind TEXT NOT NULL,
+    country_code TEXT,
+    city TEXT,
+    current_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    proposed_payload JSONB NOT NULL,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_location_suggestions_target CHECK (
+        (company_id IS NOT NULL AND company_suggestion_id IS NULL)
+        OR (company_id IS NULL AND company_suggestion_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_company_location_suggestions_operation CHECK (
+        operation IN ('add', 'update', 'remove', 'replace')
+    ),
+    CONSTRAINT chk_company_location_suggestions_location_kind CHECK (
+        location_kind IN ('headquarters', 'registered', 'office', 'branch', 'other')
+    ),
+    CONSTRAINT chk_company_location_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_location_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_location_suggestions_current_object CHECK (
+        jsonb_typeof(current_payload) = 'object'
+    ),
+    CONSTRAINT chk_company_location_suggestions_proposed_object CHECK (
+        jsonb_typeof(proposed_payload) = 'object'
+    )
+);
+
+CREATE INDEX idx_company_location_suggestions_existing_target
+    ON company_location_suggestions(company_id, status)
+    WHERE company_id IS NOT NULL;
+
+CREATE INDEX idx_company_location_suggestions_new_target
+    ON company_location_suggestions(company_suggestion_id, status)
+    WHERE company_suggestion_id IS NOT NULL;
+```
+
+### `company_status_suggestions`
+
+`company_status_suggestions` covers lifecycle/status fields and registry identity fields that are scalar values rather than section lists.
+
+```sql
+CREATE TABLE company_status_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    status_field TEXT NOT NULL,
+    current_value TEXT,
+    proposed_value TEXT,
+    current_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    proposed_payload JSONB NOT NULL,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_status_suggestions_target CHECK (
+        (company_id IS NOT NULL AND company_suggestion_id IS NULL)
+        OR (company_id IS NULL AND company_suggestion_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_company_status_suggestions_operation CHECK (
+        operation IN ('add', 'update', 'remove', 'replace')
+    ),
+    CONSTRAINT chk_company_status_suggestions_status_field CHECK (
+        status_field IN (
+            'lifecycle_status',
+            'registration_status',
+            'legal_name',
+            'registration_number',
+            'lei',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_company_status_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_status_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_status_suggestions_current_object CHECK (
+        jsonb_typeof(current_payload) = 'object'
+    ),
+    CONSTRAINT chk_company_status_suggestions_proposed_object CHECK (
+        jsonb_typeof(proposed_payload) = 'object'
+    )
+);
+
+CREATE INDEX idx_company_status_suggestions_existing_target
+    ON company_status_suggestions(company_id, status, status_field)
+    WHERE company_id IS NOT NULL;
+
+CREATE INDEX idx_company_status_suggestions_new_target
+    ON company_status_suggestions(company_suggestion_id, status, status_field)
+    WHERE company_suggestion_id IS NOT NULL;
+```
+
+### `company_relationship_suggestions`
+
+`company_relationship_suggestions` covers parent, subsidiary, ownership, acquisition, and merger relationships.
+
+```sql
+CREATE TABLE company_relationship_suggestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    relationship_type TEXT NOT NULL,
+    related_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    related_company_suggestion_id UUID REFERENCES company_suggestions(id) ON DELETE SET NULL,
+    related_company_name TEXT,
+    related_lei TEXT,
+    current_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    proposed_payload JSONB NOT NULL,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    review_note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_company_relationship_suggestions_target CHECK (
+        (company_id IS NOT NULL AND company_suggestion_id IS NULL)
+        OR (company_id IS NULL AND company_suggestion_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_related_target CHECK (
+        NOT (
+            related_company_id IS NOT NULL
+            AND related_company_suggestion_id IS NOT NULL
+        )
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_operation CHECK (
+        operation IN ('add', 'update', 'remove', 'replace')
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_relationship_type CHECK (
+        relationship_type IN (
+            'direct_parent',
+            'ultimate_parent',
+            'subsidiary_of',
+            'owned_by',
+            'acquired_by',
+            'merged_into',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_status CHECK (
+        status IN ('pending', 'approved', 'rejected', 'superseded')
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_confidence CHECK (
+        confidence IS NULL OR confidence BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_current_object CHECK (
+        jsonb_typeof(current_payload) = 'object'
+    ),
+    CONSTRAINT chk_company_relationship_suggestions_proposed_object CHECK (
+        jsonb_typeof(proposed_payload) = 'object'
+    )
+);
+
+CREATE INDEX idx_company_relationship_suggestions_existing_target
+    ON company_relationship_suggestions(company_id, status, relationship_type)
+    WHERE company_id IS NOT NULL;
+
+CREATE INDEX idx_company_relationship_suggestions_new_target
+    ON company_relationship_suggestions(company_suggestion_id, status, relationship_type)
+    WHERE company_suggestion_id IS NOT NULL;
+```
+
 ### Additional Company Section Tables
 
 Use the same section-suggestion pattern for:
 
-- `company_location_suggestions`
 - `company_market_suggestions`
 - `company_service_suggestions`
 - `company_industry_suggestions`
 - `company_financial_suggestions`
-- `company_relationship_suggestions`
-- `company_status_suggestions`
 
 Each table should use typed columns for fields that are frequently filtered in the UI. Less frequently used structured data can remain in `proposed_payload`.
 
 Examples:
 
 - `company_financial_suggestions` should include `financial_kind`, `currency`, `period_year`, and `amount` when available.
-- `company_relationship_suggestions` should include relationship type and related company target when known.
-- `company_status_suggestions` should include the proposed company lifecycle/status field being changed.
 
 ### Organization Section Suggestions
 
@@ -774,7 +989,7 @@ CREATE TABLE suggestion_source_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     suggestion_table TEXT NOT NULL,
     suggestion_id UUID NOT NULL,
-    source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    source_id UUID NOT NULL REFERENCES data_sources(id),
     source_input_table TEXT NOT NULL,
     source_input_key TEXT NOT NULL,
     source_pull_run_id UUID REFERENCES source_pull_runs(id),
@@ -790,7 +1005,7 @@ CREATE INDEX idx_suggestion_source_links_suggestion
     ON suggestion_source_links(suggestion_table, suggestion_id);
 
 CREATE INDEX idx_suggestion_source_links_source
-    ON suggestion_source_links(source_name, source_input_table, source_input_key);
+    ON suggestion_source_links(source_id, source_input_table, source_input_key);
 ```
 
 This table is generic by design because it is not raw input data and it is not resolved profile data. It is only provenance glue between source-specific input tables and source-specific suggestion tables.
@@ -799,6 +1014,7 @@ Rules:
 
 - A suggestion can have multiple source links.
 - Multiple sources can support the same suggestion.
+- `source_id` references the existing `data_sources` row.
 - The service layer validates that `source_input_table` and `source_input_key` point to an existing source-specific input row.
 - `source_input_key` stores the source input primary key in text form. For UUID raw input tables this is the UUID string; for NVD/CPE compatibility tables this is the numeric primary key string; for composite source keys the processor must use a stable canonical key.
 - Do not copy full raw payloads into `evidence_excerpt`.
@@ -886,6 +1102,20 @@ Rejecting a suggestion:
 
 Rejected suggestions become durable negative evidence. Processors should check rejected suggestions before recreating similar pending suggestions.
 
+## HTTP API Boundary
+
+This document defines the database and service behavior for suggestions. The implementation plan must include a separate API design task before building the UI review workflow.
+
+Minimum route surface to design:
+
+- list pending review requests, grouped as new entity suggestions or existing entity section suggestions
+- fetch one review request with child suggestions and source evidence
+- approve or reject a root entity suggestion
+- approve or reject one section suggestion
+- approve selected child sections while approving a new root entity
+
+The existing domain review endpoints are not enough for the new suggestion model. They can be kept for backward compatibility, but new suggestion APIs should call service-layer approval methods rather than writing table-specific status updates directly in handlers.
+
 ## UI Review Model
 
 ### New Entity Review
@@ -896,7 +1126,8 @@ The UI should show a new company suggestion as one request:
 company_suggestions row
 -> company_domain_suggestions rows
 -> company_contact_suggestions rows
--> company_financial_suggestions rows
+-> company_location_suggestions rows
+-> company_status_suggestions rows
 -> company_relationship_suggestions rows
 -> other company section suggestions
 ```
@@ -945,11 +1176,11 @@ Examples:
 
 Scheduling rules:
 
-- Scheduler reads `source_definitions` and `source_sync_states`.
-- Scheduler enqueues a River task using `source_definitions.pull_task_type`.
+- Scheduler reads `data_sources`.
+- Scheduler enqueues a River task using `data_sources.pull_task_type`.
 - The River pull task creates a `source_pull_runs` row when it starts.
 - The pull task writes source-specific raw input rows or updates a source-compatible input schema.
-- The pull task updates `source_pull_runs` and, on success, `source_sync_states`.
+- The pull task updates `source_pull_runs` and, on success, `data_sources` marker fields.
 - Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor marker.
 - Processor workers create suggestions and source links.
 
@@ -960,7 +1191,7 @@ Pulling and processing can be separate tasks. They can also run in the same job 
 Pullers:
 
 - use River task claiming and River uniqueness for concurrency control
-- update `source_sync_states` marker fields only after successful pull completion
+- update `data_sources` marker fields only after successful pull completion
 - record failed runs without losing the previous successful source marker
 
 Processors:
@@ -1064,29 +1295,50 @@ Processor behavior:
 
 ## Migration Strategy
 
-1. Add `source_definitions`, `source_sync_states`, `source_processor_states`, and `source_pull_runs`.
-2. Add the backoffice-compatible NVD/CPE schema for CPE and CVE input, using the backoffice-v2 loader-owned migrations as the source of truth.
-3. Add the first Corpscout-owned source-specific raw input tables for non-CPE/CVE sources already being pulled.
-4. Add `suggestion_source_links`.
-5. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
-6. Add initial company section suggestion tables for domains, contacts, status, and relationships.
-7. Add initial organization and open-source project section suggestion tables only for sections needed by active processors.
-8. Wire CPE/CVE processors to the mirrored NVD/CPE tables and existing CPE/CVE suggestion/link tables.
-9. Add processors for each additional source one at a time.
-10. Add UI review screens grouped by root entity suggestions and section suggestions.
-11. Keep external consumer API work deferred to the phase-two CPE lookup design.
+1. Evolve existing `data_sources` and `source_pull_runs`; do not add `source_definitions` or `source_sync_states`.
+2. Backfill `data_sources` metadata for all currently seeded sources and insert disabled `nvd_cpe` / `nvd_cve` rows.
+3. Add `source_processor_states`.
+4. Add the first Corpscout-owned source-specific raw input tables for non-CPE/CVE sources already being pulled.
+5. Add `suggestion_source_links`.
+6. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
+7. Add initial company section suggestion tables for domains, contacts, locations, status, and relationships.
+8. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
+9. Add service-layer approval and rejection methods, including slug collision handling.
+10. Add an HTTP API design task for the suggestion review workflow before UI work starts.
+11. Add UI review screens grouped by root entity suggestions and section suggestions.
+12. Run a dedicated NVD/CPE schema estimation pass, then add the backoffice-compatible schema in multiple migrations by logical group.
+13. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
+14. Keep external consumer API work deferred to the phase-two CPE lookup design.
+
+First implementation scope:
+
+- source metadata migration on existing `data_sources`
+- `source_pull_runs` additive metadata migration
+- `source_processor_states`
+- `suggestion_source_links`
+- company root suggestions
+- company domain, contact, location, status, and relationship suggestions
+- one working non-CPE processor path for existing registry/GLEIF-style source data
+- service-layer approval/rejection for company root and initial company section suggestions
+
+Out of first implementation scope:
+
+- full NVD/CPE mirrored schema implementation
+- CPE/CVE processors
+- organization and open-source project section tables not emitted by the first processor
+- phase-two external lookup API
 
 ## Testing Plan
 
 Database tests:
 
-- source definitions enforce valid schedule and source groups
-- source definitions store River task types
-- sync state stores last successful source marker metadata
+- `data_sources` preserves existing source rows and stores River task types
+- `data_sources` stores last successful source marker metadata
 - processor state stores independent last processed marker metadata
 - pull runs track River job ID, task type, status, row counts, and errors
 - source-specific raw input tables dedupe by native ID and payload hash
 - source-specific raw input tables allow multiple versions of the same source-native entity
+- company root suggestion approval handles canonical slug collisions
 - mirrored NVD/CPE tables stay schema-compatible with the backoffice-v2 loader-owned schema
 - `suggestion_source_links.source_input_key` supports UUID, numeric, and canonical composite input keys
 - section suggestions require exactly one target: existing entity or root suggestion
@@ -1114,6 +1366,13 @@ Approval tests:
 - stale suggestions are superseded when current resolved data no longer matches the captured snapshot
 - rejecting suggestions does not mutate resolved data
 - approving duplicate pending suggestions is prevented by service-layer checks
+
+API tests:
+
+- review list endpoint returns grouped root and section suggestions
+- review detail endpoint includes child suggestions and source links
+- approve endpoint calls the service layer and records reviewer metadata
+- reject endpoint does not mutate resolved data
 
 UI tests:
 
