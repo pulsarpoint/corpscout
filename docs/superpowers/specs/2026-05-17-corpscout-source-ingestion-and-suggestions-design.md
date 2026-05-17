@@ -53,7 +53,7 @@ This design covers:
 
 - Do not design a generic raw input table for all sources.
 - Do not design a generic `identity_observations` table.
-- Do not write raw source data directly into resolved entity tables.
+- Do not write source-derived data directly into resolved entity/profile tables from pullers or processors.
 - Do not force all sources to use the same payload columns.
 - Do not force companies, organizations, and open-source projects to have identical suggestion sections.
 - Do not implement external consumer integrations in this phase.
@@ -99,7 +99,23 @@ Do not use shared tables for raw source payloads.
 
 Each source has one or more processors. A processor reads only its source-specific input table, interprets raw payloads, and creates suggestions.
 
-Processors should not directly mutate resolved entity tables. The default and expected path is to create suggestions and wait for review.
+Processors must not directly mutate resolved entity tables. The only allowed processor output is reviewable suggestions plus source links. Review approval services are the only application layer that may write to resolved company, organization, or open-source project tables.
+
+This applies to existing sources as well as new sources. Existing registry workers such as `SourceCrawlWorker` must be refactored away from direct upserts into `companies`, `company_locations`, `company_phones`, `company_emails`, `company_aliases`, `company_sources`, `company_domains`, and similar resolved tables. The new flow is:
+
+```text
+River pull task
+-> source-specific raw input table or compatibility schema
+-> processor
+-> root and section suggestions
+-> suggestion_source_links
+-> reviewer approval
+-> resolved entity writes
+```
+
+There is no permanent mixed mode where old sources write directly and only new sources use suggestions. A temporary migration bridge may exist inside a single implementation phase, but the completed phase must route all source-derived company/profile changes through suggestions.
+
+Approval services may still write to resolved tables after review. That is not considered source ingestion; it is the explicit reviewed mutation boundary.
 
 ### Suggestions Are Section-Specific
 
@@ -275,6 +291,41 @@ Rules:
 - Compatibility schemas that cannot add a pull-run foreign key should record counts and source artifact details on `source_pull_runs.metadata`.
 - A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
 - Pullers update `data_sources` marker fields only after a successful run.
+
+### Legacy Provenance Tables
+
+The current schema includes `company_sources` and `source_snapshots` from the direct-write ingestion model.
+
+`company_sources` currently stores resolved-company provenance:
+
+```text
+company_id
+source_id
+external_id
+pull_run_id
+raw_data
+fetched_at
+```
+
+`source_snapshots` currently stores bulk payload snapshots:
+
+```text
+source_id
+pull_run_id
+payload_hash
+payload
+fetched_at
+```
+
+New ingestion must not write either table.
+
+Rules:
+
+- `suggestion_source_links` replaces `company_sources` as the provenance mechanism for source-derived suggestions.
+- Source-specific raw input tables replace `source_snapshots` as the durable raw payload store.
+- Existing rows in `company_sources` and `source_snapshots` remain historical/read-only during the first migration.
+- The implementation plan must include a deprecation step for both tables: remove new writes, update readers that still depend on them, and decide in a later cleanup migration whether to archive or drop them.
+- Approval services should not recreate the old `company_sources` write path. Provenance for approved data should be traceable from approved suggestions through `suggestion_source_links`.
 
 ### `source_processor_states`
 
@@ -516,7 +567,21 @@ Each source processor has the same responsibilities:
 
 Processors must be idempotent. Reprocessing the same raw input row must not create duplicate pending suggestions.
 
-Processor output should be suggestions, not direct mutations.
+Processor output must be suggestions, not direct mutations.
+
+Forbidden processor writes:
+
+- `companies`
+- `company_locations`
+- `company_phones`
+- `company_emails`
+- `company_aliases`
+- `company_domains`
+- `company_sources`
+- organization resolved tables
+- open-source project resolved tables
+
+Processors may read resolved tables to compare current values and build `current_payload`, but they may not update those tables. The approval service owns all writes to resolved tables after a reviewer accepts a suggestion.
 
 ## Root Entity Suggestions
 
@@ -1179,12 +1244,12 @@ Scheduling rules:
 - Scheduler reads `data_sources`.
 - Scheduler enqueues a River task using `data_sources.pull_task_type`.
 - The River pull task creates a `source_pull_runs` row when it starts.
-- The pull task writes source-specific raw input rows or updates a source-compatible input schema.
+- The pull task writes source-specific raw input rows or updates a source-compatible input schema only.
 - The pull task updates `source_pull_runs` and, on success, `data_sources` marker fields.
 - Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor marker.
 - Processor workers create suggestions and source links.
 
-Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the boundary should remain clear in code.
+Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the write boundary must remain clear in code: source work stops at raw input and suggestions; reviewed approval applies resolved data changes.
 
 ## Concurrency And Retry Rules
 
@@ -1193,6 +1258,7 @@ Pullers:
 - use River task claiming and River uniqueness for concurrency control
 - update `data_sources` marker fields only after successful pull completion
 - record failed runs without losing the previous successful source marker
+- never write resolved company, organization, or open-source project tables
 
 Processors:
 
@@ -1203,12 +1269,14 @@ Processors:
 - for row-queue tables, mark row `processed`, `ignored`, or `failed`
 - for compatibility schemas, use River task claiming and `source_processor_states` markers
 - retry failed processor work only when attempts and backoff policy allow
+- never write resolved company, organization, or open-source project tables
 
 Approval:
 
 - locks suggestion rows before applying changes
 - checks that the suggestion is still pending
 - performs resolved table writes and suggestion status updates in one transaction
+- is the only path from source-derived data into resolved entity/profile tables
 
 ## Source Examples
 
@@ -1302,13 +1370,15 @@ Processor behavior:
 5. Add `suggestion_source_links`.
 6. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
 7. Add initial company section suggestion tables for domains, contacts, locations, status, and relationships.
-8. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
-9. Add service-layer approval and rejection methods, including slug collision handling.
-10. Add an HTTP API design task for the suggestion review workflow before UI work starts.
-11. Add UI review screens grouped by root entity suggestions and section suggestions.
-12. Run a dedicated NVD/CPE schema estimation pass, then add the backoffice-compatible schema in multiple migrations by logical group.
-13. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
-14. Keep external consumer API work deferred to the phase-two CPE lookup design.
+8. Stop new writes to `company_sources` and `source_snapshots`; keep existing rows as historical/read-only.
+9. Refactor existing registry/GLEIF source crawl behavior so it writes raw inputs and suggestions instead of resolved company/profile tables.
+10. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
+11. Add service-layer approval and rejection methods, including slug collision handling.
+12. Add an HTTP API design task for the suggestion review workflow before UI work starts.
+13. Add UI review screens grouped by root entity suggestions and section suggestions.
+14. Run a dedicated NVD/CPE schema estimation pass, then add the backoffice-compatible schema in multiple migrations by logical group.
+15. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
+16. Keep external consumer API work deferred to the phase-two CPE lookup design.
 
 First implementation scope:
 
@@ -1318,7 +1388,8 @@ First implementation scope:
 - `suggestion_source_links`
 - company root suggestions
 - company domain, contact, location, status, and relationship suggestions
-- one working non-CPE processor path for existing registry/GLEIF-style source data
+- refactor one existing non-CPE source path for registry/GLEIF-style source data to emit suggestions only
+- remove new writes to `company_sources` and `source_snapshots`
 - service-layer approval/rejection for company root and initial company section suggestions
 
 Out of first implementation scope:
@@ -1327,6 +1398,7 @@ Out of first implementation scope:
 - CPE/CVE processors
 - organization and open-source project section tables not emitted by the first processor
 - phase-two external lookup API
+- retaining direct source writes as a long-term compatibility mode
 
 ## Testing Plan
 
@@ -1351,6 +1423,7 @@ Processor tests:
 - pullers update source run metadata correctly
 - row-queue processors claim rows with processing leases when using Corpscout-owned raw input tables
 - CPE/CVE processors use `source_processor_states` instead of mutating mirrored NVD/CPE input tables
+- source processors do not write `companies`, company profile tables, `company_sources`, or `source_snapshots`
 - processors are idempotent on repeated raw input rows or repeated compatibility-table scans
 - processors create root suggestions when no resolved entity exists
 - processors create section suggestions when resolved entity values differ
@@ -1366,6 +1439,7 @@ Approval tests:
 - stale suggestions are superseded when current resolved data no longer matches the captured snapshot
 - rejecting suggestions does not mutate resolved data
 - approving duplicate pending suggestions is prevented by service-layer checks
+- approval service is the only path that mutates resolved company/profile tables from source-derived suggestions
 
 API tests:
 
@@ -1393,5 +1467,7 @@ UI tests:
 - Use `suggestion_source_links` for provenance instead of copying full source payloads into suggestion tables.
 - Use section-specific suggestion tables so approvals can be reviewed and applied independently.
 - Use root entity suggestions only for creating new companies, organizations, or open-source projects.
-- Existing entity updates should go directly to section suggestion tables.
+- Existing entity updates should be represented by section suggestion rows.
 - CPE/CVE suggestions are source-specific mapping suggestions, not the universal source model.
+- Source pullers and processors must never write resolved entity/profile tables directly.
+- Legacy `company_sources` and `source_snapshots` are historical compatibility tables for the old direct-write model; do not add new writes to them.
