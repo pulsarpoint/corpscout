@@ -87,8 +87,8 @@ Scheduling and last-pulled source markers are operational concerns. They can be 
 
 Use shared tables for:
 
-- `data_sources`, which already stores source definitions and source sync state
-- `source_pull_runs`, which already stores pull audit rows
+- `data_sources`, which stores source definitions and source sync state
+- `source_pull_runs`, which stores pull audit rows
 - `source_processor_states`, added by this design only for processors that need independent progress markers
 
 River owns task claiming and execution. Corpscout should not duplicate River's job locking with source-level lease columns. If a source must not have two active pull jobs, enqueue it with a River uniqueness rule based on the source name and task type.
@@ -140,143 +140,146 @@ A new entity suggestion is represented by a root suggestion row plus optional ch
 
 ### `data_sources`
 
-Corpscout already has `data_sources`. This design evolves that table instead of creating a parallel `source_definitions` table or a separate `source_sync_states` table.
+MVP uses a clean source registry. The table name can remain `data_sources`, but the implementation does not need to preserve the existing table shape, rows, direct-write worker behavior, or legacy scheduler compatibility. The migration should drop and recreate the old source-ingestion tables when that is simpler than transforming them safely.
 
 ```sql
-ALTER TABLE data_sources
-    ADD COLUMN IF NOT EXISTS source_group TEXT,
-    ADD COLUMN IF NOT EXISTS input_table_name TEXT,
-    ADD COLUMN IF NOT EXISTS pull_task_type TEXT,
-    ADD COLUMN IF NOT EXISTS processor_task_type TEXT,
-    ADD COLUMN IF NOT EXISTS last_started_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_source_marker_type TEXT,
-    ADD COLUMN IF NOT EXISTS last_source_marker TEXT,
-    ADD COLUMN IF NOT EXISTS last_source_modified_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_error TEXT,
-    ADD COLUMN IF NOT EXISTS consecutive_failures INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE data_sources
-    ADD CONSTRAINT chk_data_sources_source_group
-        CHECK (
-            source_group IS NULL OR source_group IN (
-                'security_identifier',
-                'registry',
-                'domain',
-                'website',
-                'github',
-                'ai_research',
-                'manual',
-                'other'
-            )
-        ),
-    ADD CONSTRAINT chk_data_sources_marker_pair
-        CHECK (
-            (last_source_marker_type IS NULL AND last_source_marker IS NULL)
-            OR (last_source_marker_type IS NOT NULL AND last_source_marker IS NOT NULL)
-        ),
-    ADD CONSTRAINT chk_data_sources_failures
-        CHECK (consecutive_failures >= 0);
-```
-
-Existing columns remain in place:
-
-```text
-name
-source_type
-adapter_type
-country_id
-enabled
-crawl_interval_hours
-last_crawled_at
-last_cursor
-config
-display_name
-description
+CREATE TABLE data_sources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    description TEXT,
+    source_group TEXT NOT NULL,
+    input_table_name TEXT NOT NULL,
+    pull_task_type TEXT NOT NULL,
+    processor_task_type TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    schedule_kind TEXT NOT NULL DEFAULT 'manual',
+    schedule_expression TEXT,
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    last_started_at TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    last_failed_at TIMESTAMPTZ,
+    last_source_marker_type TEXT,
+    last_source_marker TEXT,
+    last_source_modified_at TIMESTAMPTZ,
+    last_error TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_data_sources_source_group CHECK (
+        source_group IN (
+            'security_identifier',
+            'registry',
+            'domain',
+            'website',
+            'github',
+            'ai_research',
+            'manual',
+            'other'
+        )
+    ),
+    CONSTRAINT chk_data_sources_schedule_kind CHECK (
+        schedule_kind IN ('manual', 'interval', 'cron', 'event')
+    ),
+    CONSTRAINT chk_data_sources_marker_pair CHECK (
+        (last_source_marker_type IS NULL AND last_source_marker IS NULL)
+        OR (last_source_marker_type IS NOT NULL AND last_source_marker IS NOT NULL)
+    ),
+    CONSTRAINT chk_data_sources_failures CHECK (consecutive_failures >= 0),
+    CONSTRAINT chk_data_sources_config_object CHECK (
+        jsonb_typeof(config) = 'object'
+    )
+);
 ```
 
 Rules:
 
 - `data_sources.name` stays the stable source name used in logs, runs, and UI.
-- Existing foreign keys to `data_sources.id` remain valid.
-- `source_group` is a broader grouping for new security and AI sources; existing `source_type` remains for registry semantics.
 - `input_table_name` points to the source-specific raw input table or the primary table in a source-compatible schema.
 - `pull_task_type` is the River task type used to pull the source.
 - `processor_task_type` is the River task type used to process pulled input when processing is a separate task.
 - `config` remains the place for safe source-specific configuration and documentation metadata. Do not store secrets.
-- Existing `last_cursor` and `last_crawled_at` are legacy scheduler state. New pullers should write `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
+- Pullers should write `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
 - The marker can be an ETag, checksum, feed version, last modified timestamp string, or another source-native version token.
 - Full-refresh sources can leave marker fields empty.
 - River task uniqueness prevents duplicate active pull jobs for the same source.
 - `last_error` must be safe for operators and must not include secrets.
 
-The first migration must backfill source metadata for existing rows. Minimum seed values:
+Seed the MVP source registry explicitly. Existing source rows do not need to be preserved.
 
 ```sql
-UPDATE data_sources
-SET
-    source_group = CASE WHEN name = 'wikidata' THEN 'other' ELSE 'registry' END,
-    input_table_name = name || '_company_raw_inputs',
-    pull_task_type = 'source_crawl',
-    processor_task_type = NULL,
-    last_source_marker_type = CASE WHEN last_cursor IS NULL THEN NULL ELSE 'legacy_cursor' END,
-    last_source_marker = last_cursor
-WHERE name IN ('gleif', 'wikidata', 'opencorporates', 'companies_house', 'brreg', 'cvr', 'ariregister');
-
 INSERT INTO data_sources (
     name,
-    source_type,
-    adapter_type,
-    enabled,
-    crawl_interval_hours,
+    display_name,
     source_group,
     input_table_name,
     pull_task_type,
     processor_task_type,
+    enabled,
+    schedule_kind,
+    schedule_expression,
     config
 )
 VALUES
-    ('nvd_cpe', 'global_aggregator', 'api', false, 24, 'security_identifier', 'cpe_dictionary', 'nvd_cpe_sync', 'nvd_cpe_process', '{}'::jsonb),
-    ('nvd_cve', 'global_aggregator', 'api', false, 6, 'security_identifier', 'nvds', 'nvd_cve_sync', 'nvd_cve_process', '{}'::jsonb)
+    ('gleif', 'GLEIF', 'registry', 'gleif_company_raw_inputs', 'source_pull', 'source_process', true, 'interval', '24h', '{}'::jsonb),
+    ('companies_house', 'UK Companies House', 'registry', 'companies_house_company_raw_inputs', 'source_pull', 'source_process', true, 'interval', '24h', '{}'::jsonb),
+    ('brreg', 'Brreg', 'registry', 'brreg_company_raw_inputs', 'source_pull', 'source_process', true, 'interval', '24h', '{}'::jsonb),
+    ('ai_company_profile', 'AI Company Profile', 'ai_research', 'ai_company_profile_raw_inputs', 'ai_company_profile_pull', 'source_process', true, 'manual', NULL, '{}'::jsonb),
+    ('nvd_cpe', 'NVD CPE', 'security_identifier', 'cpe_dictionary', 'nvd_cpe_sync', 'nvd_cpe_process', false, 'interval', '24h', '{}'::jsonb),
+    ('nvd_cve', 'NVD CVE', 'security_identifier', 'nvds', 'nvd_cve_sync', 'nvd_cve_process', false, 'interval', '6h', '{}'::jsonb)
 ON CONFLICT (name) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
     source_group = EXCLUDED.source_group,
     input_table_name = EXCLUDED.input_table_name,
     pull_task_type = EXCLUDED.pull_task_type,
     processor_task_type = EXCLUDED.processor_task_type,
+    enabled = EXCLUDED.enabled,
+    schedule_kind = EXCLUDED.schedule_kind,
+    schedule_expression = EXCLUDED.schedule_expression,
+    config = EXCLUDED.config,
     updated_at = now();
 ```
 
 ### `source_pull_runs`
 
-Corpscout already has `source_pull_runs`. This design evolves that table instead of replacing it.
-
-Existing shape:
-
-```text
-id
-source_id
-river_job_id
-started_at
-completed_at
-status
-cursor_start
-cursor_end
-snapshot_date
-records_fetched
-records_upserted
-error_message
-created_at
-```
-
-Add only the fields needed for River task audit and optional source-specific metadata:
+MVP uses a clean pull-run audit table. It does not need to preserve the existing `source_pull_runs` column names or statuses.
 
 ```sql
-ALTER TABLE source_pull_runs
-    ADD COLUMN IF NOT EXISTS task_type TEXT,
-    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    ADD CONSTRAINT chk_source_pull_runs_metadata_object
-        CHECK (jsonb_typeof(metadata) = 'object');
+CREATE TABLE source_pull_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id UUID NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
+    river_job_id BIGINT,
+    task_type TEXT NOT NULL,
+    trigger_type TEXT NOT NULL DEFAULT 'scheduled',
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ,
+    rows_seen INTEGER NOT NULL DEFAULT 0,
+    raw_rows_inserted INTEGER NOT NULL DEFAULT 0,
+    raw_rows_updated INTEGER NOT NULL DEFAULT 0,
+    raw_rows_unchanged INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_source_pull_runs_trigger_type CHECK (
+        trigger_type IN ('scheduled', 'manual', 'retry', 'backfill', 'event')
+    ),
+    CONSTRAINT chk_source_pull_runs_status CHECK (
+        status IN ('running', 'succeeded', 'failed', 'cancelled')
+    ),
+    CONSTRAINT chk_source_pull_runs_counts CHECK (
+        rows_seen >= 0
+        AND raw_rows_inserted >= 0
+        AND raw_rows_updated >= 0
+        AND raw_rows_unchanged >= 0
+    ),
+    CONSTRAINT chk_source_pull_runs_metadata_object CHECK (
+        jsonb_typeof(metadata) = 'object'
+    )
+);
+
+CREATE INDEX idx_source_pull_runs_source_started
+    ON source_pull_runs(source_id, started_at DESC);
 ```
 
 Rules:
@@ -285,8 +288,6 @@ Rules:
 - `source_id` continues to reference `data_sources(id)`.
 - `river_job_id` links the audit row to the River job when available.
 - `task_type` records the River task type that performed the pull.
-- Keep existing `records_fetched` and `records_upserted` names to avoid breaking stats and UI queries.
-- Existing `cursor_start` and `cursor_end` can remain during migration for compatibility, but new source marker state belongs in `data_sources`.
 - Corpscout-owned raw input rows inserted by the pull should reference `source_pull_runs.id`.
 - Compatibility schemas that cannot add a pull-run foreign key should record counts and source artifact details on `source_pull_runs.metadata`.
 - A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
@@ -294,7 +295,7 @@ Rules:
 
 ### Legacy Provenance Tables
 
-The current schema includes `company_sources` and `source_snapshots` from the direct-write ingestion model.
+The current schema includes `company_sources` and `source_snapshots` from the old direct-write ingestion model. They are not part of the MVP target schema.
 
 `company_sources` currently stores resolved-company provenance:
 
@@ -317,14 +318,14 @@ payload
 fetched_at
 ```
 
-New ingestion must not write either table.
+MVP ingestion must not write either table.
 
 Rules:
 
 - `suggestion_source_links` replaces `company_sources` as the provenance mechanism for source-derived suggestions.
 - Source-specific raw input tables replace `source_snapshots` as the durable raw payload store.
-- Existing rows in `company_sources` and `source_snapshots` remain historical/read-only during the first migration.
-- The implementation plan must include a deprecation step for both tables: remove new writes, update readers that still depend on them, and decide in a later cleanup migration whether to archive or drop them.
+- The MVP migration should drop `company_sources` and `source_snapshots`.
+- Readers that depend on `company_sources` or `source_snapshots` must be removed or rewritten to use suggestions and `suggestion_source_links`.
 - Approval services should not recreate the old `company_sources` write path. Provenance for approved data should be traceable from approved suggestions through `suggestion_source_links`.
 
 ### `source_processor_states`
@@ -1079,7 +1080,7 @@ Rules:
 
 - A suggestion can have multiple source links.
 - Multiple sources can support the same suggestion.
-- `source_id` references the existing `data_sources` row.
+- `source_id` references the matching `data_sources` row.
 - The service layer validates that `source_input_table` and `source_input_key` point to an existing source-specific input row.
 - `source_input_key` stores the source input primary key in text form. For UUID raw input tables this is the UUID string; for NVD/CPE compatibility tables this is the numeric primary key string; for composite source keys the processor must use a stable canonical key.
 - Do not copy full raw payloads into `evidence_excerpt`.
@@ -1179,7 +1180,7 @@ Minimum route surface to design:
 - approve or reject one section suggestion
 - approve selected child sections while approving a new root entity
 
-The existing domain review endpoints are not enough for the new suggestion model. They can be kept for backward compatibility, but new suggestion APIs should call service-layer approval methods rather than writing table-specific status updates directly in handlers.
+The existing domain review endpoints are not enough for the new suggestion model. They should be removed or replaced by suggestion APIs that call service-layer approval methods rather than writing table-specific status updates directly in handlers.
 
 ## UI Review Model
 
@@ -1363,15 +1364,15 @@ Processor behavior:
 
 ## Migration Strategy
 
-1. Evolve existing `data_sources` and `source_pull_runs`; do not add `source_definitions` or `source_sync_states`.
-2. Backfill `data_sources` metadata for all currently seeded sources and insert disabled `nvd_cpe` / `nvd_cve` rows.
+1. Replace the old source-ingestion implementation with the MVP target schema; do not preserve direct-write compatibility.
+2. Create clean `data_sources` and `source_pull_runs` tables and seed MVP sources.
 3. Add `source_processor_states`.
 4. Add the first Corpscout-owned source-specific raw input tables for non-CPE/CVE sources already being pulled.
 5. Add `suggestion_source_links`.
 6. Add root suggestion tables: `company_suggestions`, `organization_suggestions`, and `open_source_project_suggestions`.
 7. Add initial company section suggestion tables for domains, contacts, locations, status, and relationships.
-8. Stop new writes to `company_sources` and `source_snapshots`; keep existing rows as historical/read-only.
-9. Refactor existing registry/GLEIF source crawl behavior so it writes raw inputs and suggestions instead of resolved company/profile tables.
+8. Drop old direct-ingestion tables such as `company_sources` and `source_snapshots`.
+9. Remove old direct-write source worker behavior and replace it with raw-input plus suggestion processors.
 10. Add initial organization and open-source project section suggestion tables only when the first active processor emits those suggestions.
 11. Add service-layer approval and rejection methods, including slug collision handling.
 12. Add an HTTP API design task for the suggestion review workflow before UI work starts.
@@ -1380,16 +1381,16 @@ Processor behavior:
 15. Wire CPE/CVE processors only after the mirrored NVD/CPE schema and loader compatibility tests are in place.
 16. Keep external consumer API work deferred to the phase-two CPE lookup design.
 
-First implementation scope:
+MVP implementation scope:
 
-- source metadata migration on existing `data_sources`
-- `source_pull_runs` additive metadata migration
+- clean source registry and pull-run schema
 - `source_processor_states`
 - `suggestion_source_links`
 - company root suggestions
 - company domain, contact, location, status, and relationship suggestions
-- refactor one existing non-CPE source path for registry/GLEIF-style source data to emit suggestions only
-- remove new writes to `company_sources` and `source_snapshots`
+- all active non-CPE source paths emit suggestions only
+- old direct-write source worker paths removed and replaced
+- `company_sources` and `source_snapshots` removed from active writes and active reads
 - service-layer approval/rejection for company root and initial company section suggestions
 
 Out of first implementation scope:
@@ -1398,16 +1399,17 @@ Out of first implementation scope:
 - CPE/CVE processors
 - organization and open-source project section tables not emitted by the first processor
 - phase-two external lookup API
-- retaining direct source writes as a long-term compatibility mode
+- preserving old source-ingestion behavior for compatibility
 
 ## Testing Plan
 
 Database tests:
 
-- `data_sources` preserves existing source rows and stores River task types
+- `data_sources` seed contains the MVP source registry and River task types
 - `data_sources` stores last successful source marker metadata
 - processor state stores independent last processed marker metadata
 - pull runs track River job ID, task type, status, row counts, and errors
+- old `company_sources` and `source_snapshots` are not part of the active MVP schema
 - source-specific raw input tables dedupe by native ID and payload hash
 - source-specific raw input tables allow multiple versions of the same source-native entity
 - company root suggestion approval handles canonical slug collisions
@@ -1470,4 +1472,4 @@ UI tests:
 - Existing entity updates should be represented by section suggestion rows.
 - CPE/CVE suggestions are source-specific mapping suggestions, not the universal source model.
 - Source pullers and processors must never write resolved entity/profile tables directly.
-- Legacy `company_sources` and `source_snapshots` are historical compatibility tables for the old direct-write model; do not add new writes to them.
+- Legacy `company_sources` and `source_snapshots` are not part of the active MVP schema; drop them.
