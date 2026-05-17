@@ -20,15 +20,6 @@ JOIN domains d ON d.id = cd.domain_id
 WHERE cd.company_id = $1
 ORDER BY cd.confidence DESC;
 
--- name: ListCandidatesForReview :many
-SELECT cd.*, c.name AS company_name, d.domain
-FROM company_domains cd
-JOIN companies c ON c.id = cd.company_id
-JOIN domains   d ON d.id = cd.domain_id
-WHERE cd.status = 'needs_review'
-ORDER BY cd.first_seen_at
-LIMIT $1 OFFSET $2;
-
 -- name: UpdateCompanyDomainStatus :exec
 UPDATE company_domains SET status = $2, relationship_type = $3 WHERE id = $1;
 

@@ -11,22 +11,22 @@ import (
 )
 
 type Querier interface {
-	CompletePullRun(ctx context.Context, arg CompletePullRunParams) error
-	CountCandidatesForReview(ctx context.Context) (int64, error)
+	ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendingBrregRawInputsParams) ([]BrregCompanyRawInput, error)
+	ClaimPendingCompaniesHouseRawInputs(ctx context.Context, arg ClaimPendingCompaniesHouseRawInputsParams) ([]CompaniesHouseCompanyRawInput, error)
+	ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendingGLEIFRawInputsParams) ([]GleifCompanyRawInput, error)
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
 	CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error)
 	CountOpenSourceProjects(ctx context.Context, q_ *string) (int64, error)
 	CountOrganizations(ctx context.Context, q_ *string) (int64, error)
 	CountPendingCPELinkSuggestions(ctx context.Context) (int64, error)
 	CountPendingCVELinkSuggestions(ctx context.Context) (int64, error)
-	CreateDomainReview(ctx context.Context, arg CreateDomainReviewParams) (CompanyDomainReview, error)
-	// Atomically records the review decision and updates the domain candidate status
-	// in a single statement so the audit trail can never diverge from the domain state.
-	CreateDomainReviewAndUpdateStatus(ctx context.Context, arg CreateDomainReviewAndUpdateStatusParams) (CompanyDomainReview, error)
+	CountPendingCompanySuggestions(ctx context.Context) (int64, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCompanyByLEI(ctx context.Context, lei *string) (Company, error)
+	GetCompanyByRegistrationAndCountry(ctx context.Context, arg GetCompanyByRegistrationAndCountryParams) (Company, error)
 	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
 	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
 	GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]CompanyIndustry, error)
@@ -34,8 +34,10 @@ type Querier interface {
 	GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]CompanyMarket, error)
 	GetCompanyPhones(ctx context.Context, companyID uuid.UUID) ([]CompanyPhone, error)
 	GetCompanyServices(ctx context.Context, companyID uuid.UUID) ([]CompanyService, error)
+	GetCompanySuggestionByID(ctx context.Context, id uuid.UUID) (CompanySuggestion, error)
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
+	GetCountryIDByISO2(ctx context.Context, isoAlpha2 string) (uuid.UUID, error)
 	GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (OpenSourceProject, error)
 	GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (OpenSourceProject, error)
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
@@ -46,16 +48,27 @@ type Querier interface {
 	InsertCPELinkSuggestion(ctx context.Context, arg InsertCPELinkSuggestionParams) (CpeEntityLinkSuggestion, error)
 	InsertCVEEntityLink(ctx context.Context, arg InsertCVEEntityLinkParams) (CveEntityLink, error)
 	InsertCVELinkSuggestion(ctx context.Context, arg InsertCVELinkSuggestionParams) (CveEntityLinkSuggestion, error)
+	InsertCompany(ctx context.Context, arg InsertCompanyParams) (Company, error)
+	InsertCompanyContactSuggestion(ctx context.Context, arg InsertCompanyContactSuggestionParams) (CompanyContactSuggestion, error)
+	// Company section suggestions
+	InsertCompanyDomainSuggestion(ctx context.Context, arg InsertCompanyDomainSuggestionParams) (CompanyDomainSuggestion, error)
+	InsertCompanyLocationSuggestion(ctx context.Context, arg InsertCompanyLocationSuggestionParams) (CompanyLocationSuggestion, error)
+	InsertCompanyRelationshipSuggestion(ctx context.Context, arg InsertCompanyRelationshipSuggestionParams) (CompanyRelationshipSuggestion, error)
+	InsertCompanyStatusSuggestion(ctx context.Context, arg InsertCompanyStatusSuggestionParams) (CompanyStatusSuggestion, error)
+	// Company root suggestions
+	InsertCompanySuggestion(ctx context.Context, arg InsertCompanySuggestionParams) (CompanySuggestion, error)
 	// database/queries/open_source_projects.sql
 	InsertOpenSourceProject(ctx context.Context, arg InsertOpenSourceProjectParams) (OpenSourceProject, error)
+	InsertOpenSourceProjectSuggestion(ctx context.Context, arg InsertOpenSourceProjectSuggestionParams) (OpenSourceProjectSuggestion, error)
 	// database/queries/organizations.sql
 	InsertOrganization(ctx context.Context, arg InsertOrganizationParams) (Organization, error)
-	InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error
+	// Organization and open-source project root suggestions
+	InsertOrganizationSuggestion(ctx context.Context, arg InsertOrganizationSuggestionParams) (OrganizationSuggestion, error)
+	// Provenance links
+	InsertSuggestionSourceLink(ctx context.Context, arg InsertSuggestionSourceLinkParams) (SuggestionSourceLink, error)
 	InterruptStalePullRuns(ctx context.Context) error
 	ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]CveEntityLink, error)
-	ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
-	ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error)
 	ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]CompanyRelationship, error)
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
@@ -64,25 +77,37 @@ type Querier interface {
 	ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error)
 	ListPendingCPELinkSuggestions(ctx context.Context, arg ListPendingCPELinkSuggestionsParams) ([]CpeEntityLinkSuggestion, error)
 	ListPendingCVELinkSuggestions(ctx context.Context, arg ListPendingCVELinkSuggestionsParams) ([]CveEntityLinkSuggestion, error)
+	ListPendingCompanySuggestions(ctx context.Context, arg ListPendingCompanySuggestionsParams) ([]CompanySuggestion, error)
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
-	ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]CompanyDomainReview, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
+	MarkBrregRawInputFailed(ctx context.Context, arg MarkBrregRawInputFailedParams) error
+	MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	MarkCompaniesHouseRawInputFailed(ctx context.Context, arg MarkCompaniesHouseRawInputFailedParams) error
+	MarkCompaniesHouseRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	MarkGLEIFRawInputFailed(ctx context.Context, arg MarkGLEIFRawInputFailedParams) error
+	MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error
 	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
 	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
-	UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error
 	UpdateCompanyRelationshipStatus(ctx context.Context, arg UpdateCompanyRelationshipStatusParams) error
 	UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error
+	UpdateCompanySuggestionApproved(ctx context.Context, arg UpdateCompanySuggestionApprovedParams) error
+	UpdateCompanySuggestionRejected(ctx context.Context, arg UpdateCompanySuggestionRejectedParams) error
 	UpdateOpenSourceProjectStatus(ctx context.Context, arg UpdateOpenSourceProjectStatusParams) error
 	UpdateOrganizationStatus(ctx context.Context, arg UpdateOrganizationStatusParams) error
-	UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error
+	UpdateSourceConfig(ctx context.Context, arg UpdateSourceConfigParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
-	UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error
-	UpsertCompanyAlias(ctx context.Context, arg UpsertCompanyAliasParams) error
-	UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEIParams) (Company, error)
-	UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompanyByRegNumberParams) (Company, error)
+	UpdateSourcePullFailed(ctx context.Context, arg UpdateSourcePullFailedParams) error
+	UpdateSourcePullStarted(ctx context.Context, name string) error
+	UpdateSourcePullSucceeded(ctx context.Context, arg UpdateSourcePullSucceededParams) error
+	UpdateSourceSchedule(ctx context.Context, arg UpdateSourceScheduleParams) error
+	// Brreg
+	UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInputParams) (BrregCompanyRawInput, error)
+	// Companies House
+	UpsertCompaniesHouseRawInput(ctx context.Context, arg UpsertCompaniesHouseRawInputParams) (CompaniesHouseCompanyRawInput, error)
 	UpsertCompanyDomain(ctx context.Context, arg UpsertCompanyDomainParams) (CompanyDomain, error)
 	// ── emails ────────────────────────────────────────────────────────────────────
 	UpsertCompanyEmail(ctx context.Context, arg UpsertCompanyEmailParams) (CompanyEmail, error)
@@ -97,9 +122,9 @@ type Querier interface {
 	UpsertCompanyRelationship(ctx context.Context, arg UpsertCompanyRelationshipParams) (CompanyRelationship, error)
 	// ── services ──────────────────────────────────────────────────────────────────
 	UpsertCompanyService(ctx context.Context, arg UpsertCompanyServiceParams) (CompanyService, error)
-	UpsertCompanySource(ctx context.Context, arg UpsertCompanySourceParams) error
-	UpsertDataSource(ctx context.Context, arg UpsertDataSourceParams) (DataSource, error)
 	UpsertDomain(ctx context.Context, domain string) (Domain, error)
+	// GLEIF
+	UpsertGLEIFCompanyRawInput(ctx context.Context, arg UpsertGLEIFCompanyRawInputParams) (GleifCompanyRawInput, error)
 }
 
 var _ Querier = (*Queries)(nil)

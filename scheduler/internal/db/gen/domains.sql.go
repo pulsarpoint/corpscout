@@ -32,69 +32,6 @@ func (q *Queries) CountDomains(ctx context.Context, arg CountDomainsParams) (int
 	return count, err
 }
 
-const listCandidatesForReview = `-- name: ListCandidatesForReview :many
-SELECT cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at, c.name AS company_name, d.domain
-FROM company_domains cd
-JOIN companies c ON c.id = cd.company_id
-JOIN domains   d ON d.id = cd.domain_id
-WHERE cd.status = 'needs_review'
-ORDER BY cd.first_seen_at
-LIMIT $1 OFFSET $2
-`
-
-type ListCandidatesForReviewParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-type ListCandidatesForReviewRow struct {
-	ID               uuid.UUID `json:"id"`
-	CompanyID        uuid.UUID `json:"company_id"`
-	DomainID         uuid.UUID `json:"domain_id"`
-	RelationshipType string    `json:"relationship_type"`
-	Status           string    `json:"status"`
-	Signal           string    `json:"signal"`
-	Confidence       int16     `json:"confidence"`
-	Evidence         []byte    `json:"evidence"`
-	FirstSeenAt      time.Time `json:"first_seen_at"`
-	LastSeenAt       time.Time `json:"last_seen_at"`
-	CompanyName      string    `json:"company_name"`
-	Domain           string    `json:"domain"`
-}
-
-func (q *Queries) ListCandidatesForReview(ctx context.Context, arg ListCandidatesForReviewParams) ([]ListCandidatesForReviewRow, error) {
-	rows, err := q.db.Query(ctx, listCandidatesForReview, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCandidatesForReviewRow
-	for rows.Next() {
-		var i ListCandidatesForReviewRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.CompanyID,
-			&i.DomainID,
-			&i.RelationshipType,
-			&i.Status,
-			&i.Signal,
-			&i.Confidence,
-			&i.Evidence,
-			&i.FirstSeenAt,
-			&i.LastSeenAt,
-			&i.CompanyName,
-			&i.Domain,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listDomains = `-- name: ListDomains :many
 SELECT d.domain, c.name AS company_name, cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at
 FROM company_domains cd

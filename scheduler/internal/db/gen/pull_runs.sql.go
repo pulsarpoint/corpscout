@@ -14,58 +14,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const completePullRun = `-- name: CompletePullRun :exec
-UPDATE source_pull_runs
-SET status = 'completed', completed_at = now(),
-    cursor_end = $2, records_fetched = $3, records_upserted = $4
-WHERE id = $1
-`
-
-type CompletePullRunParams struct {
-	ID              uuid.UUID `json:"id"`
-	CursorEnd       *string   `json:"cursor_end"`
-	RecordsFetched  int32     `json:"records_fetched"`
-	RecordsUpserted int32     `json:"records_upserted"`
-}
-
-func (q *Queries) CompletePullRun(ctx context.Context, arg CompletePullRunParams) error {
-	_, err := q.db.Exec(ctx, completePullRun,
-		arg.ID,
-		arg.CursorEnd,
-		arg.RecordsFetched,
-		arg.RecordsUpserted,
-	)
-	return err
-}
-
 const createPullRun = `-- name: CreatePullRun :one
-INSERT INTO source_pull_runs (source_id, river_job_id, started_at, cursor_start)
-VALUES ($1, $2, now(), $3)
-RETURNING id, source_id, river_job_id, started_at, completed_at, status, cursor_start, cursor_end, snapshot_date, records_fetched, records_upserted, error_message, created_at
+INSERT INTO source_pull_runs (source_id, river_job_id, task_type, trigger_type)
+VALUES (
+    (SELECT id FROM data_sources WHERE name = $1),
+    $2, $3, $4
+)
+RETURNING id, source_id, river_job_id, task_type, trigger_type, status, started_at, finished_at, rows_seen, raw_rows_inserted, raw_rows_updated, raw_rows_unchanged, error_message, metadata, created_at
 `
 
 type CreatePullRunParams struct {
-	SourceID    uuid.UUID `json:"source_id"`
-	RiverJobID  *int64    `json:"river_job_id"`
-	CursorStart *string   `json:"cursor_start"`
+	Name        string `json:"name"`
+	RiverJobID  *int64 `json:"river_job_id"`
+	TaskType    string `json:"task_type"`
+	TriggerType string `json:"trigger_type"`
 }
 
 func (q *Queries) CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error) {
-	row := q.db.QueryRow(ctx, createPullRun, arg.SourceID, arg.RiverJobID, arg.CursorStart)
+	row := q.db.QueryRow(ctx, createPullRun,
+		arg.Name,
+		arg.RiverJobID,
+		arg.TaskType,
+		arg.TriggerType,
+	)
 	var i SourcePullRun
 	err := row.Scan(
 		&i.ID,
 		&i.SourceID,
 		&i.RiverJobID,
-		&i.StartedAt,
-		&i.CompletedAt,
+		&i.TaskType,
+		&i.TriggerType,
 		&i.Status,
-		&i.CursorStart,
-		&i.CursorEnd,
-		&i.SnapshotDate,
-		&i.RecordsFetched,
-		&i.RecordsUpserted,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.RowsSeen,
+		&i.RawRowsInserted,
+		&i.RawRowsUpdated,
+		&i.RawRowsUnchanged,
 		&i.ErrorMessage,
+		&i.Metadata,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -73,7 +60,9 @@ func (q *Queries) CreatePullRun(ctx context.Context, arg CreatePullRunParams) (S
 
 const failPullRun = `-- name: FailPullRun :exec
 UPDATE source_pull_runs
-SET status = 'failed', completed_at = now(), error_message = $2
+SET status = 'failed',
+    finished_at = now(),
+    error_message = $2
 WHERE id = $1
 `
 
@@ -87,33 +76,8 @@ func (q *Queries) FailPullRun(ctx context.Context, arg FailPullRunParams) error 
 	return err
 }
 
-const insertSourceSnapshot = `-- name: InsertSourceSnapshot :exec
-INSERT INTO source_snapshots (source_id, pull_run_id, payload_hash, payload)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (source_id, payload_hash) DO NOTHING
-`
-
-type InsertSourceSnapshotParams struct {
-	SourceID    uuid.UUID       `json:"source_id"`
-	PullRunID   uuid.UUID       `json:"pull_run_id"`
-	PayloadHash string          `json:"payload_hash"`
-	Payload     json.RawMessage `json:"payload"`
-}
-
-func (q *Queries) InsertSourceSnapshot(ctx context.Context, arg InsertSourceSnapshotParams) error {
-	_, err := q.db.Exec(ctx, insertSourceSnapshot,
-		arg.SourceID,
-		arg.PullRunID,
-		arg.PayloadHash,
-		arg.Payload,
-	)
-	return err
-}
-
 const interruptStalePullRuns = `-- name: InterruptStalePullRuns :exec
-UPDATE source_pull_runs
-SET status = 'failed', completed_at = now(),
-    error_message = 'scheduler restarted while run was in progress'
+UPDATE source_pull_runs SET status = 'failed', error_message = 'interrupted on startup'
 WHERE status = 'running'
 `
 
@@ -123,39 +87,41 @@ func (q *Queries) InterruptStalePullRuns(ctx context.Context) error {
 }
 
 const listPullRuns = `-- name: ListPullRuns :many
-SELECT spr.id, spr.source_id, spr.river_job_id, spr.started_at, spr.completed_at, spr.status, spr.cursor_start, spr.cursor_end, spr.snapshot_date, spr.records_fetched, spr.records_upserted, spr.error_message, spr.created_at, ds.name AS source_name
-FROM source_pull_runs spr
-JOIN data_sources ds ON ds.id = spr.source_id
-WHERE ($1::text IS NULL OR ds.name = $1::text)
-ORDER BY spr.started_at DESC
+SELECT r.id, r.source_id, r.river_job_id, r.task_type, r.trigger_type, r.status, r.started_at, r.finished_at, r.rows_seen, r.raw_rows_inserted, r.raw_rows_updated, r.raw_rows_unchanged, r.error_message, r.metadata, r.created_at, d.name AS source_name
+FROM source_pull_runs r
+JOIN data_sources d ON d.id = r.source_id
+WHERE ($1::text IS NULL OR d.name = $1)
+ORDER BY r.started_at DESC
 LIMIT $3 OFFSET $2
 `
 
 type ListPullRunsParams struct {
-	SourceName *string `json:"source_name"`
-	Offset     int32   `json:"offset"`
-	Limit      int32   `json:"limit"`
+	Column1 string `json:"column_1"`
+	Offset  int32  `json:"offset"`
+	Limit   int32  `json:"limit"`
 }
 
 type ListPullRunsRow struct {
-	ID              uuid.UUID          `json:"id"`
-	SourceID        uuid.UUID          `json:"source_id"`
-	RiverJobID      *int64             `json:"river_job_id"`
-	StartedAt       time.Time          `json:"started_at"`
-	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
-	Status          string             `json:"status"`
-	CursorStart     *string            `json:"cursor_start"`
-	CursorEnd       *string            `json:"cursor_end"`
-	SnapshotDate    pgtype.Date        `json:"snapshot_date"`
-	RecordsFetched  int32              `json:"records_fetched"`
-	RecordsUpserted int32              `json:"records_upserted"`
-	ErrorMessage    *string            `json:"error_message"`
-	CreatedAt       time.Time          `json:"created_at"`
-	SourceName      string             `json:"source_name"`
+	ID               uuid.UUID          `json:"id"`
+	SourceID         uuid.UUID          `json:"source_id"`
+	RiverJobID       *int64             `json:"river_job_id"`
+	TaskType         string             `json:"task_type"`
+	TriggerType      string             `json:"trigger_type"`
+	Status           string             `json:"status"`
+	StartedAt        time.Time          `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	RowsSeen         int32              `json:"rows_seen"`
+	RawRowsInserted  int32              `json:"raw_rows_inserted"`
+	RawRowsUpdated   int32              `json:"raw_rows_updated"`
+	RawRowsUnchanged int32              `json:"raw_rows_unchanged"`
+	ErrorMessage     *string            `json:"error_message"`
+	Metadata         json.RawMessage    `json:"metadata"`
+	CreatedAt        time.Time          `json:"created_at"`
+	SourceName       string             `json:"source_name"`
 }
 
 func (q *Queries) ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error) {
-	rows, err := q.db.Query(ctx, listPullRuns, arg.SourceName, arg.Offset, arg.Limit)
+	rows, err := q.db.Query(ctx, listPullRuns, arg.Column1, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -167,15 +133,17 @@ func (q *Queries) ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]L
 			&i.ID,
 			&i.SourceID,
 			&i.RiverJobID,
-			&i.StartedAt,
-			&i.CompletedAt,
+			&i.TaskType,
+			&i.TriggerType,
 			&i.Status,
-			&i.CursorStart,
-			&i.CursorEnd,
-			&i.SnapshotDate,
-			&i.RecordsFetched,
-			&i.RecordsUpserted,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.RowsSeen,
+			&i.RawRowsInserted,
+			&i.RawRowsUpdated,
+			&i.RawRowsUnchanged,
 			&i.ErrorMessage,
+			&i.Metadata,
 			&i.CreatedAt,
 			&i.SourceName,
 		); err != nil {
@@ -187,4 +155,34 @@ func (q *Queries) ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const succeedPullRun = `-- name: SucceedPullRun :exec
+UPDATE source_pull_runs
+SET status = 'succeeded',
+    finished_at = now(),
+    rows_seen = $2,
+    raw_rows_inserted = $3,
+    raw_rows_updated = $4,
+    raw_rows_unchanged = $5
+WHERE id = $1
+`
+
+type SucceedPullRunParams struct {
+	ID               uuid.UUID `json:"id"`
+	RowsSeen         int32     `json:"rows_seen"`
+	RawRowsInserted  int32     `json:"raw_rows_inserted"`
+	RawRowsUpdated   int32     `json:"raw_rows_updated"`
+	RawRowsUnchanged int32     `json:"raw_rows_unchanged"`
+}
+
+func (q *Queries) SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error {
+	_, err := q.db.Exec(ctx, succeedPullRun,
+		arg.ID,
+		arg.RowsSeen,
+		arg.RawRowsInserted,
+		arg.RawRowsUpdated,
+		arg.RawRowsUnchanged,
+	)
+	return err
 }

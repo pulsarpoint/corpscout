@@ -7,7 +7,6 @@ package db
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,25 +17,16 @@ SELECT COUNT(*) FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
   AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
-  AND ($4::uuid IS NULL OR EXISTS (
-    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = $4
-  ))
 `
 
 type CountCompaniesParams struct {
 	Status    *string     `json:"status"`
 	CountryID pgtype.UUID `json:"country_id"`
 	Q         *string     `json:"q"`
-	SourceID  pgtype.UUID `json:"source_id"`
 }
 
 func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCompanies,
-		arg.Status,
-		arg.CountryID,
-		arg.Q,
-		arg.SourceID,
-	)
+	row := q.db.QueryRow(ctx, countCompanies, arg.Status, arg.CountryID, arg.Q)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -48,6 +38,85 @@ SELECT id, lei, name, country_id, registration_number, status, primary_source_id
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
 	row := q.db.QueryRow(ctx, getCompany, id)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+	)
+	return i, err
+}
+
+const getCompanyByLEI = `-- name: GetCompanyByLEI :one
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence FROM companies WHERE lei = $1
+`
+
+func (q *Queries) GetCompanyByLEI(ctx context.Context, lei *string) (Company, error) {
+	row := q.db.QueryRow(ctx, getCompanyByLEI, lei)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+	)
+	return i, err
+}
+
+const getCompanyByRegistrationAndCountry = `-- name: GetCompanyByRegistrationAndCountry :one
+SELECT c.id, c.lei, c.name, c.country_id, c.registration_number, c.status, c.primary_source_id, c.created_at, c.updated_at, c.short_name, c.short_description, c.description, c.website, c.founded_year, c.employee_estimate, c.revenue_estimate, c.ownership, c.parent_lei, c.ultimate_parent_lei, c.canonical_slug, c.display_name, c.resolution_status, c.evidence
+FROM companies c
+JOIN countries co ON co.id = c.country_id
+WHERE c.registration_number = $1
+  AND co.iso_alpha2 = $2
+`
+
+type GetCompanyByRegistrationAndCountryParams struct {
+	RegistrationNumber *string `json:"registration_number"`
+	IsoAlpha2          string  `json:"iso_alpha2"`
+}
+
+func (q *Queries) GetCompanyByRegistrationAndCountry(ctx context.Context, arg GetCompanyByRegistrationAndCountryParams) (Company, error) {
+	row := q.db.QueryRow(ctx, getCompanyByRegistrationAndCountry, arg.RegistrationNumber, arg.IsoAlpha2)
 	var i Company
 	err := row.Scan(
 		&i.ID,
@@ -112,23 +181,68 @@ func (q *Queries) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (C
 	return i, err
 }
 
+const insertCompany = `-- name: InsertCompany :one
+INSERT INTO companies (canonical_slug, name, country_id, status)
+VALUES ($1, $2, $3, coalesce($4, 'active'))
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence
+`
+
+type InsertCompanyParams struct {
+	CanonicalSlug string      `json:"canonical_slug"`
+	Name          string      `json:"name"`
+	CountryID     uuid.UUID   `json:"country_id"`
+	Column4       interface{} `json:"column_4"`
+}
+
+func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (Company, error) {
+	row := q.db.QueryRow(ctx, insertCompany,
+		arg.CanonicalSlug,
+		arg.Name,
+		arg.CountryID,
+		arg.Column4,
+	)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+	)
+	return i, err
+}
+
 const listCompanies = `-- name: ListCompanies :many
 SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
   AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
-  AND ($4::uuid IS NULL OR EXISTS (
-    SELECT 1 FROM company_sources cs WHERE cs.company_id = c.id AND cs.source_id = $4
-  ))
 ORDER BY name
-LIMIT $6 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type ListCompaniesParams struct {
 	Status    *string     `json:"status"`
 	CountryID pgtype.UUID `json:"country_id"`
 	Q         *string     `json:"q"`
-	SourceID  pgtype.UUID `json:"source_id"`
 	Offset    int32       `json:"offset"`
 	Limit     int32       `json:"limit"`
 }
@@ -138,7 +252,6 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 		arg.Status,
 		arg.CountryID,
 		arg.Q,
-		arg.SourceID,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -184,63 +297,6 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 	return items, nil
 }
 
-const listCompaniesForGLEIFEnrich = `-- name: ListCompaniesForGLEIFEnrich :many
-SELECT id, lei FROM companies
-WHERE lei IS NOT NULL
-  AND parent_lei IS NULL
-ORDER BY created_at
-LIMIT $1 OFFSET $2
-`
-
-type ListCompaniesForGLEIFEnrichParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-type ListCompaniesForGLEIFEnrichRow struct {
-	ID  uuid.UUID `json:"id"`
-	Lei *string   `json:"lei"`
-}
-
-func (q *Queries) ListCompaniesForGLEIFEnrich(ctx context.Context, arg ListCompaniesForGLEIFEnrichParams) ([]ListCompaniesForGLEIFEnrichRow, error) {
-	rows, err := q.db.Query(ctx, listCompaniesForGLEIFEnrich, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCompaniesForGLEIFEnrichRow
-	for rows.Next() {
-		var i ListCompaniesForGLEIFEnrichRow
-		if err := rows.Scan(&i.ID, &i.Lei); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateCompanyParentLEI = `-- name: UpdateCompanyParentLEI :exec
-UPDATE companies
-SET parent_lei          = $2,
-    ultimate_parent_lei = $3,
-    updated_at          = now()
-WHERE id = $1
-`
-
-type UpdateCompanyParentLEIParams struct {
-	ID                uuid.UUID `json:"id"`
-	ParentLei         *string   `json:"parent_lei"`
-	UltimateParentLei *string   `json:"ultimate_parent_lei"`
-}
-
-func (q *Queries) UpdateCompanyParentLEI(ctx context.Context, arg UpdateCompanyParentLEIParams) error {
-	_, err := q.db.Exec(ctx, updateCompanyParentLEI, arg.ID, arg.ParentLei, arg.UltimateParentLei)
-	return err
-}
-
 const updateCompanySlug = `-- name: UpdateCompanySlug :exec
 UPDATE companies
 SET canonical_slug = $2,
@@ -257,173 +313,5 @@ type UpdateCompanySlugParams struct {
 
 func (q *Queries) UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error {
 	_, err := q.db.Exec(ctx, updateCompanySlug, arg.ID, arg.CanonicalSlug, arg.DisplayName)
-	return err
-}
-
-const upsertCompanyAlias = `-- name: UpsertCompanyAlias :exec
-INSERT INTO company_aliases (company_id, alias, alias_type, source_id)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (company_id, alias, alias_type) DO NOTHING
-`
-
-type UpsertCompanyAliasParams struct {
-	CompanyID uuid.UUID   `json:"company_id"`
-	Alias     string      `json:"alias"`
-	AliasType string      `json:"alias_type"`
-	SourceID  pgtype.UUID `json:"source_id"`
-}
-
-func (q *Queries) UpsertCompanyAlias(ctx context.Context, arg UpsertCompanyAliasParams) error {
-	_, err := q.db.Exec(ctx, upsertCompanyAlias,
-		arg.CompanyID,
-		arg.Alias,
-		arg.AliasType,
-		arg.SourceID,
-	)
-	return err
-}
-
-const upsertCompanyByLEI = `-- name: UpsertCompanyByLEI :one
-INSERT INTO companies (lei, name, country_id, registration_number, status, primary_source_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (lei) DO UPDATE SET
-    name = EXCLUDED.name,
-    status = EXCLUDED.status,
-    updated_at = now()
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence
-`
-
-type UpsertCompanyByLEIParams struct {
-	Lei                *string     `json:"lei"`
-	Name               string      `json:"name"`
-	CountryID          uuid.UUID   `json:"country_id"`
-	RegistrationNumber *string     `json:"registration_number"`
-	Status             string      `json:"status"`
-	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
-}
-
-func (q *Queries) UpsertCompanyByLEI(ctx context.Context, arg UpsertCompanyByLEIParams) (Company, error) {
-	row := q.db.QueryRow(ctx, upsertCompanyByLEI,
-		arg.Lei,
-		arg.Name,
-		arg.CountryID,
-		arg.RegistrationNumber,
-		arg.Status,
-		arg.PrimarySourceID,
-	)
-	var i Company
-	err := row.Scan(
-		&i.ID,
-		&i.Lei,
-		&i.Name,
-		&i.CountryID,
-		&i.RegistrationNumber,
-		&i.Status,
-		&i.PrimarySourceID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ShortName,
-		&i.ShortDescription,
-		&i.Description,
-		&i.Website,
-		&i.FoundedYear,
-		&i.EmployeeEstimate,
-		&i.RevenueEstimate,
-		&i.Ownership,
-		&i.ParentLei,
-		&i.UltimateParentLei,
-		&i.CanonicalSlug,
-		&i.DisplayName,
-		&i.ResolutionStatus,
-		&i.Evidence,
-	)
-	return i, err
-}
-
-const upsertCompanyByRegNumber = `-- name: UpsertCompanyByRegNumber :one
-INSERT INTO companies (name, country_id, registration_number, status, primary_source_id)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (country_id, registration_number)
-    WHERE registration_number IS NOT NULL AND lei IS NULL
-DO UPDATE SET
-    name = EXCLUDED.name,
-    status = EXCLUDED.status,
-    updated_at = now()
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence
-`
-
-type UpsertCompanyByRegNumberParams struct {
-	Name               string      `json:"name"`
-	CountryID          uuid.UUID   `json:"country_id"`
-	RegistrationNumber *string     `json:"registration_number"`
-	Status             string      `json:"status"`
-	PrimarySourceID    pgtype.UUID `json:"primary_source_id"`
-}
-
-func (q *Queries) UpsertCompanyByRegNumber(ctx context.Context, arg UpsertCompanyByRegNumberParams) (Company, error) {
-	row := q.db.QueryRow(ctx, upsertCompanyByRegNumber,
-		arg.Name,
-		arg.CountryID,
-		arg.RegistrationNumber,
-		arg.Status,
-		arg.PrimarySourceID,
-	)
-	var i Company
-	err := row.Scan(
-		&i.ID,
-		&i.Lei,
-		&i.Name,
-		&i.CountryID,
-		&i.RegistrationNumber,
-		&i.Status,
-		&i.PrimarySourceID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ShortName,
-		&i.ShortDescription,
-		&i.Description,
-		&i.Website,
-		&i.FoundedYear,
-		&i.EmployeeEstimate,
-		&i.RevenueEstimate,
-		&i.Ownership,
-		&i.ParentLei,
-		&i.UltimateParentLei,
-		&i.CanonicalSlug,
-		&i.DisplayName,
-		&i.ResolutionStatus,
-		&i.Evidence,
-	)
-	return i, err
-}
-
-const upsertCompanySource = `-- name: UpsertCompanySource :exec
-INSERT INTO company_sources (company_id, source_id, external_id, pull_run_id, raw_data, fetched_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (company_id, source_id) DO UPDATE SET
-    external_id = EXCLUDED.external_id,
-    pull_run_id = EXCLUDED.pull_run_id,
-    raw_data    = EXCLUDED.raw_data,
-    fetched_at  = EXCLUDED.fetched_at
-`
-
-type UpsertCompanySourceParams struct {
-	CompanyID  uuid.UUID   `json:"company_id"`
-	SourceID   uuid.UUID   `json:"source_id"`
-	ExternalID string      `json:"external_id"`
-	PullRunID  pgtype.UUID `json:"pull_run_id"`
-	RawData    []byte      `json:"raw_data"`
-	FetchedAt  time.Time   `json:"fetched_at"`
-}
-
-func (q *Queries) UpsertCompanySource(ctx context.Context, arg UpsertCompanySourceParams) error {
-	_, err := q.db.Exec(ctx, upsertCompanySource,
-		arg.CompanyID,
-		arg.SourceID,
-		arg.ExternalID,
-		arg.PullRunID,
-		arg.RawData,
-		arg.FetchedAt,
-	)
 	return err
 }

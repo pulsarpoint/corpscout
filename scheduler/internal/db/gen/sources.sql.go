@@ -7,13 +7,13 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getSourceByName = `-- name: GetSourceByName :one
-SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description FROM data_sources WHERE name = $1
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at FROM data_sources WHERE name = $1
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource, error) {
@@ -22,24 +22,32 @@ func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource,
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.SourceType,
-		&i.AdapterType,
-		&i.CountryID,
-		&i.Enabled,
-		&i.CrawlIntervalHours,
-		&i.LastCrawledAt,
-		&i.LastCursor,
-		&i.Config,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.DisplayName,
 		&i.Description,
+		&i.SourceGroup,
+		&i.InputTableName,
+		&i.PullTaskType,
+		&i.ProcessorTaskType,
+		&i.Enabled,
+		&i.ScheduleKind,
+		&i.ScheduleExpression,
+		&i.Config,
+		&i.LastStartedAt,
+		&i.LastSuccessAt,
+		&i.LastFailedAt,
+		&i.LastSourceMarkerType,
+		&i.LastSourceMarker,
+		&i.LastSourceModifiedAt,
+		&i.LastError,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listSources = `-- name: ListSources :many
-SELECT id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description FROM data_sources ORDER BY name
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at FROM data_sources ORDER BY name
 `
 
 func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
@@ -54,18 +62,26 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.SourceType,
-			&i.AdapterType,
-			&i.CountryID,
-			&i.Enabled,
-			&i.CrawlIntervalHours,
-			&i.LastCrawledAt,
-			&i.LastCursor,
-			&i.Config,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 			&i.DisplayName,
 			&i.Description,
+			&i.SourceGroup,
+			&i.InputTableName,
+			&i.PullTaskType,
+			&i.ProcessorTaskType,
+			&i.Enabled,
+			&i.ScheduleKind,
+			&i.ScheduleExpression,
+			&i.Config,
+			&i.LastStartedAt,
+			&i.LastSuccessAt,
+			&i.LastFailedAt,
+			&i.LastSourceMarkerType,
+			&i.LastSourceMarker,
+			&i.LastSourceModifiedAt,
+			&i.LastError,
+			&i.ConsecutiveFailures,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -77,20 +93,17 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 	return items, nil
 }
 
-const updateSourceCursor = `-- name: UpdateSourceCursor :exec
-UPDATE data_sources
-SET last_cursor = $2, last_crawled_at = $3, updated_at = now()
-WHERE id = $1
+const updateSourceConfig = `-- name: UpdateSourceConfig :exec
+UPDATE data_sources SET config = $2, updated_at = now() WHERE name = $1
 `
 
-type UpdateSourceCursorParams struct {
-	ID            uuid.UUID          `json:"id"`
-	LastCursor    *string            `json:"last_cursor"`
-	LastCrawledAt pgtype.Timestamptz `json:"last_crawled_at"`
+type UpdateSourceConfigParams struct {
+	Name   string          `json:"name"`
+	Config json.RawMessage `json:"config"`
 }
 
-func (q *Queries) UpdateSourceCursor(ctx context.Context, arg UpdateSourceCursorParams) error {
-	_, err := q.db.Exec(ctx, updateSourceCursor, arg.ID, arg.LastCursor, arg.LastCrawledAt)
+func (q *Queries) UpdateSourceConfig(ctx context.Context, arg UpdateSourceConfigParams) error {
+	_, err := q.db.Exec(ctx, updateSourceConfig, arg.Name, arg.Config)
 	return err
 }
 
@@ -108,67 +121,76 @@ func (q *Queries) UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabl
 	return err
 }
 
-const updateSourceInterval = `-- name: UpdateSourceInterval :exec
-UPDATE data_sources SET crawl_interval_hours = $2, updated_at = now() WHERE name = $1
+const updateSourcePullFailed = `-- name: UpdateSourcePullFailed :exec
+UPDATE data_sources
+SET last_failed_at = now(),
+    consecutive_failures = consecutive_failures + 1,
+    last_error = $2,
+    updated_at = now()
+WHERE name = $1
 `
 
-type UpdateSourceIntervalParams struct {
-	Name               string `json:"name"`
-	CrawlIntervalHours int32  `json:"crawl_interval_hours"`
+type UpdateSourcePullFailedParams struct {
+	Name      string  `json:"name"`
+	LastError *string `json:"last_error"`
 }
 
-func (q *Queries) UpdateSourceInterval(ctx context.Context, arg UpdateSourceIntervalParams) error {
-	_, err := q.db.Exec(ctx, updateSourceInterval, arg.Name, arg.CrawlIntervalHours)
+func (q *Queries) UpdateSourcePullFailed(ctx context.Context, arg UpdateSourcePullFailedParams) error {
+	_, err := q.db.Exec(ctx, updateSourcePullFailed, arg.Name, arg.LastError)
 	return err
 }
 
-const upsertDataSource = `-- name: UpsertDataSource :one
-INSERT INTO data_sources (name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, config)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (name) DO UPDATE SET
-    enabled = EXCLUDED.enabled,
-    crawl_interval_hours = EXCLUDED.crawl_interval_hours,
-    config = EXCLUDED.config,
-    updated_at = now()
-RETURNING id, name, source_type, adapter_type, country_id, enabled, crawl_interval_hours, last_crawled_at, last_cursor, config, created_at, updated_at, display_name, description
+const updateSourcePullStarted = `-- name: UpdateSourcePullStarted :exec
+UPDATE data_sources SET last_started_at = now(), updated_at = now() WHERE name = $1
 `
 
-type UpsertDataSourceParams struct {
-	Name               string      `json:"name"`
-	SourceType         string      `json:"source_type"`
-	AdapterType        string      `json:"adapter_type"`
-	CountryID          pgtype.UUID `json:"country_id"`
-	Enabled            bool        `json:"enabled"`
-	CrawlIntervalHours int32       `json:"crawl_interval_hours"`
-	Config             []byte      `json:"config"`
+func (q *Queries) UpdateSourcePullStarted(ctx context.Context, name string) error {
+	_, err := q.db.Exec(ctx, updateSourcePullStarted, name)
+	return err
 }
 
-func (q *Queries) UpsertDataSource(ctx context.Context, arg UpsertDataSourceParams) (DataSource, error) {
-	row := q.db.QueryRow(ctx, upsertDataSource,
+const updateSourcePullSucceeded = `-- name: UpdateSourcePullSucceeded :exec
+UPDATE data_sources
+SET last_success_at = now(),
+    last_source_marker_type = $2,
+    last_source_marker = $3,
+    last_source_modified_at = $4,
+    consecutive_failures = 0,
+    last_error = NULL,
+    updated_at = now()
+WHERE name = $1
+`
+
+type UpdateSourcePullSucceededParams struct {
+	Name                 string             `json:"name"`
+	LastSourceMarkerType *string            `json:"last_source_marker_type"`
+	LastSourceMarker     *string            `json:"last_source_marker"`
+	LastSourceModifiedAt pgtype.Timestamptz `json:"last_source_modified_at"`
+}
+
+func (q *Queries) UpdateSourcePullSucceeded(ctx context.Context, arg UpdateSourcePullSucceededParams) error {
+	_, err := q.db.Exec(ctx, updateSourcePullSucceeded,
 		arg.Name,
-		arg.SourceType,
-		arg.AdapterType,
-		arg.CountryID,
-		arg.Enabled,
-		arg.CrawlIntervalHours,
-		arg.Config,
+		arg.LastSourceMarkerType,
+		arg.LastSourceMarker,
+		arg.LastSourceModifiedAt,
 	)
-	var i DataSource
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.SourceType,
-		&i.AdapterType,
-		&i.CountryID,
-		&i.Enabled,
-		&i.CrawlIntervalHours,
-		&i.LastCrawledAt,
-		&i.LastCursor,
-		&i.Config,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DisplayName,
-		&i.Description,
-	)
-	return i, err
+	return err
+}
+
+const updateSourceSchedule = `-- name: UpdateSourceSchedule :exec
+UPDATE data_sources
+SET schedule_kind = $2, schedule_expression = $3, updated_at = now()
+WHERE name = $1
+`
+
+type UpdateSourceScheduleParams struct {
+	Name               string  `json:"name"`
+	ScheduleKind       string  `json:"schedule_kind"`
+	ScheduleExpression *string `json:"schedule_expression"`
+}
+
+func (q *Queries) UpdateSourceSchedule(ctx context.Context, arg UpdateSourceScheduleParams) error {
+	_, err := q.db.Exec(ctx, updateSourceSchedule, arg.Name, arg.ScheduleKind, arg.ScheduleExpression)
+	return err
 }

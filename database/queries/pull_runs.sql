@@ -1,34 +1,36 @@
 -- name: CreatePullRun :one
-INSERT INTO source_pull_runs (source_id, river_job_id, started_at, cursor_start)
-VALUES ($1, $2, now(), $3)
+INSERT INTO source_pull_runs (source_id, river_job_id, task_type, trigger_type)
+VALUES (
+    (SELECT id FROM data_sources WHERE name = $1),
+    $2, $3, $4
+)
 RETURNING *;
 
--- name: CompletePullRun :exec
+-- name: SucceedPullRun :exec
 UPDATE source_pull_runs
-SET status = 'completed', completed_at = now(),
-    cursor_end = $2, records_fetched = $3, records_upserted = $4
+SET status = 'succeeded',
+    finished_at = now(),
+    rows_seen = $2,
+    raw_rows_inserted = $3,
+    raw_rows_updated = $4,
+    raw_rows_unchanged = $5
 WHERE id = $1;
 
 -- name: FailPullRun :exec
 UPDATE source_pull_runs
-SET status = 'failed', completed_at = now(), error_message = $2
+SET status = 'failed',
+    finished_at = now(),
+    error_message = $2
 WHERE id = $1;
 
--- name: InsertSourceSnapshot :exec
-INSERT INTO source_snapshots (source_id, pull_run_id, payload_hash, payload)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (source_id, payload_hash) DO NOTHING;
-
 -- name: InterruptStalePullRuns :exec
-UPDATE source_pull_runs
-SET status = 'failed', completed_at = now(),
-    error_message = 'scheduler restarted while run was in progress'
+UPDATE source_pull_runs SET status = 'failed', error_message = 'interrupted on startup'
 WHERE status = 'running';
 
 -- name: ListPullRuns :many
-SELECT spr.*, ds.name AS source_name
-FROM source_pull_runs spr
-JOIN data_sources ds ON ds.id = spr.source_id
-WHERE (sqlc.narg('source_name')::text IS NULL OR ds.name = sqlc.narg('source_name')::text)
-ORDER BY spr.started_at DESC
-LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+SELECT r.*, d.name AS source_name
+FROM source_pull_runs r
+JOIN data_sources d ON d.id = r.source_id
+WHERE ($1::text IS NULL OR d.name = $1)
+ORDER BY r.started_at DESC
+LIMIT $3 OFFSET $2;

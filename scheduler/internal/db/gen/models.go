@@ -12,6 +12,77 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AiCompanyProfileRawInput struct {
+	ID                   uuid.UUID          `json:"id"`
+	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
+	NormalizedWebsite    *string            `json:"normalized_website"`
+	NormalizedDomain     *string            `json:"normalized_domain"`
+	RequestedCompanyName *string            `json:"requested_company_name"`
+	ModelName            *string            `json:"model_name"`
+	PromptVersion        *string            `json:"prompt_version"`
+	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload           json.RawMessage    `json:"raw_payload"`
+	PayloadHash          string             `json:"payload_hash"`
+	FirstSeenAt          time.Time          `json:"first_seen_at"`
+	LastSeenAt           time.Time          `json:"last_seen_at"`
+	ProcessingStatus     string             `json:"processing_status"`
+	ProcessingAttempts   int32              `json:"processing_attempts"`
+	ProcessingError      *string            `json:"processing_error"`
+	ProcessingLeaseBy    *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type BrregCompanyRawInput struct {
+	ID                   uuid.UUID          `json:"id"`
+	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
+	SourceNativeID       string             `json:"source_native_id"`
+	OrganizationNumber   string             `json:"organization_number"`
+	OrganizationName     *string            `json:"organization_name"`
+	RegistrationStatus   *string            `json:"registration_status"`
+	Website              *string            `json:"website"`
+	CountryIso2          *string            `json:"country_iso2"`
+	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload           json.RawMessage    `json:"raw_payload"`
+	PayloadHash          string             `json:"payload_hash"`
+	FirstSeenAt          time.Time          `json:"first_seen_at"`
+	LastSeenAt           time.Time          `json:"last_seen_at"`
+	ProcessingStatus     string             `json:"processing_status"`
+	ProcessingAttempts   int32              `json:"processing_attempts"`
+	ProcessingError      *string            `json:"processing_error"`
+	ProcessingLeaseBy    *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type CompaniesHouseCompanyRawInput struct {
+	ID                   uuid.UUID          `json:"id"`
+	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
+	SourceNativeID       string             `json:"source_native_id"`
+	CompanyNumber        string             `json:"company_number"`
+	CompanyName          *string            `json:"company_name"`
+	CompanyStatus        *string            `json:"company_status"`
+	CompanyType          *string            `json:"company_type"`
+	CountryIso2          *string            `json:"country_iso2"`
+	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload           json.RawMessage    `json:"raw_payload"`
+	PayloadHash          string             `json:"payload_hash"`
+	FirstSeenAt          time.Time          `json:"first_seen_at"`
+	LastSeenAt           time.Time          `json:"last_seen_at"`
+	ProcessingStatus     string             `json:"processing_status"`
+	ProcessingAttempts   int32              `json:"processing_attempts"`
+	ProcessingError      *string            `json:"processing_error"`
+	ProcessingLeaseBy    *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
 type Company struct {
 	ID                 uuid.UUID       `json:"id"`
 	Lei                *string         `json:"lei"`
@@ -47,6 +118,23 @@ type CompanyAlias struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
+type CompanyContactSuggestion struct {
+	ID                  uuid.UUID          `json:"id"`
+	CompanyID           pgtype.UUID        `json:"company_id"`
+	CompanySuggestionID pgtype.UUID        `json:"company_suggestion_id"`
+	Operation           string             `json:"operation"`
+	ContactKind         string             `json:"contact_kind"`
+	CurrentPayload      json.RawMessage    `json:"current_payload"`
+	ProposedPayload     json.RawMessage    `json:"proposed_payload"`
+	Confidence          *float32           `json:"confidence"`
+	Status              string             `json:"status"`
+	ReviewedBy          *string            `json:"reviewed_by"`
+	ReviewedAt          pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote          *string            `json:"review_note"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
 type CompanyDomain struct {
 	ID               uuid.UUID `json:"id"`
 	CompanyID        uuid.UUID `json:"company_id"`
@@ -60,13 +148,21 @@ type CompanyDomain struct {
 	LastSeenAt       time.Time `json:"last_seen_at"`
 }
 
-type CompanyDomainReview struct {
-	ID              uuid.UUID `json:"id"`
-	CompanyDomainID uuid.UUID `json:"company_domain_id"`
-	Action          string    `json:"action"`
-	ReviewedBy      string    `json:"reviewed_by"`
-	ReviewNote      *string   `json:"review_note"`
-	CreatedAt       time.Time `json:"created_at"`
+type CompanyDomainSuggestion struct {
+	ID                  uuid.UUID          `json:"id"`
+	CompanyID           pgtype.UUID        `json:"company_id"`
+	CompanySuggestionID pgtype.UUID        `json:"company_suggestion_id"`
+	Operation           string             `json:"operation"`
+	Domain              string             `json:"domain"`
+	CurrentPayload      json.RawMessage    `json:"current_payload"`
+	ProposedPayload     json.RawMessage    `json:"proposed_payload"`
+	Confidence          *float32           `json:"confidence"`
+	Status              string             `json:"status"`
+	ReviewedBy          *string            `json:"reviewed_by"`
+	ReviewedAt          pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote          *string            `json:"review_note"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
 type CompanyEmail struct {
@@ -118,6 +214,25 @@ type CompanyLocation struct {
 	UpdatedAt    time.Time          `json:"updated_at"`
 }
 
+type CompanyLocationSuggestion struct {
+	ID                  uuid.UUID          `json:"id"`
+	CompanyID           pgtype.UUID        `json:"company_id"`
+	CompanySuggestionID pgtype.UUID        `json:"company_suggestion_id"`
+	Operation           string             `json:"operation"`
+	LocationKind        string             `json:"location_kind"`
+	CountryCode         *string            `json:"country_code"`
+	City                *string            `json:"city"`
+	CurrentPayload      json.RawMessage    `json:"current_payload"`
+	ProposedPayload     json.RawMessage    `json:"proposed_payload"`
+	Confidence          *float32           `json:"confidence"`
+	Status              string             `json:"status"`
+	ReviewedBy          *string            `json:"reviewed_by"`
+	ReviewedAt          pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote          *string            `json:"review_note"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
 type CompanyMarket struct {
 	ID         uuid.UUID       `json:"id"`
 	CompanyID  uuid.UUID       `json:"company_id"`
@@ -160,6 +275,27 @@ type CompanyRelationship struct {
 	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
+type CompanyRelationshipSuggestion struct {
+	ID                         uuid.UUID          `json:"id"`
+	CompanyID                  pgtype.UUID        `json:"company_id"`
+	CompanySuggestionID        pgtype.UUID        `json:"company_suggestion_id"`
+	Operation                  string             `json:"operation"`
+	RelationshipType           string             `json:"relationship_type"`
+	RelatedCompanyID           pgtype.UUID        `json:"related_company_id"`
+	RelatedCompanySuggestionID pgtype.UUID        `json:"related_company_suggestion_id"`
+	RelatedCompanyName         *string            `json:"related_company_name"`
+	RelatedLei                 *string            `json:"related_lei"`
+	CurrentPayload             json.RawMessage    `json:"current_payload"`
+	ProposedPayload            json.RawMessage    `json:"proposed_payload"`
+	Confidence                 *float32           `json:"confidence"`
+	Status                     string             `json:"status"`
+	ReviewedBy                 *string            `json:"reviewed_by"`
+	ReviewedAt                 pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote                 *string            `json:"review_note"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+}
+
 type CompanyService struct {
 	ID          uuid.UUID       `json:"id"`
 	CompanyID   uuid.UUID       `json:"company_id"`
@@ -171,13 +307,41 @@ type CompanyService struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
-type CompanySource struct {
-	CompanyID  uuid.UUID   `json:"company_id"`
-	SourceID   uuid.UUID   `json:"source_id"`
-	ExternalID string      `json:"external_id"`
-	PullRunID  pgtype.UUID `json:"pull_run_id"`
-	RawData    []byte      `json:"raw_data"`
-	FetchedAt  time.Time   `json:"fetched_at"`
+type CompanyStatusSuggestion struct {
+	ID                  uuid.UUID          `json:"id"`
+	CompanyID           pgtype.UUID        `json:"company_id"`
+	CompanySuggestionID pgtype.UUID        `json:"company_suggestion_id"`
+	Operation           string             `json:"operation"`
+	StatusField         string             `json:"status_field"`
+	CurrentValue        *string            `json:"current_value"`
+	ProposedValue       *string            `json:"proposed_value"`
+	CurrentPayload      json.RawMessage    `json:"current_payload"`
+	ProposedPayload     json.RawMessage    `json:"proposed_payload"`
+	Confidence          *float32           `json:"confidence"`
+	Status              string             `json:"status"`
+	ReviewedBy          *string            `json:"reviewed_by"`
+	ReviewedAt          pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote          *string            `json:"review_note"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+}
+
+type CompanySuggestion struct {
+	ID                    uuid.UUID          `json:"id"`
+	ProposedDisplayName   string             `json:"proposed_display_name"`
+	ProposedLegalName     *string            `json:"proposed_legal_name"`
+	ProposedWebsite       *string            `json:"proposed_website"`
+	ProposedCanonicalSlug *string            `json:"proposed_canonical_slug"`
+	ProposedCountryID     pgtype.UUID        `json:"proposed_country_id"`
+	ProposedProfile       json.RawMessage    `json:"proposed_profile"`
+	Confidence            *float32           `json:"confidence"`
+	Status                string             `json:"status"`
+	CreatedCompanyID      pgtype.UUID        `json:"created_company_id"`
+	ReviewedBy            *string            `json:"reviewed_by"`
+	ReviewedAt            pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote            *string            `json:"review_note"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
 }
 
 type Country struct {
@@ -255,20 +419,28 @@ type CveEntityLinkSuggestion struct {
 }
 
 type DataSource struct {
-	ID                 uuid.UUID          `json:"id"`
-	Name               string             `json:"name"`
-	SourceType         string             `json:"source_type"`
-	AdapterType        string             `json:"adapter_type"`
-	CountryID          pgtype.UUID        `json:"country_id"`
-	Enabled            bool               `json:"enabled"`
-	CrawlIntervalHours int32              `json:"crawl_interval_hours"`
-	LastCrawledAt      pgtype.Timestamptz `json:"last_crawled_at"`
-	LastCursor         *string            `json:"last_cursor"`
-	Config             []byte             `json:"config"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-	DisplayName        string             `json:"display_name"`
-	Description        string             `json:"description"`
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	DisplayName          *string            `json:"display_name"`
+	Description          *string            `json:"description"`
+	SourceGroup          string             `json:"source_group"`
+	InputTableName       string             `json:"input_table_name"`
+	PullTaskType         string             `json:"pull_task_type"`
+	ProcessorTaskType    *string            `json:"processor_task_type"`
+	Enabled              bool               `json:"enabled"`
+	ScheduleKind         string             `json:"schedule_kind"`
+	ScheduleExpression   *string            `json:"schedule_expression"`
+	Config               json.RawMessage    `json:"config"`
+	LastStartedAt        pgtype.Timestamptz `json:"last_started_at"`
+	LastSuccessAt        pgtype.Timestamptz `json:"last_success_at"`
+	LastFailedAt         pgtype.Timestamptz `json:"last_failed_at"`
+	LastSourceMarkerType *string            `json:"last_source_marker_type"`
+	LastSourceMarker     *string            `json:"last_source_marker"`
+	LastSourceModifiedAt pgtype.Timestamptz `json:"last_source_modified_at"`
+	LastError            *string            `json:"last_error"`
+	ConsecutiveFailures  int32              `json:"consecutive_failures"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
 type Domain struct {
@@ -276,6 +448,52 @@ type Domain struct {
 	Domain         string             `json:"domain"`
 	FirstSeenAt    time.Time          `json:"first_seen_at"`
 	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
+}
+
+type DomainDiscoveryRawInput struct {
+	ID                   uuid.UUID          `json:"id"`
+	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
+	Domain               string             `json:"domain"`
+	Signal               *string            `json:"signal"`
+	Confidence           *float32           `json:"confidence"`
+	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload           json.RawMessage    `json:"raw_payload"`
+	PayloadHash          string             `json:"payload_hash"`
+	FirstSeenAt          time.Time          `json:"first_seen_at"`
+	LastSeenAt           time.Time          `json:"last_seen_at"`
+	ProcessingStatus     string             `json:"processing_status"`
+	ProcessingAttempts   int32              `json:"processing_attempts"`
+	ProcessingError      *string            `json:"processing_error"`
+	ProcessingLeaseBy    *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type GleifCompanyRawInput struct {
+	ID                      uuid.UUID          `json:"id"`
+	SourcePullRunID         uuid.UUID          `json:"source_pull_run_id"`
+	SourceNativeID          string             `json:"source_native_id"`
+	Lei                     string             `json:"lei"`
+	LegalName               *string            `json:"legal_name"`
+	RegistrationStatus      *string            `json:"registration_status"`
+	HeadquartersCountryCode *string            `json:"headquarters_country_code"`
+	ParentLei               *string            `json:"parent_lei"`
+	UltimateParentLei       *string            `json:"ultimate_parent_lei"`
+	SourceUpdatedAt         pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload              json.RawMessage    `json:"raw_payload"`
+	PayloadHash             string             `json:"payload_hash"`
+	FirstSeenAt             time.Time          `json:"first_seen_at"`
+	LastSeenAt              time.Time          `json:"last_seen_at"`
+	ProcessingStatus        string             `json:"processing_status"`
+	ProcessingAttempts      int32              `json:"processing_attempts"`
+	ProcessingError         *string            `json:"processing_error"`
+	ProcessingLeaseBy       *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil    pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt             pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
 }
 
 type OpenSourceProject struct {
@@ -295,6 +513,25 @@ type OpenSourceProject struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
+type OpenSourceProjectSuggestion struct {
+	ID                         uuid.UUID          `json:"id"`
+	ProposedDisplayName        string             `json:"proposed_display_name"`
+	ProposedRepositoryUrl      *string            `json:"proposed_repository_url"`
+	ProposedWebsite            *string            `json:"proposed_website"`
+	ProposedLicense            *string            `json:"proposed_license"`
+	ProposedLifecycleStatus    *string            `json:"proposed_lifecycle_status"`
+	ProposedCanonicalSlug      *string            `json:"proposed_canonical_slug"`
+	ProposedProfile            json.RawMessage    `json:"proposed_profile"`
+	Confidence                 *float32           `json:"confidence"`
+	Status                     string             `json:"status"`
+	CreatedOpenSourceProjectID pgtype.UUID        `json:"created_open_source_project_id"`
+	ReviewedBy                 *string            `json:"reviewed_by"`
+	ReviewedAt                 pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote                 *string            `json:"review_note"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+}
+
 type Organization struct {
 	ID               uuid.UUID       `json:"id"`
 	CanonicalSlug    string          `json:"canonical_slug"`
@@ -312,57 +549,83 @@ type Organization struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
-type SourcePullRun struct {
-	ID              uuid.UUID          `json:"id"`
-	SourceID        uuid.UUID          `json:"source_id"`
-	RiverJobID      *int64             `json:"river_job_id"`
-	StartedAt       time.Time          `json:"started_at"`
-	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
-	Status          string             `json:"status"`
-	CursorStart     *string            `json:"cursor_start"`
-	CursorEnd       *string            `json:"cursor_end"`
-	SnapshotDate    pgtype.Date        `json:"snapshot_date"`
-	RecordsFetched  int32              `json:"records_fetched"`
-	RecordsUpserted int32              `json:"records_upserted"`
-	ErrorMessage    *string            `json:"error_message"`
-	CreatedAt       time.Time          `json:"created_at"`
+type OrganizationSuggestion struct {
+	ID                       uuid.UUID          `json:"id"`
+	ProposedDisplayName      string             `json:"proposed_display_name"`
+	ProposedOrganizationType string             `json:"proposed_organization_type"`
+	ProposedWebsite          *string            `json:"proposed_website"`
+	ProposedCanonicalSlug    *string            `json:"proposed_canonical_slug"`
+	ProposedProfile          json.RawMessage    `json:"proposed_profile"`
+	Confidence               *float32           `json:"confidence"`
+	Status                   string             `json:"status"`
+	CreatedOrganizationID    pgtype.UUID        `json:"created_organization_id"`
+	ReviewedBy               *string            `json:"reviewed_by"`
+	ReviewedAt               pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote               *string            `json:"review_note"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
 }
 
-type SourceSnapshot struct {
-	ID          uuid.UUID       `json:"id"`
-	SourceID    uuid.UUID       `json:"source_id"`
-	PullRunID   uuid.UUID       `json:"pull_run_id"`
-	PayloadHash string          `json:"payload_hash"`
-	Payload     json.RawMessage `json:"payload"`
-	FetchedAt   time.Time       `json:"fetched_at"`
+type SourceProcessorState struct {
+	SourceID                uuid.UUID          `json:"source_id"`
+	ProcessorTaskType       string             `json:"processor_task_type"`
+	LastStartedAt           pgtype.Timestamptz `json:"last_started_at"`
+	LastSuccessAt           pgtype.Timestamptz `json:"last_success_at"`
+	LastFailedAt            pgtype.Timestamptz `json:"last_failed_at"`
+	LastProcessedMarkerType *string            `json:"last_processed_marker_type"`
+	LastProcessedMarker     *string            `json:"last_processed_marker"`
+	LastProcessedAt         pgtype.Timestamptz `json:"last_processed_at"`
+	LastSourcePullRunID     pgtype.UUID        `json:"last_source_pull_run_id"`
+	LastError               *string            `json:"last_error"`
+	ConsecutiveFailures     int32              `json:"consecutive_failures"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+}
+
+type SourcePullRun struct {
+	ID               uuid.UUID          `json:"id"`
+	SourceID         uuid.UUID          `json:"source_id"`
+	RiverJobID       *int64             `json:"river_job_id"`
+	TaskType         string             `json:"task_type"`
+	TriggerType      string             `json:"trigger_type"`
+	Status           string             `json:"status"`
+	StartedAt        time.Time          `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	RowsSeen         int32              `json:"rows_seen"`
+	RawRowsInserted  int32              `json:"raw_rows_inserted"`
+	RawRowsUpdated   int32              `json:"raw_rows_updated"`
+	RawRowsUnchanged int32              `json:"raw_rows_unchanged"`
+	ErrorMessage     *string            `json:"error_message"`
+	Metadata         json.RawMessage    `json:"metadata"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
+type SuggestionSourceLink struct {
+	ID               uuid.UUID   `json:"id"`
+	SuggestionTable  string      `json:"suggestion_table"`
+	SuggestionID     uuid.UUID   `json:"suggestion_id"`
+	SourceID         uuid.UUID   `json:"source_id"`
+	SourceInputTable string      `json:"source_input_table"`
+	SourceInputKey   string      `json:"source_input_key"`
+	SourcePullRunID  pgtype.UUID `json:"source_pull_run_id"`
+	Confidence       *float32    `json:"confidence"`
+	EvidenceExcerpt  *string     `json:"evidence_excerpt"`
+	CreatedAt        time.Time   `json:"created_at"`
 }
 
 type VCompany struct {
-	ID                       uuid.UUID       `json:"id"`
-	Name                     string          `json:"name"`
-	DisplayName              *string         `json:"display_name"`
-	CanonicalSlug            string          `json:"canonical_slug"`
-	ResolutionStatus         string          `json:"resolution_status"`
-	ShortName                *string         `json:"short_name"`
-	RegistrationNumber       *string         `json:"registration_number"`
-	Lei                      *string         `json:"lei"`
-	Status                   string          `json:"status"`
-	Website                  *string         `json:"website"`
-	ShortDescription         *string         `json:"short_description"`
-	FoundedYear              *int32          `json:"founded_year"`
-	EmployeeEstimate         json.RawMessage `json:"employee_estimate"`
-	RevenueEstimate          json.RawMessage `json:"revenue_estimate"`
-	Ownership                json.RawMessage `json:"ownership"`
-	Evidence                 json.RawMessage `json:"evidence"`
-	CreatedAt                time.Time       `json:"created_at"`
-	UpdatedAt                time.Time       `json:"updated_at"`
-	CountryID                uuid.UUID       `json:"country_id"`
-	CountryName              string          `json:"country_name"`
-	CountryIso2              string          `json:"country_iso2"`
-	PrimarySource            *string         `json:"primary_source"`
-	PrimarySourceDisplayName *string         `json:"primary_source_display_name"`
-	DomainCount              int32           `json:"domain_count"`
-	HeadquartersLocation     interface{}     `json:"headquarters_location"`
+	ID                       uuid.UUID `json:"id"`
+	Name                     string    `json:"name"`
+	RegistrationNumber       *string   `json:"registration_number"`
+	Lei                      *string   `json:"lei"`
+	Status                   string    `json:"status"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
+	CountryID                uuid.UUID `json:"country_id"`
+	CountryName              string    `json:"country_name"`
+	CountryIso2              string    `json:"country_iso2"`
+	PrimarySource            *string   `json:"primary_source"`
+	PrimarySourceDisplayName *string   `json:"primary_source_display_name"`
+	DomainCount              int32     `json:"domain_count"`
 }
 
 type VCompanyDomain struct {
@@ -462,16 +725,6 @@ type VCompanyService struct {
 	Confidence  *float32        `json:"confidence"`
 	Evidence    json.RawMessage `json:"evidence"`
 	CreatedAt   time.Time       `json:"created_at"`
-}
-
-type VCompanySource struct {
-	CompanyID         uuid.UUID `json:"company_id"`
-	ExternalID        string    `json:"external_id"`
-	FetchedAt         time.Time `json:"fetched_at"`
-	SourceID          uuid.UUID `json:"source_id"`
-	SourceName        string    `json:"source_name"`
-	SourceDisplayName string    `json:"source_display_name"`
-	SourceType        string    `json:"source_type"`
 }
 
 type VDomain struct {

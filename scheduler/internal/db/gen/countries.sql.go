@@ -53,6 +53,17 @@ func (q *Queries) GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Count
 	return i, err
 }
 
+const getCountryIDByISO2 = `-- name: GetCountryIDByISO2 :one
+SELECT id FROM countries WHERE iso_alpha2 = $1
+`
+
+func (q *Queries) GetCountryIDByISO2(ctx context.Context, isoAlpha2 string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getCountryIDByISO2, isoAlpha2)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listCountries = `-- name: ListCountries :many
 SELECT id, iso_alpha2, iso_alpha3, name, has_public_registry, registry_url, registry_notes, created_at, updated_at FROM countries ORDER BY name
 `
