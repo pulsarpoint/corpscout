@@ -4,7 +4,7 @@
 
 Design the Corpscout pipeline for pulling external data, storing raw source-specific input, processing that input, and creating reviewable suggestions for resolved entities.
 
-The pipeline must support many independent sources with different schedules, cursors, payload shapes, confidence rules, and processors. CPE and CVE are only two sources. They must not become the universal ingestion model.
+The pipeline must support many independent sources with different schedules, source markers, payload shapes, confidence rules, and processors. CPE and CVE are only two sources. They must not become the universal ingestion model.
 
 The intended flow is:
 
@@ -83,13 +83,15 @@ For sources that already have a mature importer in backoffice-v2, prefer schema-
 
 ### Pull State Is Shared Operational Metadata
 
-Scheduling and cursor metadata are operational concerns. They can be stored in shared source state tables because they describe the puller, not the identity data.
+Scheduling and last-pulled source markers are operational concerns. They can be stored in shared source state tables because they describe the puller, not the identity data.
 
 Use shared tables for:
 
 - source definitions
 - source sync state
 - source pull runs
+
+River owns task claiming and execution. Corpscout should not duplicate River's job locking with source-level lease columns. If a source must not have two active pull jobs, enqueue it with a River uniqueness rule based on the source name and task type.
 
 Do not use shared tables for raw source payloads.
 
@@ -129,8 +131,8 @@ CREATE TABLE source_definitions (
     source_name TEXT PRIMARY KEY,
     source_group TEXT NOT NULL,
     input_table_name TEXT NOT NULL,
-    puller_name TEXT NOT NULL,
-    processor_name TEXT NOT NULL,
+    pull_task_type TEXT NOT NULL,
+    processor_task_type TEXT,
     enabled BOOLEAN NOT NULL DEFAULT true,
     schedule_kind TEXT NOT NULL DEFAULT 'manual',
     schedule_expression TEXT,
@@ -163,6 +165,8 @@ Rules:
 
 - `source_name` is stable and used in logs, runs, and source links.
 - `input_table_name` points to the source-specific raw input table or to the primary table in a source-compatible schema.
+- `pull_task_type` is the River task type used to pull the source.
+- `processor_task_type` is the River task type used to process pulled input when processing is a separate task.
 - `schedule_expression` is interpreted by the scheduler for `interval` or `cron` sources.
 - `metadata` can store source configuration that is safe to persist. Do not store secrets.
 
@@ -176,15 +180,15 @@ CREATE TABLE source_sync_states (
     last_started_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
     last_failed_at TIMESTAMPTZ,
-    last_cursor JSONB NOT NULL DEFAULT '{}'::jsonb,
-    last_watermark_at TIMESTAMPTZ,
+    last_source_marker_type TEXT,
+    last_source_marker TEXT,
+    last_source_modified_at TIMESTAMPTZ,
     last_error TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
-    leased_by TEXT,
-    leased_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_source_sync_states_cursor_object CHECK (
-        jsonb_typeof(last_cursor) = 'object'
+    CONSTRAINT chk_source_sync_states_marker_pair CHECK (
+        (last_source_marker_type IS NULL AND last_source_marker IS NULL)
+        OR (last_source_marker_type IS NOT NULL AND last_source_marker IS NOT NULL)
     ),
     CONSTRAINT chk_source_sync_states_failures CHECK (
         consecutive_failures >= 0
@@ -194,9 +198,10 @@ CREATE TABLE source_sync_states (
 
 Rules:
 
-- Pullers use `leased_by` and `leased_until` to avoid duplicate source pulls.
-- Incremental sources store cursors or watermarks in `last_cursor` and `last_watermark_at`.
-- Full-refresh sources can leave `last_cursor` empty.
+- River task uniqueness prevents duplicate active pull jobs for the same source.
+- Pullers update `last_source_marker_type`, `last_source_marker`, and `last_source_modified_at` only after a successful pull.
+- The marker can be an ETag, checksum, feed version, last modified timestamp string, or another source-native version token.
+- Full-refresh sources can leave marker fields empty.
 - `last_error` must be safe for operators and must not include secrets.
 
 ### `source_pull_runs`
@@ -207,14 +212,12 @@ Rules:
 CREATE TABLE source_pull_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
+    river_job_id BIGINT,
+    task_type TEXT NOT NULL,
     trigger_type TEXT NOT NULL DEFAULT 'scheduled',
     status TEXT NOT NULL DEFAULT 'running',
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at TIMESTAMPTZ,
-    cursor_before JSONB NOT NULL DEFAULT '{}'::jsonb,
-    cursor_after JSONB NOT NULL DEFAULT '{}'::jsonb,
-    window_start_at TIMESTAMPTZ,
-    window_end_at TIMESTAMPTZ,
     rows_seen INTEGER NOT NULL DEFAULT 0,
     rows_inserted INTEGER NOT NULL DEFAULT 0,
     rows_updated INTEGER NOT NULL DEFAULT 0,
@@ -233,12 +236,6 @@ CREATE TABLE source_pull_runs (
         AND rows_updated >= 0
         AND rows_unchanged >= 0
     ),
-    CONSTRAINT chk_source_pull_runs_cursor_before_object CHECK (
-        jsonb_typeof(cursor_before) = 'object'
-    ),
-    CONSTRAINT chk_source_pull_runs_cursor_after_object CHECK (
-        jsonb_typeof(cursor_after) = 'object'
-    ),
     CONSTRAINT chk_source_pull_runs_metadata_object CHECK (
         jsonb_typeof(metadata) = 'object'
     )
@@ -251,8 +248,10 @@ CREATE INDEX idx_source_pull_runs_source_started
 Rules:
 
 - Every pull attempt creates a run row.
+- `river_job_id` links the audit row to the River job when available.
+- `task_type` records the River task type that performed the pull.
 - Corpscout-owned raw input rows inserted by the pull should reference `source_pull_runs.id`.
-- Compatibility schemas that cannot add a pull-run foreign key should record counts, cursor metadata, and source artifact details on `source_pull_runs`.
+- Compatibility schemas that cannot add a pull-run foreign key should record counts and source artifact details on `source_pull_runs`.
 - A failed run does not delete raw rows already inserted unless the puller explicitly rolls back the whole transaction.
 - Pullers update `source_sync_states` only after a successful run.
 
@@ -263,21 +262,21 @@ Rules:
 ```sql
 CREATE TABLE source_processor_states (
     source_name TEXT NOT NULL REFERENCES source_definitions(source_name),
-    processor_name TEXT NOT NULL,
+    processor_task_type TEXT NOT NULL,
     last_started_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
     last_failed_at TIMESTAMPTZ,
-    last_cursor JSONB NOT NULL DEFAULT '{}'::jsonb,
-    last_watermark_at TIMESTAMPTZ,
+    last_processed_marker_type TEXT,
+    last_processed_marker TEXT,
+    last_processed_at TIMESTAMPTZ,
     last_source_pull_run_id UUID REFERENCES source_pull_runs(id),
     last_error TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
-    leased_by TEXT,
-    leased_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (source_name, processor_name),
-    CONSTRAINT chk_source_processor_states_cursor_object CHECK (
-        jsonb_typeof(last_cursor) = 'object'
+    PRIMARY KEY (source_name, processor_task_type),
+    CONSTRAINT chk_source_processor_states_marker_pair CHECK (
+        (last_processed_marker_type IS NULL AND last_processed_marker IS NULL)
+        OR (last_processed_marker_type IS NOT NULL AND last_processed_marker IS NOT NULL)
     ),
     CONSTRAINT chk_source_processor_states_failures CHECK (
         consecutive_failures >= 0
@@ -288,10 +287,11 @@ CREATE TABLE source_processor_states (
 Rules:
 
 - Row-queue processors should use the `processing_status` fields on their source-specific input table.
-- Compatibility-schema processors should use `source_processor_states` for leases, retry state, and incremental cursors.
-- CPE processors can store a cursor over `cpe_dictionary.updated_at` and `cpe_dictionary.id`.
-- CVE processors can store a cursor over `nvds.last_modified_date`, `nvds.id`, or the last successful NVD pull run.
-- Processor cursors are independent from puller cursors. A pull can succeed while the downstream processor still has pending work.
+- Compatibility-schema processors should use `source_processor_states` for retry state and their last processed marker.
+- River task uniqueness prevents duplicate active compatibility processors for the same source and processor task type.
+- CPE processors can store a marker such as `cpe_dictionary.updated_at:id`.
+- CVE processors can store a marker such as `nvds.last_modified_date:id` or the last processed NVD pull run ID.
+- Processor markers are independent from puller markers. A pull can succeed while the downstream processor still has pending work.
 
 ## Source-Specific Raw Input Tables
 
@@ -395,7 +395,7 @@ Processor rules for this compatibility schema:
 
 - CPE processors read from `cpe_dictionary`, not from a Corpscout-only CPE queue table.
 - CVE processors read from `nvds`, NVD child tables, `cpe_match_criteria`, `cpe_match_criteria_names`, and `nvd_config_match_criteria`.
-- Processors track leases, retries, and incremental watermarks in `source_processor_states`.
+- Processors track retries and last processed markers in `source_processor_states`.
 - Suggestions link back to these tables through `suggestion_source_links.source_input_key`, using the source table primary key serialized as text.
 
 ### Example: GLEIF Company Raw Inputs
@@ -946,10 +946,11 @@ Examples:
 Scheduling rules:
 
 - Scheduler reads `source_definitions` and `source_sync_states`.
-- Scheduler creates a `source_pull_runs` row.
-- Puller writes source-specific raw input rows or updates a source-compatible input schema.
-- Puller updates `source_pull_runs` and `source_sync_states`.
-- Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor watermark.
+- Scheduler enqueues a River task using `source_definitions.pull_task_type`.
+- The River pull task creates a `source_pull_runs` row when it starts.
+- The pull task writes source-specific raw input rows or updates a source-compatible input schema.
+- The pull task updates `source_pull_runs` and, on success, `source_sync_states`.
+- Processor workers read pending rows from source-specific raw input tables, or scan compatibility tables from their processor marker.
 - Processor workers create suggestions and source links.
 
 Pulling and processing can be separate tasks. They can also run in the same job for simple sources, but the boundary should remain clear in code.
@@ -958,9 +959,9 @@ Pulling and processing can be separate tasks. They can also run in the same job 
 
 Pullers:
 
-- use `source_sync_states.leased_by` and `leased_until`
-- update cursor only after successful pull completion
-- record failed runs without losing prior successful cursor
+- use River task claiming and River uniqueness for concurrency control
+- update `source_sync_states` marker fields only after successful pull completion
+- record failed runs without losing the previous successful source marker
 
 Processors:
 
@@ -969,7 +970,7 @@ Processors:
 - for row-queue tables, set `processing_lease_by` and `processing_lease_until`
 - for row-queue tables, increment `processing_attempts`
 - for row-queue tables, mark row `processed`, `ignored`, or `failed`
-- for compatibility schemas, use `source_processor_states.leased_by`, `leased_until`, cursors, and watermarks
+- for compatibility schemas, use River task claiming and `source_processor_states` markers
 - retry failed processor work only when attempts and backoff policy allow
 
 Approval:
@@ -1039,7 +1040,7 @@ Input:
 
 Processor behavior:
 
-- read CPE rows from the mirrored CPE schema using `source_processor_states` watermarks
+- read CPE rows from the mirrored CPE schema using `source_processor_states` markers
 - create `cpe_entity_link_suggestions`
 - link suggestions back to `cpe_dictionary` or `cpe_match_criteria` with `suggestion_source_links`
 - do not create product records in Corpscout
@@ -1055,7 +1056,7 @@ Input:
 
 Processor behavior:
 
-- read CVE rows from the mirrored NVD schema using `source_processor_states` watermarks
+- read CVE rows from the mirrored NVD schema using `source_processor_states` markers
 - create `cve_entity_link_suggestions` only for entity-level relevance
 - link suggestions back to `nvds`, `nvd_config_match_criteria`, or related CPE tables with `suggestion_source_links`
 - approve into `cve_entity_links` after review
@@ -1080,9 +1081,10 @@ Processor behavior:
 Database tests:
 
 - source definitions enforce valid schedule and source groups
-- sync state stores cursors and lease metadata
-- processor state stores independent cursors and lease metadata
-- pull runs track status, cursors, row counts, and errors
+- source definitions store River task types
+- sync state stores last successful source marker metadata
+- processor state stores independent last processed marker metadata
+- pull runs track River job ID, task type, status, row counts, and errors
 - source-specific raw input tables dedupe by native ID and payload hash
 - source-specific raw input tables allow multiple versions of the same source-native entity
 - mirrored NVD/CPE tables stay schema-compatible with the backoffice-v2 loader-owned schema
@@ -1095,7 +1097,7 @@ Database tests:
 Processor tests:
 
 - pullers update source run metadata correctly
-- processors claim rows with leases
+- row-queue processors claim rows with processing leases when using Corpscout-owned raw input tables
 - CPE/CVE processors use `source_processor_states` instead of mutating mirrored NVD/CPE input tables
 - processors are idempotent on repeated raw input rows or repeated compatibility-table scans
 - processors create root suggestions when no resolved entity exists
