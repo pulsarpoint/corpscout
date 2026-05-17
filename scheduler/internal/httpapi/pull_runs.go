@@ -12,10 +12,14 @@ func (h *Handlers) handleListPullRuns(w http.ResponseWriter, r *http.Request) {
 	limit := min(queryInt(r, "limit", 20), 100)
 	offset := int32((page - 1) * limit)
 
+	sourceName := ""
+	if s := r.URL.Query().Get("source"); s != "" {
+		sourceName = s
+	}
 	runs, err := h.db.ListPullRuns(r.Context(), db.ListPullRunsParams{
-		SourceName: queryString(r, "source"),
-		Limit:      int32(limit),
-		Offset:     offset,
+		Column1: sourceName,
+		Limit:   int32(limit),
+		Offset:  offset,
 	})
 	if err != nil {
 		slog.Error("list pull runs", "error", err)

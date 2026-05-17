@@ -8,13 +8,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
-// sourceView wraps DataSource for JSON output so that the JSONB config field
-// is emitted as a JSON object instead of a base64 string (the default for []byte).
 type sourceView struct {
 	db.DataSource
 	Config json.RawMessage `json:"config"`
@@ -36,42 +35,14 @@ func toSourceViews(sources []db.DataSource) []sourceView {
 	return out
 }
 
-func (h *Handlers) handleProbeSource(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
-		writeError(w, http.StatusNotFound, "source not found")
-		return
-	}
-	if h.crawler == nil {
-		writeError(w, http.StatusServiceUnavailable, "crawler not available")
-		return
-	}
-	start := time.Now()
-	resp, err := h.crawler.Crawl(r.Context(), name, time.Time{}, nil, 1)
-	durationMs := time.Since(start).Milliseconds()
+func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
+	sources, err := h.db.ListSources(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"records_count": 0,
-			"total":         0,
-			"has_more":      false,
-			"sample":        nil,
-			"error":         err.Error(),
-			"duration_ms":   durationMs,
-		})
+		slog.Error("list sources", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	var sample any
-	if len(resp.Records) > 0 {
-		sample = resp.Records[0]
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"records_count": len(resp.Records),
-		"total":         resp.Total,
-		"has_more":      resp.HasMore,
-		"sample":        sample,
-		"error":         nil,
-		"duration_ms":   durationMs,
-	})
+	writeJSON(w, http.StatusOK, toSourceViews(sources))
 }
 
 func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
@@ -84,19 +55,10 @@ func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toSourceView(source))
 }
 
-func (h *Handlers) handleListSources(w http.ResponseWriter, r *http.Request) {
-	sources, err := h.db.ListSources(r.Context())
-	if err != nil {
-		slog.Error("list sources", "error", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	writeJSON(w, http.StatusOK, toSourceViews(sources))
-}
-
 type patchSourceRequest struct {
-	Enabled            *bool  `json:"enabled"`
-	CrawlIntervalHours *int32 `json:"crawl_interval_hours"`
+	Enabled            *bool   `json:"enabled"`
+	ScheduleKind       *string `json:"schedule_kind"`
+	ScheduleExpression *string `json:"schedule_expression"`
 }
 
 func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
@@ -115,11 +77,26 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.CrawlIntervalHours != nil {
-		if err := h.db.UpdateSourceInterval(r.Context(), db.UpdateSourceIntervalParams{
-			Name: name, CrawlIntervalHours: *req.CrawlIntervalHours,
+	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
+		src, err := h.db.GetSourceByName(r.Context(), name)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "source not found")
+			return
+		}
+		kind := src.ScheduleKind
+		expr := src.ScheduleExpression
+		if req.ScheduleKind != nil {
+			kind = *req.ScheduleKind
+		}
+		if req.ScheduleExpression != nil {
+			expr = req.ScheduleExpression
+		}
+		if err := h.db.UpdateSourceSchedule(r.Context(), db.UpdateSourceScheduleParams{
+			Name:               name,
+			ScheduleKind:       kind,
+			ScheduleExpression: expr,
 		}); err != nil {
-			slog.Error("update source interval", "name", name, "error", err)
+			slog.Error("update source schedule", "name", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -134,20 +111,58 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}
+	if source.PullTaskType != "source_pull" {
+		writeError(w, http.StatusUnprocessableEntity, "pull task type not supported for manual trigger")
+		return
+	}
 	if h.rv == nil {
 		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
 		return
 	}
-	var since time.Time
-	if source.LastCrawledAt.Valid {
-		since = source.LastCrawledAt.Time
-	}
-	if _, err := h.rv.Insert(r.Context(), workers.SourceCrawlArgs{
-		SourceName: name, Since: since,
-	}, &river.InsertOpts{Queue: "source_crawl"}); err != nil {
+	if _, err := h.rv.Insert(r.Context(), workers.SourcePullArgs{
+		SourceName:  name,
+		TriggerType: "manual",
+	}, &river.InsertOpts{
+		Queue: "source_pull",
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:  true,
+			ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
+		},
+	}); err != nil {
 		slog.Error("trigger source", "name", name, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})
+}
+
+func (h *Handlers) handleProbeSource(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+	if h.crawler == nil {
+		writeError(w, http.StatusServiceUnavailable, "crawler not available")
+		return
+	}
+	start := time.Now()
+	resp, err := h.crawler.Crawl(r.Context(), name, time.Time{}, nil, 1)
+	durationMs := time.Since(start).Milliseconds()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"records_count": 0, "total": 0, "has_more": false,
+			"sample": nil, "error": err.Error(), "duration_ms": durationMs,
+		})
+		return
+	}
+	var sample any
+	if len(resp.Records) > 0 {
+		sample = resp.Records[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"records_count": len(resp.Records), "total": resp.Total,
+		"has_more": resp.HasMore, "sample": sample,
+		"error": nil, "duration_ms": durationMs,
+	})
 }

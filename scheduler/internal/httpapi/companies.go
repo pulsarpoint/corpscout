@@ -22,17 +22,10 @@ func (h *Handlers) handleListCompanies(w http.ResponseWriter, r *http.Request) {
 			countryID = pgtype.UUID{Bytes: id, Valid: true}
 		}
 	}
-	var sourceID pgtype.UUID
-	if s := r.URL.Query().Get("source"); s != "" {
-		if id, err := uuid.Parse(s); err == nil {
-			sourceID = pgtype.UUID{Bytes: id, Valid: true}
-		}
-	}
 
 	params := db.ListCompaniesParams{
 		Status:    queryString(r, "status"),
 		CountryID: countryID,
-		SourceID:  sourceID,
 		Q:         queryString(r, "q"),
 		Offset:    offset,
 		Limit:     int32(limit),
@@ -45,8 +38,7 @@ func (h *Handlers) handleListCompanies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, err := h.db.CountCompanies(r.Context(), db.CountCompaniesParams{
-		Status: params.Status, CountryID: params.CountryID,
-		SourceID: params.SourceID, Q: params.Q,
+		Status: params.Status, CountryID: params.CountryID, Q: params.Q,
 	})
 	if err != nil {
 		slog.Error("count companies", "error", err)

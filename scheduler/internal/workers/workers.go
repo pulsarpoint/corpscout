@@ -1,27 +1,17 @@
-// Package workers contains River job worker implementations.
 package workers
 
-import "time"
-
-// SourceCrawlArgs is the job argument for a source crawl task.
-type SourceCrawlArgs struct {
-	SourceName string    `json:"source_name"`
-	Since      time.Time `json:"since"`
+// SourcePullArgs is the job argument for a source pull task.
+type SourcePullArgs struct {
+	SourceName  string `json:"source_name"`
+	TriggerType string `json:"trigger_type"`
 }
 
-func (SourceCrawlArgs) Kind() string { return "source_crawl" }
+func (SourcePullArgs) Kind() string { return "source_pull" }
 
-// DomainResolveArgs is the job argument for a domain resolution task.
-type DomainResolveArgs struct {
-	CompanyID string `json:"company_id"`
+// SourceProcessArgs is the job argument for a source processor task.
+type SourceProcessArgs struct {
+	SourceName string `json:"source_name"`
+	PullRunID  string `json:"pull_run_id"`
 }
 
-func (DomainResolveArgs) Kind() string { return "domain_resolve" }
-
-// GLEIFEnrichArgs is the job argument for enriching a GLEIF company with parent LEI data.
-type GLEIFEnrichArgs struct {
-	CompanyID string `json:"company_id"`
-	LEI       string `json:"lei"`
-}
-
-func (GLEIFEnrichArgs) Kind() string { return "gleif_enrich" }
+func (SourceProcessArgs) Kind() string { return "source_process" }

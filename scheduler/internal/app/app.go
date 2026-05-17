@@ -12,6 +12,7 @@ import (
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
@@ -111,24 +112,33 @@ func scheduleOnce(ctx context.Context, q db.Querier, rc *river.Client[pgx.Tx]) {
 		if !src.Enabled {
 			continue
 		}
-
-		if src.LastCrawledAt.Valid {
-			due := src.LastCrawledAt.Time.Add(time.Duration(src.CrawlIntervalHours) * time.Hour)
+		if src.ScheduleKind != "interval" {
+			continue
+		}
+		if src.ScheduleExpression == nil {
+			continue
+		}
+		interval, err := time.ParseDuration(*src.ScheduleExpression)
+		if err != nil {
+			slog.Warn("schedule sources: invalid schedule_expression", "source", src.Name, "expr", *src.ScheduleExpression)
+			continue
+		}
+		if src.LastStartedAt.Valid {
+			due := src.LastStartedAt.Time.Add(interval)
 			if time.Now().Before(due) {
 				continue
 			}
 		}
-
-		since := time.Time{}
-		if src.LastCrawledAt.Valid {
-			since = src.LastCrawledAt.Time
-		}
-
-		_, err := rc.Insert(ctx, workers.SourceCrawlArgs{
-			SourceName: src.Name,
-			Since:      since,
-		}, &river.InsertOpts{Queue: "source_crawl"})
-		if err != nil {
+		if _, err := rc.Insert(ctx, workers.SourcePullArgs{
+			SourceName:  src.Name,
+			TriggerType: "scheduled",
+		}, &river.InsertOpts{
+			Queue: "source_pull",
+			UniqueOpts: river.UniqueOpts{
+				ByArgs:  true,
+				ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
+			},
+		}); err != nil {
 			slog.Error("schedule sources: insert job", "source", src.Name, "error", err)
 		}
 	}

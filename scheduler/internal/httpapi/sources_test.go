@@ -20,7 +20,7 @@ func TestListSources_returns_all(t *testing.T) {
 	q := &stubQuerier{}
 
 	sources := []db.DataSource{
-		{ID: uuid.New(), Name: "gleif", AdapterType: "api", Enabled: true, CrawlIntervalHours: 24},
+		{ID: uuid.New(), Name: "gleif", Enabled: true},
 	}
 
 	q.On("ListSources", mock.Anything).Return(sources, nil)
@@ -59,16 +59,23 @@ func TestPatchSource_updates_enabled(t *testing.T) {
 	q.AssertExpectations(t)
 }
 
-func TestPatchSource_updates_interval(t *testing.T) {
+func TestPatchSource_updates_schedule(t *testing.T) {
 	q := &stubQuerier{}
 
-	q.On("UpdateSourceInterval", mock.Anything, db.UpdateSourceIntervalParams{
-		Name: "gleif", CrawlIntervalHours: 72,
+	expr := "24h"
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:         "gleif",
+		ScheduleKind: "interval",
+	}, nil)
+	q.On("UpdateSourceSchedule", mock.Anything, db.UpdateSourceScheduleParams{
+		Name:               "gleif",
+		ScheduleKind:       "interval",
+		ScheduleExpression: &expr,
 	}).Return(nil)
 
 	r := routerForHandlers(q)
 
-	body := strings.NewReader(`{"crawl_interval_hours": 72}`)
+	body := strings.NewReader(`{"schedule_expression": "24h"}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

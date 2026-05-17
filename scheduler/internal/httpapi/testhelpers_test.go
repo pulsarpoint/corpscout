@@ -56,28 +56,9 @@ func (s *stubQuerier) ListCountries(ctx context.Context) ([]db.Country, error) {
 
 // --- stub-only methods (zero return values, no mock.On needed) ---
 
-func (s *stubQuerier) CompletePullRun(ctx context.Context, arg db.CompletePullRunParams) error {
-	return nil
-}
-
-func (s *stubQuerier) CountCandidatesForReview(ctx context.Context) (int64, error) {
-	ret := s.Called(ctx)
-	return ret.Get(0).(int64), ret.Error(1)
-}
-
 func (s *stubQuerier) CountDomains(ctx context.Context, arg db.CountDomainsParams) (int64, error) {
 	ret := s.Called(ctx, arg)
 	return ret.Get(0).(int64), ret.Error(1)
-}
-
-func (s *stubQuerier) CreateDomainReview(ctx context.Context, arg db.CreateDomainReviewParams) (db.CompanyDomainReview, error) {
-	ret := s.Called(ctx, arg)
-	return ret.Get(0).(db.CompanyDomainReview), ret.Error(1)
-}
-
-func (s *stubQuerier) CreateDomainReviewAndUpdateStatus(ctx context.Context, arg db.CreateDomainReviewAndUpdateStatusParams) (db.CompanyDomainReview, error) {
-	ret := s.Called(ctx, arg)
-	return ret.Get(0).(db.CompanyDomainReview), ret.Error(1)
 }
 
 func (s *stubQuerier) CreatePullRun(ctx context.Context, arg db.CreatePullRunParams) (db.SourcePullRun, error) {
@@ -85,6 +66,10 @@ func (s *stubQuerier) CreatePullRun(ctx context.Context, arg db.CreatePullRunPar
 }
 
 func (s *stubQuerier) FailPullRun(ctx context.Context, arg db.FailPullRunParams) error {
+	return nil
+}
+
+func (s *stubQuerier) SucceedPullRun(ctx context.Context, arg db.SucceedPullRunParams) error {
 	return nil
 }
 
@@ -106,18 +91,6 @@ func (s *stubQuerier) GetStats(ctx context.Context) (db.GetStatsRow, error) {
 	return ret.Get(0).(db.GetStatsRow), ret.Error(1)
 }
 
-func (s *stubQuerier) InsertSourceSnapshot(ctx context.Context, arg db.InsertSourceSnapshotParams) error {
-	return nil
-}
-
-func (s *stubQuerier) ListCandidatesForReview(ctx context.Context, arg db.ListCandidatesForReviewParams) ([]db.ListCandidatesForReviewRow, error) {
-	ret := s.Called(ctx, arg)
-	if v, ok := ret.Get(0).([]db.ListCandidatesForReviewRow); ok {
-		return v, ret.Error(1)
-	}
-	return nil, ret.Error(1)
-}
-
 func (s *stubQuerier) ListDomains(ctx context.Context, arg db.ListDomainsParams) ([]db.ListDomainsRow, error) {
 	ret := s.Called(ctx, arg)
 	if v, ok := ret.Get(0).([]db.ListDomainsRow); ok {
@@ -134,10 +107,6 @@ func (s *stubQuerier) ListPullRuns(ctx context.Context, arg db.ListPullRunsParam
 	return nil, ret.Error(1)
 }
 
-func (s *stubQuerier) ListReviewsForClaim(ctx context.Context, companyDomainID uuid.UUID) ([]db.CompanyDomainReview, error) {
-	return nil, nil
-}
-
 func (s *stubQuerier) ListSources(ctx context.Context) ([]db.DataSource, error) {
 	ret := s.Called(ctx)
 	if v, ok := ret.Get(0).([]db.DataSource); ok {
@@ -150,30 +119,30 @@ func (s *stubQuerier) UpdateCompanyDomainStatus(ctx context.Context, arg db.Upda
 	return nil
 }
 
-func (s *stubQuerier) UpdateSourceCursor(ctx context.Context, arg db.UpdateSourceCursorParams) error {
-	return nil
-}
-
 func (s *stubQuerier) UpdateSourceEnabled(ctx context.Context, arg db.UpdateSourceEnabledParams) error {
 	ret := s.Called(ctx, arg)
 	return ret.Error(0)
 }
 
-func (s *stubQuerier) UpdateSourceInterval(ctx context.Context, arg db.UpdateSourceIntervalParams) error {
+func (s *stubQuerier) UpdateSourceSchedule(ctx context.Context, arg db.UpdateSourceScheduleParams) error {
 	ret := s.Called(ctx, arg)
 	return ret.Error(0)
 }
 
-func (s *stubQuerier) UpsertCompanyAlias(ctx context.Context, arg db.UpsertCompanyAliasParams) error {
+func (s *stubQuerier) UpdateSourceConfig(ctx context.Context, arg db.UpdateSourceConfigParams) error {
 	return nil
 }
 
-func (s *stubQuerier) UpsertCompanyByLEI(ctx context.Context, arg db.UpsertCompanyByLEIParams) (db.Company, error) {
-	return db.Company{}, nil
+func (s *stubQuerier) UpdateSourcePullStarted(ctx context.Context, name string) error {
+	return nil
 }
 
-func (s *stubQuerier) UpsertCompanyByRegNumber(ctx context.Context, arg db.UpsertCompanyByRegNumberParams) (db.Company, error) {
-	return db.Company{}, nil
+func (s *stubQuerier) UpdateSourcePullSucceeded(ctx context.Context, arg db.UpdateSourcePullSucceededParams) error {
+	return nil
+}
+
+func (s *stubQuerier) UpdateSourcePullFailed(ctx context.Context, arg db.UpdateSourcePullFailedParams) error {
+	return nil
 }
 
 func (s *stubQuerier) UpsertCompanyDomain(ctx context.Context, arg db.UpsertCompanyDomainParams) (db.CompanyDomain, error) {
@@ -223,24 +192,9 @@ func (s *stubQuerier) UpsertCompanyPhone(ctx context.Context, arg db.UpsertCompa
 func (s *stubQuerier) UpsertCompanyService(ctx context.Context, arg db.UpsertCompanyServiceParams) (db.CompanyService, error) {
 	return db.CompanyService{}, nil
 }
-func (s *stubQuerier) UpsertCompanySource(ctx context.Context, arg db.UpsertCompanySourceParams) error {
-	return nil
-}
-
-func (s *stubQuerier) UpsertDataSource(ctx context.Context, arg db.UpsertDataSourceParams) (db.DataSource, error) {
-	return db.DataSource{}, nil
-}
 
 func (s *stubQuerier) UpsertDomain(ctx context.Context, domain string) (db.Domain, error) {
 	return db.Domain{}, nil
-}
-
-func (s *stubQuerier) ListCompaniesForGLEIFEnrich(ctx context.Context, arg db.ListCompaniesForGLEIFEnrichParams) ([]db.ListCompaniesForGLEIFEnrichRow, error) {
-	return nil, nil
-}
-
-func (s *stubQuerier) UpdateCompanyParentLEI(ctx context.Context, arg db.UpdateCompanyParentLEIParams) error {
-	return nil
 }
 
 func (s *stubQuerier) UpsertCompanyRelationship(ctx context.Context, arg db.UpsertCompanyRelationshipParams) (db.CompanyRelationship, error) {
@@ -350,6 +304,106 @@ func (s *stubQuerier) ListCVEEntityLinksByCVEID(ctx context.Context, cveID strin
 	return nil, nil
 }
 
+// Suggestion methods
+func (s *stubQuerier) CountPendingCompanySuggestions(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+func (s *stubQuerier) GetCompanySuggestionByID(ctx context.Context, id uuid.UUID) (db.CompanySuggestion, error) {
+	return db.CompanySuggestion{}, nil
+}
+func (s *stubQuerier) ListPendingCompanySuggestions(ctx context.Context, arg db.ListPendingCompanySuggestionsParams) ([]db.CompanySuggestion, error) {
+	ret := s.Called(ctx, arg)
+	if v, ok := ret.Get(0).([]db.CompanySuggestion); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
+}
+func (s *stubQuerier) UpdateCompanySuggestionApproved(ctx context.Context, arg db.UpdateCompanySuggestionApprovedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateCompanySuggestionRejected(ctx context.Context, arg db.UpdateCompanySuggestionRejectedParams) error {
+	return nil
+}
+func (s *stubQuerier) InsertCompanyDomainSuggestion(ctx context.Context, arg db.InsertCompanyDomainSuggestionParams) (db.CompanyDomainSuggestion, error) {
+	return db.CompanyDomainSuggestion{}, nil
+}
+func (s *stubQuerier) InsertCompanyContactSuggestion(ctx context.Context, arg db.InsertCompanyContactSuggestionParams) (db.CompanyContactSuggestion, error) {
+	return db.CompanyContactSuggestion{}, nil
+}
+func (s *stubQuerier) InsertCompanyLocationSuggestion(ctx context.Context, arg db.InsertCompanyLocationSuggestionParams) (db.CompanyLocationSuggestion, error) {
+	return db.CompanyLocationSuggestion{}, nil
+}
+func (s *stubQuerier) InsertCompanyStatusSuggestion(ctx context.Context, arg db.InsertCompanyStatusSuggestionParams) (db.CompanyStatusSuggestion, error) {
+	return db.CompanyStatusSuggestion{}, nil
+}
+func (s *stubQuerier) InsertCompanyRelationshipSuggestion(ctx context.Context, arg db.InsertCompanyRelationshipSuggestionParams) (db.CompanyRelationshipSuggestion, error) {
+	return db.CompanyRelationshipSuggestion{}, nil
+}
+func (s *stubQuerier) InsertOrganizationSuggestion(ctx context.Context, arg db.InsertOrganizationSuggestionParams) (db.OrganizationSuggestion, error) {
+	return db.OrganizationSuggestion{}, nil
+}
+func (s *stubQuerier) InsertOpenSourceProjectSuggestion(ctx context.Context, arg db.InsertOpenSourceProjectSuggestionParams) (db.OpenSourceProjectSuggestion, error) {
+	return db.OpenSourceProjectSuggestion{}, nil
+}
+func (s *stubQuerier) InsertSuggestionSourceLink(ctx context.Context, arg db.InsertSuggestionSourceLinkParams) (db.SuggestionSourceLink, error) {
+	return db.SuggestionSourceLink{}, nil
+}
+func (s *stubQuerier) InsertCompanySuggestion(ctx context.Context, arg db.InsertCompanySuggestionParams) (db.CompanySuggestion, error) {
+	return db.CompanySuggestion{}, nil
+}
+
+// Company methods
+func (s *stubQuerier) GetCompanyByLEI(ctx context.Context, lei *string) (db.Company, error) {
+	return db.Company{}, nil
+}
+func (s *stubQuerier) GetCompanyByRegistrationAndCountry(ctx context.Context, arg db.GetCompanyByRegistrationAndCountryParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+func (s *stubQuerier) GetCountryIDByISO2(ctx context.Context, isoAlpha2 string) (uuid.UUID, error) {
+	return uuid.UUID{}, nil
+}
+func (s *stubQuerier) InsertCompany(ctx context.Context, arg db.InsertCompanyParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+
+// Raw input stubs
+func (s *stubQuerier) UpsertGLEIFCompanyRawInput(ctx context.Context, arg db.UpsertGLEIFCompanyRawInputParams) (db.GleifCompanyRawInput, error) {
+	return db.GleifCompanyRawInput{}, nil
+}
+func (s *stubQuerier) ClaimPendingGLEIFRawInputs(ctx context.Context, arg db.ClaimPendingGLEIFRawInputsParams) ([]db.GleifCompanyRawInput, error) {
+	return nil, nil
+}
+func (s *stubQuerier) MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (s *stubQuerier) MarkGLEIFRawInputFailed(ctx context.Context, arg db.MarkGLEIFRawInputFailedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpsertCompaniesHouseRawInput(ctx context.Context, arg db.UpsertCompaniesHouseRawInputParams) (db.CompaniesHouseCompanyRawInput, error) {
+	return db.CompaniesHouseCompanyRawInput{}, nil
+}
+func (s *stubQuerier) ClaimPendingCompaniesHouseRawInputs(ctx context.Context, arg db.ClaimPendingCompaniesHouseRawInputsParams) ([]db.CompaniesHouseCompanyRawInput, error) {
+	return nil, nil
+}
+func (s *stubQuerier) MarkCompaniesHouseRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (s *stubQuerier) MarkCompaniesHouseRawInputFailed(ctx context.Context, arg db.MarkCompaniesHouseRawInputFailedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpsertBrregRawInput(ctx context.Context, arg db.UpsertBrregRawInputParams) (db.BrregCompanyRawInput, error) {
+	return db.BrregCompanyRawInput{}, nil
+}
+func (s *stubQuerier) ClaimPendingBrregRawInputs(ctx context.Context, arg db.ClaimPendingBrregRawInputsParams) ([]db.BrregCompanyRawInput, error) {
+	return nil, nil
+}
+func (s *stubQuerier) MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (s *stubQuerier) MarkBrregRawInputFailed(ctx context.Context, arg db.MarkBrregRawInputFailedParams) error {
+	return nil
+}
+
 // --- helpers ---
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
@@ -367,4 +421,3 @@ func routerFor(h *httpapi.Handlers) chi.Router {
 
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)
-

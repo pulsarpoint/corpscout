@@ -29,20 +29,17 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 		slog.Info("river migration applied", "version", v.Version, "direction", "up")
 	}
 
-	sourceCrawlWorker := workers.NewSourceCrawlWorker(q, crawler, nil)
-	domainResolveWorker := workers.NewDomainResolveWorker(q, crawler)
-	gleifEnrichWorker := workers.NewGLEIFEnrichWorker(q, crawler)
+	sourcePullWorker := workers.NewSourcePullWorker(q, crawler, pool)
+	sourceProcessWorker := workers.NewSourceProcessWorker(q, pool)
 
 	w := river.NewWorkers()
-	river.AddWorker(w, sourceCrawlWorker)
-	river.AddWorker(w, domainResolveWorker)
-	river.AddWorker(w, gleifEnrichWorker)
+	river.AddWorker(w, sourcePullWorker)
+	river.AddWorker(w, sourceProcessWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
-			"source_crawl":   {MaxWorkers: cfg.CrawlConcurrency},
-			"domain_resolve": {MaxWorkers: cfg.DomainConcurrency},
-			"gleif_enrich":   {MaxWorkers: cfg.GLEIFEnrichConcurrency},
+			"source_pull":    {MaxWorkers: cfg.CrawlConcurrency},
+			"source_process": {MaxWorkers: cfg.DomainConcurrency},
 		},
 		Workers: w,
 	}
@@ -51,7 +48,5 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	if err != nil {
 		return nil, err
 	}
-
-	sourceCrawlWorker.SetRiverClient(rc)
 	return rc, nil
 }
