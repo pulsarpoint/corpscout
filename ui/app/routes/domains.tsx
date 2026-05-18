@@ -1,101 +1,133 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { type ColumnDef, type SortingState } from "@tanstack/react-table";
+import { MoreHorizontal } from "lucide-react";
 import { pgrest } from "~/lib/pgrest";
 import type { VDomain } from "~/types/api";
 import { DataTable } from "~/components/ui/data-table";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { CrawlDomainDialog } from "~/components/app/CrawlDomainDialog";
 import { signalColor, confidenceColor, formatDate } from "~/lib/utils";
 
 const PAGE_SIZE = 50;
 
 const SIGNALS = ["registry_website", "wikidata", "certsh", "whois", "search"] as const;
 
-const columns: ColumnDef<VDomain, unknown>[] = [
-  {
-    accessorKey: "domain",
-    header: "Domain",
-    enableSorting: true,
-    cell: ({ row }) => (
-      <a
-        href={`https://${row.original.domain}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-mono text-primary hover:underline"
-      >
-        {row.original.domain}
-      </a>
-    ),
-  },
-  {
-    accessorKey: "primary_company_name",
-    header: "Company",
-    enableSorting: true,
-    cell: ({ row }) =>
-      row.original.primary_company_id ? (
-        <Link
-          to={`/companies/${row.original.primary_company_id}`}
-          className="hover:underline text-sm"
-        >
-          {row.original.primary_company_name}
-        </Link>
-      ) : (
-        <span className="text-muted-foreground text-sm">No company</span>
-      ),
-  },
-  {
-    accessorKey: "primary_signal",
-    header: "Signal",
-    enableSorting: true,
-    cell: ({ row }) =>
-      row.original.primary_signal ? (
-        <Badge variant="outline" className={signalColor(row.original.primary_signal)}>
-          {row.original.primary_signal}
-        </Badge>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "max_confidence",
-    header: "Confidence",
-    enableSorting: true,
-    cell: ({ row }) =>
-      row.original.max_confidence != null ? (
-        <span className={`font-bold ${confidenceColor(row.original.max_confidence)}`}>
-          {row.original.max_confidence}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
-    accessorKey: "company_count",
-    header: "Companies",
-    enableSorting: true,
-    cell: ({ row }) => (
-      <span className={row.original.company_count === 0 ? "text-muted-foreground" : "font-medium"}>
-        {row.original.company_count}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "first_seen_at",
-    header: "First Seen",
-    enableSorting: true,
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.first_seen_at ? formatDate(row.original.first_seen_at) : "—"}
-      </span>
-    ),
-  },
-];
-
 export default function DomainsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [domains, setDomains] = useState<VDomain[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [crawlTarget, setCrawlTarget] = useState<{ id: string; domain: string } | null>(null);
+
+  const columns = useMemo<ColumnDef<VDomain, unknown>[]>(
+    () => [
+      {
+        accessorKey: "domain",
+        header: "Domain",
+        enableSorting: true,
+        cell: ({ row }) => (
+          <Link
+            to={`/domains/${row.original.id}`}
+            className="font-mono font-medium hover:underline"
+          >
+            {row.original.domain}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "primary_company_name",
+        header: "Company",
+        enableSorting: true,
+        cell: ({ row }) =>
+          row.original.primary_company_id ? (
+            <Link
+              to={`/companies/${row.original.primary_company_id}`}
+              className="hover:underline text-sm"
+            >
+              {row.original.primary_company_name}
+            </Link>
+          ) : (
+            <span className="text-muted-foreground text-sm">No company</span>
+          ),
+      },
+      {
+        accessorKey: "primary_signal",
+        header: "Signal",
+        enableSorting: true,
+        cell: ({ row }) =>
+          row.original.primary_signal ? (
+            <Badge variant="outline" className={signalColor(row.original.primary_signal)}>
+              {row.original.primary_signal}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        accessorKey: "max_confidence",
+        header: "Confidence",
+        enableSorting: true,
+        cell: ({ row }) =>
+          row.original.max_confidence != null ? (
+            <span className={`font-bold ${confidenceColor(row.original.max_confidence)}`}>
+              {row.original.max_confidence}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        accessorKey: "company_count",
+        header: "Companies",
+        enableSorting: true,
+        cell: ({ row }) => (
+          <span className={row.original.company_count === 0 ? "text-muted-foreground" : "font-medium"}>
+            {row.original.company_count}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "first_seen_at",
+        header: "First Seen",
+        enableSorting: true,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.first_seen_at ? formatDate(row.original.first_seen_at) : "—"}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        cell: ({ row }) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  setCrawlTarget({ id: row.original.id, domain: row.original.domain })
+                }
+              >
+                Crawl domain
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
+    ],
+    [setCrawlTarget]
+  );
 
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const signal = searchParams.get("signal") ?? "";
@@ -215,6 +247,14 @@ export default function DomainsPage() {
         onPageChange={(p) => setParam({ page: String(p) })}
         loading={loading}
       />
+      {crawlTarget && (
+        <CrawlDomainDialog
+          domainId={crawlTarget.id}
+          domainName={crawlTarget.domain}
+          open={!!crawlTarget}
+          onOpenChange={(open) => { if (!open) setCrawlTarget(null); }}
+        />
+      )}
     </div>
   );
 }
