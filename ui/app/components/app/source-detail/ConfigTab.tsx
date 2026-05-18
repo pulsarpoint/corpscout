@@ -59,6 +59,10 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
         hasError = true;
         return { ...row, error: "Key is required." };
       }
+      if (row.isExisting && row.value === row.originalValue) {
+        seenKeys.add(key);
+        return { ...row, key };
+      }
       if (/key|secret|token|password/i.test(key)) {
         hasError = true;
         return { ...row, error: "Secret-like config keys cannot be edited here." };
