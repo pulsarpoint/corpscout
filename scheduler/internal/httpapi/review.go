@@ -124,7 +124,8 @@ func (h *Handlers) handleBulkReview(w http.ResponseWriter, r *http.Request) {
 		}
 		updated++
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"updated": updated})
+	skipped := len(body.IDs) - updated
+	writeJSON(w, http.StatusOK, map[string]any{"updated": updated, "skipped": skipped})
 }
 
 func reviewActionToStatus(action string) (string, bool) {

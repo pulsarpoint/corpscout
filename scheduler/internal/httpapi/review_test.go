@@ -76,3 +76,15 @@ func TestHandleBulkReview_rejects_invalid_action(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+func TestHandleBulkReview_rejects_empty_ids(t *testing.T) {
+	q := &stubQuerier{}
+	r := routerForHandlers(q)
+	body := map[string]any{"ids": []string{}, "action": "approved"}
+	b, _ := json.Marshal(body)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/review/bulk", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
