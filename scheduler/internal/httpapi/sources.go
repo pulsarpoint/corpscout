@@ -96,21 +96,21 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 
 	scheduleKind := src.ScheduleKind
 	scheduleExpr := src.ScheduleExpression
-		if req.ScheduleKind != nil {
-			scheduleKind = *req.ScheduleKind
+	if req.ScheduleKind != nil {
+		scheduleKind = *req.ScheduleKind
+	}
+	if req.ScheduleExpression != nil {
+		scheduleExpr = req.ScheduleExpression
+	}
+	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
+		if !validScheduleKind(scheduleKind) {
+			writeError(w, http.StatusUnprocessableEntity, "invalid schedule kind")
+			return
 		}
-		if req.ScheduleExpression != nil {
-			scheduleExpr = req.ScheduleExpression
-		}
-		if req.ScheduleKind != nil || req.ScheduleExpression != nil {
-			if !validScheduleKind(scheduleKind) {
-				writeError(w, http.StatusUnprocessableEntity, "invalid schedule kind")
+		if scheduleKind == "interval" && scheduleExpr != nil {
+			if _, err := parsePositiveDuration(*scheduleExpr); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "invalid schedule expression")
 				return
-			}
-			if scheduleKind == "interval" && scheduleExpr != nil {
-				if _, err := parsePositiveDuration(*scheduleExpr); err != nil {
-					writeError(w, http.StatusUnprocessableEntity, "invalid schedule expression")
-					return
 			}
 		}
 	}
