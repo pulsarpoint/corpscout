@@ -26,7 +26,12 @@ class BrregAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict | None = None,
     ) -> CrawlResponse:
+        _cfg = config or {}
+        api_url = _cfg.get("api_url") or self.endpoint
+        page_size = int(_cfg.get("page_size") or self.page_size)
+
         # cursor = "YYYY-MM-DD,N" (date bucket + 0-indexed page within bucket)
         # or None (start from beginning)
         # Legacy integer cursors (page numbers) are reset to the beginning.
@@ -44,14 +49,14 @@ class BrregAdapter(SourceAdapter):
 
         params: dict[str, Any] = {
             "page": str(page_offset),
-            "size": str(self.page_size),
+            "size": str(page_size),
             "sort": "registreringsdatoEnhetsregisteret,asc",
         }
         if date_cursor:
             params["fraRegistreringsdatoEnhetsregisteret"] = date_cursor
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            resp = await client.get(api_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 
