@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Ban, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "~/lib/api";
+import { api, errorMessage } from "~/lib/api";
 import { pgrest } from "~/lib/pgrest";
 import { formatDate } from "~/lib/utils";
 import type {
@@ -42,6 +42,7 @@ export function RawInputSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [action, setAction] = useState<"retry" | "ignore" | null>(null);
+  const retryOnlyResetsStatus = source.name === "ai_company_profile" || source.name === "domain_discovery";
 
   useEffect(() => {
     if (!open || !row) {
@@ -98,8 +99,11 @@ export function RawInputSheet({
       }
       onChanged();
       onOpenChange(false);
-    } catch {
-      toast.error(nextAction === "retry" ? "Failed to retry raw input." : "Failed to ignore raw input.");
+    } catch (err) {
+      toast.error(errorMessage(
+        err,
+        nextAction === "retry" ? "Failed to retry raw input." : "Failed to ignore raw input.",
+      ));
     } finally {
       setAction(null);
     }
@@ -145,6 +149,13 @@ export function RawInputSheet({
                 Ignore
               </Button>
             </div>
+            {retryOnlyResetsStatus && (
+              <Alert>
+                <AlertDescription>
+                  Retry resets this raw input to pending. No processor job is queued for this source yet.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {error && (
               <Alert variant="destructive">

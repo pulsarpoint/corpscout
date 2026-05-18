@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "~/lib/api";
+import { api, errorMessage } from "~/lib/api";
 import type { DataSource } from "~/types/api";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -68,8 +68,8 @@ export default function SourceDetailPage() {
       await api.patchSource(sourceName, patch);
       await refreshSource(sourceName);
       toast.success("Source updated.");
-    } catch {
-      toast.error("Failed to update source.");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to update source."));
     } finally {
       if (latestNameRef.current === sourceName) setSaving(false);
     }
@@ -83,8 +83,8 @@ export default function SourceDetailPage() {
     try {
       await api.triggerSource(sourceName);
       toast.success(`${sourceName} pull queued.`);
-    } catch {
-      toast.error(`Failed to trigger ${sourceName}.`);
+    } catch (err) {
+      toast.error(errorMessage(err, `Failed to trigger ${sourceName}.`));
     } finally {
       if (latestNameRef.current === sourceName) setTriggering(false);
     }

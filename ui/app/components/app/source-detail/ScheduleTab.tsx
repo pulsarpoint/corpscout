@@ -49,6 +49,7 @@ export function ScheduleTab({
 }: ScheduleTabProps) {
   const [duration, setDuration] = useState(source.schedule_expression ?? "");
   const [durationError, setDurationError] = useState<string>();
+  const isIntervalSchedule = source.schedule_kind === "interval";
 
   useEffect(() => {
     setDuration(source.schedule_expression ?? "");
@@ -58,12 +59,13 @@ export function ScheduleTab({
   const nextRun = useMemo(() => nextRunText(source), [source]);
 
   async function saveDuration() {
+    if (!isIntervalSchedule) return;
+
     const error = validateDuration(duration);
     setDurationError(error);
     if (error) return;
 
     await onPatch({
-      schedule_kind: "interval",
       schedule_expression: duration.trim(),
     });
   }
@@ -104,31 +106,37 @@ export function ScheduleTab({
             <CardTitle>Schedule</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium" htmlFor="schedule-duration">
-                Duration
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="schedule-duration"
-                  value={duration}
-                  onChange={(event) => {
-                    setDuration(event.target.value);
-                    setDurationError(undefined);
-                  }}
-                  placeholder="24h"
-                  aria-invalid={Boolean(durationError)}
-                />
-                <Button disabled={saving} onClick={saveDuration}>
-                  <Save className="size-4" />
-                  Save
-                </Button>
+            {isIntervalSchedule ? (
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="schedule-duration">
+                  Duration
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="schedule-duration"
+                    value={duration}
+                    onChange={(event) => {
+                      setDuration(event.target.value);
+                      setDurationError(undefined);
+                    }}
+                    placeholder="24h"
+                    aria-invalid={Boolean(durationError)}
+                  />
+                  <Button disabled={saving} onClick={saveDuration}>
+                    <Save className="size-4" />
+                    Save
+                  </Button>
+                </div>
+                {durationError && <p className="text-sm text-destructive">{durationError}</p>}
+                <p className="text-sm text-muted-foreground">
+                  MVP scheduling uses Go duration strings such as 24h, 12h, or 30m.
+                </p>
               </div>
-              {durationError && <p className="text-sm text-destructive">{durationError}</p>}
-              <p className="text-sm text-muted-foreground">
-                MVP scheduling uses Go duration strings such as 24h, 12h, or 30m.
-              </p>
-            </div>
+            ) : (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                This source uses {source.schedule_kind} scheduling. Duration editing is not available.
+              </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>

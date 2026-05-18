@@ -15,9 +15,45 @@ import type {
 
 const BASE = "/api/v1";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+async function responseError(res: Response): Promise<ApiError> {
+  const fallback = `${res.status} ${res.statusText}`;
+  const contentType = res.headers.get("Content-Type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const body = await res.json() as { error?: unknown; message?: unknown };
+      const message = typeof body.error === "string"
+        ? body.error
+        : typeof body.message === "string"
+          ? body.message
+          : fallback;
+      return new ApiError(res.status, message);
+    } catch {
+      return new ApiError(res.status, fallback);
+    }
+  }
+
+  const text = await res.text();
+  return new ApiError(res.status, text.trim() || fallback);
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) throw await responseError(res);
   return res.json() as Promise<T>;
 }
 
@@ -27,7 +63,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) throw await responseError(res);
   return res.json() as Promise<T>;
 }
 
@@ -37,7 +73,7 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) throw await responseError(res);
   return res.json() as Promise<T>;
 }
 
