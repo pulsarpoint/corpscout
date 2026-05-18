@@ -18,6 +18,15 @@ type stubQuerier struct {
 	mock.Mock
 }
 
+func (s *stubQuerier) hasExpectation(method string) bool {
+	for _, call := range s.ExpectedCalls {
+		if call.Method == method {
+			return true
+		}
+	}
+	return false
+}
+
 // --- methods used by test cases (use mock.Called) ---
 
 func (s *stubQuerier) ListCompanies(ctx context.Context, arg db.ListCompaniesParams) ([]db.Company, error) {
@@ -130,6 +139,9 @@ func (s *stubQuerier) UpdateSourceSchedule(ctx context.Context, arg db.UpdateSou
 }
 
 func (s *stubQuerier) UpdateSourceScheduleEnabled(ctx context.Context, arg db.UpdateSourceScheduleEnabledParams) error {
+	if !s.hasExpectation("UpdateSourceScheduleEnabled") {
+		return nil
+	}
 	ret := s.Called(ctx, arg)
 	return ret.Error(0)
 }
@@ -410,42 +422,72 @@ func (s *stubQuerier) MarkBrregRawInputFailed(ctx context.Context, arg db.MarkBr
 	return nil
 }
 func (s *stubQuerier) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryGLEIFRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreGLEIFRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryCompaniesHouseRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreCompaniesHouseRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryBrregRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreBrregRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryAIRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreAIRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryDomainDiscoveryRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 func (s *stubQuerier) IgnoreDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreDomainDiscoveryRawInput") {
+		return uuid.UUID{}, nil
+	}
 	ret := s.Called(ctx, id)
 	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
