@@ -26,7 +26,7 @@ class BrregAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
-        config: dict | None = None,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         _cfg = config or {}
         api_url = _cfg.get("api_url") or self.endpoint
