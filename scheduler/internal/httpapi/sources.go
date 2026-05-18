@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-chi/chi/v5"
+	pgx "github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -75,62 +77,40 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Enabled != nil {
-		if err := h.db.UpdateSourceEnabled(r.Context(), db.UpdateSourceEnabledParams{
-			Name: name, Enabled: *req.Enabled,
-		}); err != nil {
-			slog.Error("update source enabled", "name", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-	}
-	if req.ScheduleEnabled != nil {
-		if err := h.db.UpdateSourceScheduleEnabled(r.Context(), db.UpdateSourceScheduleEnabledParams{
-			Name: name, ScheduleEnabled: *req.ScheduleEnabled,
-		}); err != nil {
-			slog.Error("update source schedule enabled", "name", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-	}
-	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
-		src, err := h.db.GetSourceByName(r.Context(), name)
+
+	ctx := r.Context()
+	needsCurrentSource := req.ScheduleKind != nil || req.ScheduleExpression != nil || req.Config != nil
+	var src db.DataSource
+	if needsCurrentSource {
+		var err error
+		src, err = h.db.GetSourceByName(ctx, name)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "source not found")
 			return
 		}
-		kind := src.ScheduleKind
-		expr := src.ScheduleExpression
-		if req.ScheduleKind != nil {
-			kind = *req.ScheduleKind
-		}
-		if req.ScheduleExpression != nil {
-			expr = req.ScheduleExpression
-		}
-		if kind == "interval" && expr != nil {
-			if _, err := time.ParseDuration(*expr); err != nil {
+	}
+
+	scheduleKind := src.ScheduleKind
+	scheduleExpr := src.ScheduleExpression
+	if req.ScheduleKind != nil {
+		scheduleKind = *req.ScheduleKind
+	}
+	if req.ScheduleExpression != nil {
+		scheduleExpr = req.ScheduleExpression
+	}
+	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
+		if scheduleKind == "interval" && scheduleExpr != nil {
+			if _, err := parsePositiveDuration(*scheduleExpr); err != nil {
 				writeError(w, http.StatusUnprocessableEntity, "invalid schedule expression")
 				return
 			}
 		}
-		if err := h.db.UpdateSourceSchedule(r.Context(), db.UpdateSourceScheduleParams{
-			Name:               name,
-			ScheduleKind:       kind,
-			ScheduleExpression: expr,
-		}); err != nil {
-			slog.Error("update source schedule", "name", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
 	}
+
+	var mergedConfig json.RawMessage
 	if req.Config != nil {
 		if err := validateConfigPatch(req.Config); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "invalid config patch")
-			return
-		}
-		src, err := h.db.GetSourceByName(r.Context(), name)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "source not found")
 			return
 		}
 		config, err := mergeConfig(src.Config, req.Config)
@@ -139,14 +119,77 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		if err := h.db.UpdateSourceConfig(r.Context(), db.UpdateSourceConfigParams{
+		mergedConfig = config
+	}
+
+	writeDB := h.db
+	hasWrites := req.Enabled != nil || req.ScheduleEnabled != nil || req.ScheduleKind != nil || req.ScheduleExpression != nil || req.Config != nil
+	var tx pgx.Tx
+	if h.pool != nil && hasWrites {
+		var err error
+		tx, err = h.pool.Begin(ctx)
+		if err != nil {
+			slog.Error("begin source patch transaction", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		defer func() {
+			if tx == nil {
+				return
+			}
+			if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+				slog.Error("rollback source patch transaction", "name", name, "error", err)
+			}
+		}()
+		writeDB = db.New(tx)
+	}
+
+	if req.Enabled != nil {
+		if err := writeDB.UpdateSourceEnabled(ctx, db.UpdateSourceEnabledParams{
+			Name: name, Enabled: *req.Enabled,
+		}); err != nil {
+			slog.Error("update source enabled", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+	if req.ScheduleEnabled != nil {
+		if err := writeDB.UpdateSourceScheduleEnabled(ctx, db.UpdateSourceScheduleEnabledParams{
+			Name: name, ScheduleEnabled: *req.ScheduleEnabled,
+		}); err != nil {
+			slog.Error("update source schedule enabled", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
+		if err := writeDB.UpdateSourceSchedule(ctx, db.UpdateSourceScheduleParams{
+			Name:               name,
+			ScheduleKind:       scheduleKind,
+			ScheduleExpression: scheduleExpr,
+		}); err != nil {
+			slog.Error("update source schedule", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+	if req.Config != nil {
+		if err := writeDB.UpdateSourceConfig(ctx, db.UpdateSourceConfigParams{
 			Name:   name,
-			Config: config,
+			Config: mergedConfig,
 		}); err != nil {
 			slog.Error("update source config", "name", name, "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			slog.Error("commit source patch transaction", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		tx = nil
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -159,36 +202,51 @@ func validateConfigPatch(config map[string]json.RawMessage) error {
 		if !json.Valid(value) {
 			return errors.Newf("invalid json for config key %q", key)
 		}
-		if err := validateNestedConfigKeys(key, value); err != nil {
+		var decoded any
+		dec := json.NewDecoder(bytes.NewReader(value))
+		dec.UseNumber()
+		if err := dec.Decode(&decoded); err != nil {
+			return errors.Wrapf(err, "decode config key %q", key)
+		}
+		if err := validateNestedConfigKeys(key, decoded); err != nil {
 			return errors.Wrapf(err, "validate config key %q", key)
 		}
 	}
 	return nil
 }
 
-func validateNestedConfigKeys(path string, value json.RawMessage) error {
-	trimmed := bytes.TrimSpace(value)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return nil
-	}
-
-	var nested map[string]json.RawMessage
-	if err := json.Unmarshal(trimmed, &nested); err != nil {
-		return errors.Wrap(err, "decode nested config object")
-	}
-	for key, nestedValue := range nested {
-		nestedPath := path + "." + key
-		if forbiddenConfigKey.MatchString(key) {
-			return errors.Newf("forbidden nested config key %q", nestedPath)
+func validateNestedConfigKeys(path string, value any) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, nestedValue := range typed {
+			nestedPath := path + "." + key
+			if forbiddenConfigKey.MatchString(key) {
+				return errors.Newf("forbidden nested config key %q", nestedPath)
+			}
+			if err := validateNestedConfigKeys(nestedPath, nestedValue); err != nil {
+				return errors.Wrapf(err, "validate nested config key %q", nestedPath)
+			}
 		}
-		if !json.Valid(nestedValue) {
-			return errors.Newf("invalid json for nested config key %q", nestedPath)
-		}
-		if err := validateNestedConfigKeys(nestedPath, nestedValue); err != nil {
-			return errors.Wrapf(err, "validate nested config key %q", nestedPath)
+	case []any:
+		for i, nestedValue := range typed {
+			nestedPath := fmt.Sprintf("%s[%d]", path, i)
+			if err := validateNestedConfigKeys(nestedPath, nestedValue); err != nil {
+				return errors.Wrapf(err, "validate nested config item %q", nestedPath)
+			}
 		}
 	}
 	return nil
+}
+
+func parsePositiveDuration(expr string) (time.Duration, error) {
+	duration, err := time.ParseDuration(expr)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse schedule expression")
+	}
+	if duration <= 0 {
+		return 0, errors.Newf("schedule expression must be positive")
+	}
+	return duration, nil
 }
 
 func mergeConfig(existing json.RawMessage, patch map[string]json.RawMessage) (json.RawMessage, error) {

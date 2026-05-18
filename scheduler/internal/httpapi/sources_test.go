@@ -27,6 +27,16 @@ func (s *sourceConfigStubQuerier) UpdateSourceConfig(_ context.Context, arg db.U
 	return nil
 }
 
+type sourcePatchWriteRecorder struct {
+	stubQuerier
+	updateSourceEnabledCalled bool
+}
+
+func (s *sourcePatchWriteRecorder) UpdateSourceEnabled(_ context.Context, _ db.UpdateSourceEnabledParams) error {
+	s.updateSourceEnabledCalled = true
+	return nil
+}
+
 func TestListSources_returns_all(t *testing.T) {
 	q := &stubQuerier{}
 
@@ -135,6 +145,50 @@ func TestPatchSource_invalid_schedule_expression_returns_422(t *testing.T) {
 	q.AssertExpectations(t)
 }
 
+func TestPatchSource_non_positive_schedule_expression_returns_422(t *testing.T) {
+	for _, expr := range []string{"0s", "-1h"} {
+		t.Run(expr, func(t *testing.T) {
+			q := &stubQuerier{}
+
+			q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+				Name:         "gleif",
+				ScheduleKind: "interval",
+			}, nil)
+			q.On("UpdateSourceSchedule", mock.Anything, mock.Anything).Return(nil)
+
+			r := routerForHandlers(q)
+
+			body := strings.NewReader(`{"schedule_expression": "` + expr + `"}`)
+			req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		})
+	}
+}
+
+func TestPatchSource_validates_all_fields_before_writing(t *testing.T) {
+	q := &sourcePatchWriteRecorder{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:   "gleif",
+		Config: json.RawMessage(`{}`),
+	}, nil)
+
+	r := routerFor(newTestHandlers(q))
+
+	body := strings.NewReader(`{"enabled": false, "config": {"api_token": "secret"}}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	require.False(t, q.updateSourceEnabledCalled)
+}
+
 func TestPatchSource_config_merge_preserves_json_numeric_type(t *testing.T) {
 	q := &sourceConfigStubQuerier{}
 
@@ -162,6 +216,11 @@ func TestPatchSource_config_merge_preserves_json_numeric_type(t *testing.T) {
 func TestPatchSource_config_secret_key_returns_422(t *testing.T) {
 	q := &stubQuerier{}
 
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:   "gleif",
+		Config: json.RawMessage(`{}`),
+	}, nil)
+
 	r := routerForHandlers(q)
 
 	body := strings.NewReader(`{"config":{"api_token":"secret"}}`)
@@ -171,6 +230,26 @@ func TestPatchSource_config_secret_key_returns_422(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+}
+
+func TestPatchSource_config_secret_key_inside_array_returns_422(t *testing.T) {
+	q := &sourceConfigStubQuerier{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:   "gleif",
+		Config: json.RawMessage(`{}`),
+	}, nil)
+
+	r := routerFor(newTestHandlers(q))
+
+	body := strings.NewReader(`{"config":{"providers":[{"api_token":"secret"}]}}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	require.Nil(t, q.updateSourceConfigParams)
 }
 
 func TestTriggerSource_returns_404_for_unknown(t *testing.T) {

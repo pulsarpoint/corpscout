@@ -146,12 +146,23 @@ func sourceScheduleDue(src db.DataSource, now time.Time) (bool, error) {
 	if src.ScheduleExpression == nil {
 		return false, nil
 	}
-	interval, err := time.ParseDuration(*src.ScheduleExpression)
+	interval, err := parsePositiveDuration(*src.ScheduleExpression)
 	if err != nil {
-		return false, errors.Wrap(err, "parse schedule expression")
+		return false, err
 	}
 	if src.LastStartedAt.Valid && now.Before(src.LastStartedAt.Time.Add(interval)) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func parsePositiveDuration(expr string) (time.Duration, error) {
+	duration, err := time.ParseDuration(expr)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse schedule expression")
+	}
+	if duration <= 0 {
+		return 0, errors.Newf("schedule expression must be positive")
+	}
+	return duration, nil
 }

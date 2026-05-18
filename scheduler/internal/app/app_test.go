@@ -73,3 +73,21 @@ func TestSourceScheduleDue_invalidDurationReturnsErrorAndFalse(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, due)
 }
+
+func TestSourceScheduleDue_nonPositiveDurationReturnsErrorAndFalse(t *testing.T) {
+	now := time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC)
+
+	for _, expr := range []string{"0s", "-1h"} {
+		t.Run(expr, func(t *testing.T) {
+			due, err := sourceScheduleDue(db.DataSource{
+				Enabled:            true,
+				ScheduleEnabled:    true,
+				ScheduleKind:       "interval",
+				ScheduleExpression: &expr,
+			}, now)
+
+			require.Error(t, err)
+			require.False(t, due)
+		})
+	}
+}
