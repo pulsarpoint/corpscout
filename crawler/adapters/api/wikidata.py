@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import httpx
 
@@ -35,6 +35,7 @@ class WikidataAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         offset = int(cursor) if cursor is not None and cursor != "" else 0
         # Request page_size + 1 so we can detect whether more pages exist

@@ -37,6 +37,7 @@ class GLEIFAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         # GLEIF only supports cursor-based pagination (page-based stops at 10,000 results).
         # cursor=None or a legacy page-number string → start from the beginning with cursor=*.

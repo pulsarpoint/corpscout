@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from ..base import CrawlResponse, SourceAdapter
 
@@ -30,6 +30,7 @@ class Crawl4AIGenericAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         if not self.is_configured():
             raise Crawl4AIUnconfiguredError(

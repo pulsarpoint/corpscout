@@ -102,6 +102,7 @@ class SourceAdapter(ABC):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         """Fetch one page of records. Must be deterministic for a given input."""
         raise NotImplementedError

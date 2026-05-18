@@ -30,6 +30,7 @@ class OpenCorporatesAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
         api_key = (os.getenv("CRAWLER_OPENCORPORATES_API_KEY") or "").strip()
         if not api_key or api_key.startswith("#"):

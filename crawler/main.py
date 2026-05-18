@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 import logging
 
@@ -45,6 +46,7 @@ class CrawlRequest(BaseModel):
     since: datetime | None = None
     cursor: str | None = None
     page: int = 1
+    config: dict[str, Any] | None = None
 
 
 class ResolveRequest(BaseModel):
@@ -95,7 +97,7 @@ async def crawl(source_name: str, req: CrawlRequest) -> CrawlResponse:
     if adapter is None:
         raise HTTPException(status_code=404, detail=f"source not found: {source_name}")
     try:
-        return await adapter.crawl(req.since, req.cursor, req.page)
+        return await adapter.crawl(req.since, req.cursor, req.page, req.config)
     except Crawl4AIUnconfiguredError as e:
         raise HTTPException(status_code=501, detail=str(e))
     except RuntimeError as e:
