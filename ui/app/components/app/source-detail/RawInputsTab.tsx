@@ -108,6 +108,8 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
 
     setLoading(true);
     setError(undefined);
+    setRows([]);
+    setTotal(0);
 
     pgrest<SourceRawInput>("v_source_raw_inputs", {
       source_name: `eq.${source.name}`,
@@ -118,11 +120,21 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
     })
       .then((result) => {
         if (cancelled) return;
+        const nextPageCount = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+        if (page > nextPageCount) {
+          setTotal(result.total);
+          setPage(nextPageCount);
+          return;
+        }
         setRows(result.data);
         setTotal(result.total);
       })
       .catch(() => {
-        if (!cancelled) setError("Failed to load raw inputs.");
+        if (!cancelled) {
+          setRows([]);
+          setTotal(0);
+          setError("Failed to load raw inputs.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
