@@ -36,10 +36,16 @@ class CompaniesHouseAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
-        api_key = os.getenv("COMPANIES_HOUSE_API_KEY")
+        _cfg = config or {}
+        api_url = _cfg.get("api_url") or self.endpoint
+        page_size = int(_cfg.get("page_size") or self.page_size)
+        auth_env = _cfg.get("auth_env") or "COMPANIES_HOUSE_API_KEY"
+
+        api_key = os.getenv(auth_env)
         if not api_key:
-            raise RuntimeError("COMPANIES_HOUSE_API_KEY is not set — API requires HTTP Basic auth")
+            raise RuntimeError(f"{auth_env} is not set — API requires HTTP Basic auth")
 
         # cursor = "YYYY-MM-DD,N" (incorporated_from date + 0-indexed page within bucket)
         # or None / legacy integer → start from page 0 with no date filter.
@@ -54,9 +60,9 @@ class CompaniesHouseAdapter(SourceAdapter):
             except ValueError:
                 page_offset = 0
 
-        start_index = page_offset * self.page_size
+        start_index = page_offset * page_size
         params: dict[str, Any] = {
-            "size": str(self.page_size),
+            "size": str(page_size),
             "start_index": str(start_index),
             "company_status": "active",
         }
@@ -64,7 +70,7 @@ class CompaniesHouseAdapter(SourceAdapter):
             params["incorporated_from"] = date_cursor
 
         async with httpx.AsyncClient(timeout=30.0, auth=(api_key, "")) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            resp = await client.get(api_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 
@@ -114,7 +120,7 @@ class CompaniesHouseAdapter(SourceAdapter):
 
         # CH API never returns total_results; use `hits` for the total count.
         total = int(data.get("hits") or 0)
-        has_more = len(items) == self.page_size
+        has_more = len(items) == page_size
 
         next_cursor: str | None = None
         if has_more:
