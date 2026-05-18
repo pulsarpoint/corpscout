@@ -1,0 +1,72 @@
+<h2>Schedule Tab — Detailed View</h2>
+<p class="subtitle">Full schedule configuration, editing, and enable/disable control</p>
+
+<div class="mockup" style="max-width:800px;margin:0 auto;">
+  <div class="mockup-header">sources / gleif — Schedule tab</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;padding:0;">
+
+    <!-- Source enabled/disabled banner -->
+    <div style="padding:10px 20px;background:#14532d;border-bottom:1px solid #166534;display:flex;justify-content:space-between;align-items:center;">
+      <div style="color:#86efac;font-size:11px;">● Source is enabled — scheduled runs are active</div>
+      <span style="background:#374151;color:#ef4444;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">Disable source</span>
+    </div>
+
+    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+      <!-- Schedule kind + expression -->
+      <div style="background:#1e293b;border-radius:6px;padding:14px;grid-column:1/-1;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:10px;">SCHEDULE CONFIGURATION</div>
+        <div style="display:grid;grid-template-columns:140px 1fr 140px 1fr;gap:10px;align-items:center;">
+          <span style="font-size:10px;color:#94a3b8;">Schedule kind</span>
+          <div style="background:#0f172a;border:1px solid #334155;border-radius:4px;padding:5px 8px;color:#cbd5e1;font-size:11px;">periodic</div>
+          <span style="font-size:10px;color:#94a3b8;">Expression</span>
+          <div style="background:#0f172a;border:1px solid #4f46e5;border-radius:4px;padding:5px 8px;color:#cbd5e1;font-size:11px;">every 12h</div>
+        </div>
+        <div style="margin-top:10px;font-size:9px;color:#475569;">
+          Supported: <code>every Nh</code> (periodic) &nbsp;·&nbsp; <code>0 */12 * * *</code> (cron) &nbsp;·&nbsp; Changes take effect on the next scheduled enqueue.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <span style="background:#4f46e5;color:#fff;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">Save schedule</span>
+          <span style="background:#374151;color:#d1d5db;padding:3px 10px;border-radius:4px;font-size:10px;cursor:pointer;">Reset</span>
+        </div>
+      </div>
+
+      <!-- Next run -->
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">NEXT SCHEDULED RUN</div>
+        <div style="color:#cbd5e1;margin-bottom:4px;">in 2h 14m</div>
+        <div style="font-size:10px;color:#64748b;">2026-05-18 18:00 UTC</div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <span style="background:#374151;color:#d1d5db;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer;">Skip next run</span>
+          <span style="background:#374151;color:#ef4444;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer;">Cancel queued job</span>
+        </div>
+      </div>
+
+      <!-- Last run -->
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">LAST RUN</div>
+        <div style="color:#22c55e;margin-bottom:4px;">✓ Succeeded</div>
+        <div style="font-size:10px;color:#64748b;margin-bottom:4px;">2026-05-18 06:00 UTC</div>
+        <div style="font-size:10px;color:#94a3b8;">14,832 seen · 312 new · 91 updated</div>
+      </div>
+
+      <!-- Manual trigger -->
+      <div style="background:#1e293b;border-radius:6px;padding:14px;grid-column:1/-1;border:1px solid #1e3a5f;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">MANUAL TRIGGER</div>
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:10px;">Run immediately outside the schedule. Does not affect the next scheduled run time.</div>
+        <span style="background:#0369a1;color:#fff;padding:4px 12px;border-radius:4px;font-size:10px;cursor:pointer;">Trigger now</span>
+      </div>
+
+    </div>
+
+    <!-- Disabled state example -->
+    <div style="margin:0 20px 20px;background:#1e293b;border-radius:6px;padding:14px;border:1px dashed #334155;">
+      <div style="font-size:10px;color:#64748b;margin-bottom:6px;">WHEN DISABLED — banner changes to:</div>
+      <div style="background:#1c1917;border:1px solid #44403c;border-radius:4px;padding:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#fbbf24;font-size:10px;">⚠ Source is disabled — no scheduled runs will be enqueued</div>
+        <span style="background:#374151;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:10px;">Enable source</span>
+      </div>
+    </div>
+
+  </div>
+</div>

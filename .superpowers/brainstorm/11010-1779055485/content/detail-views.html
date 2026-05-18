@@ -1,0 +1,107 @@
+<h2>Section 4 — Drawer &amp; Config Tab Detail</h2>
+<p class="subtitle">Sheet drawer for raw input rows · Config tab editor · Logs tab</p>
+
+<div class="split" style="align-items:flex-start;gap:20px;">
+
+  <!-- Sheet drawer -->
+  <div class="mockup" style="flex:1.4;">
+    <div class="mockup-header">Raw Input — Sheet Drawer (2× width)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:11px;background:#0f172a;color:#94a3b8;padding:0;">
+      <div style="padding:14px 16px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="color:#f1f5f9;font-size:13px;font-weight:600;">LEI123456789</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px;">gleif_company_raw_inputs · <span style="color:#ef4444;">failed</span> · 3 attempts</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <span style="background:#1d4ed8;color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;">Retry</span>
+          <span style="background:#374151;color:#d1d5db;padding:3px 8px;border-radius:4px;font-size:10px;">Ignore</span>
+        </div>
+      </div>
+
+      <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:#1e293b;border-radius:4px;padding:8px;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;">FIRST SEEN</div>
+          <div style="color:#cbd5e1;">2026-05-17 04:12 UTC</div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:8px;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;">LAST SEEN</div>
+          <div style="color:#cbd5e1;">2026-05-17 05:44 UTC</div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:8px;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;">PAYLOAD HASH</div>
+          <div style="color:#cbd5e1;font-family:monospace;font-size:10px;">a3f2c1d8…</div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:8px;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;">SUGGESTION</div>
+          <div style="color:#64748b;">None produced</div>
+        </div>
+      </div>
+
+      <div style="padding:0 16px 8px;">
+        <div style="font-size:9px;color:#64748b;margin-bottom:6px;">LAST ERROR</div>
+        <div style="background:#2d1b1b;border:1px solid #7f1d1d;border-radius:4px;padding:8px;color:#fca5a5;font-size:10px;">connection timeout after 30s: dial tcp 185.0.0.1:443</div>
+      </div>
+
+      <div style="padding:0 16px 12px;">
+        <div style="font-size:9px;color:#64748b;margin-bottom:6px;">RAW PAYLOAD</div>
+        <div style="background:#1e293b;border-radius:4px;padding:10px;font-size:10px;color:#86efac;line-height:1.6;">
+          {<br/>
+          &nbsp;&nbsp;<span style="color:#7dd3fc;">"lei"</span>: <span style="color:#fde68a;">"LEI123456789"</span>,<br/>
+          &nbsp;&nbsp;<span style="color:#7dd3fc;">"legalName"</span>: <span style="color:#fde68a;">"Example Corp GmbH"</span>,<br/>
+          &nbsp;&nbsp;<span style="color:#7dd3fc;">"registration_status"</span>: <span style="color:#fde68a;">"ISSUED"</span>,<br/>
+          &nbsp;&nbsp;<span style="color:#7dd3fc;">"headquarters_country_code"</span>: <span style="color:#fde68a;">"DE"</span>,<br/>
+          &nbsp;&nbsp;<span style="color:#7dd3fc;">"direct_parent_lei"</span>: <span style="color:#94a3b8;">null</span><br/>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config tab + Logs tab -->
+  <div style="flex:1;display:flex;flex-direction:column;gap:16px;">
+    <div class="mockup">
+      <div class="mockup-header">Config Tab</div>
+      <div class="mockup-body" style="font-family:monospace;font-size:11px;background:#0f172a;color:#94a3b8;padding:14px 16px;">
+        <div style="font-size:9px;color:#64748b;margin-bottom:10px;">Editable config fields stored in data_sources.config (JSONB). API keys stay in environment variables.</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;">
+            <span style="font-size:10px;color:#94a3b8;">base_url</span>
+            <div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:5px 8px;color:#cbd5e1;font-size:10px;">https://api.gleif.org/api/v1</div>
+          </div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;">
+            <span style="font-size:10px;color:#94a3b8;">rate_limit_rps</span>
+            <div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:5px 8px;color:#cbd5e1;font-size:10px;">5</div>
+          </div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;">
+            <span style="font-size:10px;color:#94a3b8;">page_size</span>
+            <div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:5px 8px;color:#cbd5e1;font-size:10px;">200</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <span style="background:#4f46e5;color:#fff;padding:3px 10px;border-radius:4px;font-size:10px;">Save config</span>
+          <span style="background:#374151;color:#d1d5db;padding:3px 10px;border-radius:4px;font-size:10px;">Reset</span>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:#475569;">Fields containing key / secret / token / password are rejected.</div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mockup-header">Logs Tab — Pull Run History</div>
+      <div class="mockup-body" style="font-family:monospace;font-size:11px;background:#0f172a;color:#94a3b8;padding:14px 16px;">
+        <div style="display:grid;grid-template-columns:100px 60px 60px 60px 1fr;gap:8px;font-size:9px;color:#475569;padding-bottom:6px;border-bottom:1px solid #1e293b;">
+          <span>STARTED</span><span>SEEN</span><span>NEW</span><span>UPDATED</span><span>RESULT</span>
+        </div>
+        <div style="display:grid;grid-template-columns:100px 60px 60px 60px 1fr;gap:8px;font-size:10px;padding:5px 0;border-bottom:1px solid #0f172a;">
+          <span>05-17 06:00</span><span>14,832</span><span style="color:#22c55e;">312</span><span>91</span><span style="color:#22c55e;">✓ ok</span>
+        </div>
+        <div style="display:grid;grid-template-columns:100px 60px 60px 60px 1fr;gap:8px;font-size:10px;padding:5px 0;border-bottom:1px solid #0f172a;">
+          <span>05-16 18:00</span><span>14,520</span><span style="color:#22c55e;">87</span><span>44</span><span style="color:#22c55e;">✓ ok</span>
+        </div>
+        <div style="display:grid;grid-template-columns:100px 60px 60px 60px 1fr;gap:8px;font-size:10px;padding:5px 0;">
+          <span>05-16 06:00</span><span>—</span><span>—</span><span>—</span><span style="color:#ef4444;">✗ 3 upsert errors</span>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:#475569;">Paginated · newest first · from /api/v1/pull-runs?source=gleif</div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,104 @@
+<h2>Source Detail Page Layout</h2>
+<p class="subtitle">Extended <code>sources_.$name.tsx</code> — proposed tab structure and content areas</p>
+
+<div class="mockup" style="max-width:900px;margin:0 auto;">
+  <div class="mockup-header">sources / gleif — Source Detail Dashboard</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;padding:0;">
+
+    <!-- Page header -->
+    <div style="padding:16px 20px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="color:#f1f5f9;font-size:16px;font-weight:600;">GLEIF</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">Global Legal Entity Identifier Foundation · api · <span style="color:#22c55e;">●</span> enabled</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <span style="background:#1e293b;color:#94a3b8;padding:4px 10px;border-radius:4px;font-size:11px;">Trigger now</span>
+        <span style="background:#1e293b;color:#ef4444;padding:4px 10px;border-radius:4px;font-size:11px;">Disable</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:1px solid #1e293b;padding:0 20px;">
+      <div style="padding:10px 16px;color:#6366f1;border-bottom:2px solid #6366f1;font-size:12px;">Schedule</div>
+      <div style="padding:10px 16px;font-size:12px;">Config</div>
+      <div style="padding:10px 16px;font-size:12px;">Logs</div>
+      <div style="padding:10px 16px;font-size:12px;">Raw Inputs</div>
+    </div>
+
+    <!-- Schedule tab content -->
+    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">CURRENT SCHEDULE</div>
+        <div style="color:#cbd5e1;margin-bottom:4px;">Every 12 hours</div>
+        <div style="font-size:10px;color:#64748b;font-family:monospace;">0 */12 * * *</div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <span style="background:#4f46e5;color:#fff;padding:3px 8px;border-radius:4px;font-size:10px;">Edit schedule</span>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">NEXT RUN</div>
+        <div style="color:#cbd5e1;margin-bottom:4px;">in 2h 14m</div>
+        <div style="font-size:10px;color:#64748b;">2026-05-17 18:00 UTC</div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <span style="background:#374151;color:#d1d5db;padding:3px 8px;border-radius:4px;font-size:10px;">Skip next run</span>
+          <span style="background:#374151;color:#ef4444;padding:3px 8px;border-radius:4px;font-size:10px;">Cancel queued</span>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">LAST RUN</div>
+        <div style="color:#22c55e;margin-bottom:4px;">✓ Succeeded</div>
+        <div style="font-size:10px;color:#64748b;">2026-05-17 06:00 UTC · 14,832 rows</div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:14px;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;">CONCURRENCY</div>
+        <div style="color:#cbd5e1;margin-bottom:4px;">5 workers</div>
+        <div style="font-size:10px;color:#64748b;">crawl_concurrency setting</div>
+      </div>
+    </div>
+
+    <!-- Hint for other tabs -->
+    <div style="padding:0 20px 16px;font-size:10px;color:#475569;">
+      Config tab → editable JSONB fields (base_url, rate_limit_rps, page_size…) &nbsp;|&nbsp;
+      Logs tab → pull run history table &nbsp;|&nbsp;
+      Raw Inputs → paginated table with live/archive sub-tabs + Sheet drawer
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top:24px;">
+  <h3>Raw Inputs tab — sub-tab structure</h3>
+  <div class="mockup" style="max-width:900px;margin:12px auto 0;">
+    <div class="mockup-header">Raw Inputs tab</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;padding:0;">
+
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:0;border-bottom:1px solid #1e293b;padding:0 20px;">
+        <div style="padding:8px 14px;color:#f59e0b;border-bottom:2px solid #f59e0b;font-size:11px;">Live Queue <span style="background:#f59e0b;color:#000;border-radius:10px;padding:1px 5px;font-size:9px;margin-left:4px;">23</span></div>
+        <div style="padding:8px 14px;font-size:11px;">Archive</div>
+      </div>
+
+      <!-- Table -->
+      <div style="padding:12px 20px;">
+        <div style="display:grid;grid-template-columns:80px 160px 100px 60px 1fr 90px;gap:8px;font-size:10px;color:#475569;padding-bottom:6px;border-bottom:1px solid #1e293b;">
+          <span>STATUS</span><span>NATIVE ID</span><span>FIRST SEEN</span><span>TRIES</span><span>ERROR</span><span>SUGGESTION</span>
+        </div>
+        <div style="display:grid;grid-template-columns:80px 160px 100px 60px 1fr 90px;gap:8px;font-size:10px;padding:6px 0;border-bottom:1px solid #0f172a;cursor:pointer;" title="click → opens Sheet drawer">
+          <span style="color:#ef4444;">● failed</span><span style="color:#cbd5e1;">LEI123456789</span><span>2026-05-17</span><span>3</span><span style="color:#ef4444;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">connection timeout</span><span style="color:#64748b;">—</span>
+        </div>
+        <div style="display:grid;grid-template-columns:80px 160px 100px 60px 1fr 90px;gap:8px;font-size:10px;padding:6px 0;border-bottom:1px solid #0f172a;">
+          <span style="color:#f59e0b;">● pending</span><span style="color:#cbd5e1;">LEI987654321</span><span>2026-05-17</span><span>0</span><span>—</span><span style="color:#64748b;">—</span>
+        </div>
+        <div style="display:grid;grid-template-columns:80px 160px 100px 60px 1fr 90px;gap:8px;font-size:10px;padding:6px 0;">
+          <span style="color:#3b82f6;">● processing</span><span style="color:#cbd5e1;">LEI555000111</span><span>2026-05-17</span><span>1</span><span>—</span><span style="color:#64748b;">—</span>
+        </div>
+      </div>
+
+      <!-- Sheet drawer hint -->
+      <div style="margin:0 20px 16px;background:#1e293b;border-radius:4px;padding:10px;font-size:10px;color:#64748b;">
+        ↳ Clicking any row opens a 2× wide shadcn Sheet with: full metadata · raw_payload (formatted JSON) · linked suggestion IDs · Retry / Ignore actions (for failed rows)
+      </div>
+
+    </div>
+  </div>
+</div>

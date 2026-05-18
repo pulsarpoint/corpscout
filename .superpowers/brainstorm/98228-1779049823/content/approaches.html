@@ -1,0 +1,93 @@
+<h2>Source Detail Page — Navigation Approach</h2>
+<p class="subtitle">Three ways to organise the four sections (Schedule · Config · Logs · Raw Inputs)</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;border-radius:6px;padding:12px;">
+        <div style="color:#64748b;margin-bottom:8px;">sources / gleif</div>
+        <div style="display:flex;gap:16px;border-bottom:1px solid #1e293b;padding-bottom:8px;margin-bottom:12px;">
+          <span style="color:#6366f1;border-bottom:2px solid #6366f1;padding-bottom:6px;">Schedule</span>
+          <span>Config</span>
+          <span>Logs</span>
+          <span>Raw Inputs</span>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:10px;">
+          <div style="color:#cbd5e1;margin-bottom:6px;">Next run: in 2h 14m</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <span style="background:#4f46e5;color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;">Skip next</span>
+            <span style="background:#374151;color:#d1d5db;padding:3px 8px;border-radius:4px;font-size:11px;">Disable</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Tabs on existing page <span style="font-size:11px;background:#4f46e5;color:#fff;padding:2px 6px;border-radius:4px;margin-left:4px;">Recommended</span></h3>
+      <p>Extend <code>sources_.$name.tsx</code> into a 4-tab page. Consistent with the rest of the UI (companies, jobs). Raw Inputs gets sub-tabs for Live / Archive.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Matches existing UI patterns</li><li>Single URL per source</li><li>Easiest to build</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Raw Inputs tab is heavier than others</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;border-radius:6px;padding:12px;">
+        <div style="color:#64748b;margin-bottom:8px;">sources / gleif</div>
+        <div style="display:flex;gap:0;">
+          <div style="width:110px;background:#1e293b;border-radius:4px 0 0 4px;padding:10px;font-size:11px;">
+            <div style="color:#6366f1;margin-bottom:8px;">▸ Schedule</div>
+            <div style="margin-bottom:8px;">▸ Config</div>
+            <div style="margin-bottom:8px;">▸ Logs</div>
+            <div>▸ Raw Inputs</div>
+          </div>
+          <div style="flex:1;background:#1e293b;border-radius:0 4px 4px 0;padding:10px;margin-left:1px;">
+            <div style="color:#cbd5e1;margin-bottom:4px;">Schedule</div>
+            <div style="font-size:10px;color:#64748b;">Next run: in 2h 14m<br/>Interval: every 12h</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Left sidebar nav</h3>
+      <p>Persistent sidebar within the source page. More space for content, familiar admin-panel feel. Each section has its own area.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>More horizontal space per section</li><li>Sections always visible in nav</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Different pattern from rest of UI</li><li>More complex layout</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:12px;background:#0f172a;color:#94a3b8;border-radius:6px;padding:12px;">
+        <div style="display:flex;gap:8px;margin-bottom:8px;font-size:11px;">
+          <span style="color:#64748b;">sources /</span>
+          <span style="color:#6366f1;">gleif</span>
+          <span style="color:#64748b;">/</span>
+          <span>schedule</span>
+          <span style="color:#64748b;">|</span>
+          <span>config</span>
+          <span style="color:#64748b;">|</span>
+          <span>logs</span>
+          <span style="color:#64748b;">|</span>
+          <span>inputs</span>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:10px;">
+          <div style="font-size:10px;color:#cbd5e1;">Each section is its own route.<br/>Deep-linkable URLs.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Separate sub-routes</h3>
+      <p>Each section becomes its own route: <code>/sources/gleif/schedule</code>, <code>/sources/gleif/config</code>, etc. Maximum separation, fully deep-linkable.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Clean isolation per section</li><li>Deep-linkable</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More routes/files to maintain</li><li>Context switches feel heavy</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
