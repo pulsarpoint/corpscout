@@ -11,6 +11,8 @@ import { SourceHeader } from "~/components/app/source-detail/SourceHeader";
 import { ScheduleTab } from "~/components/app/source-detail/ScheduleTab";
 import { ConfigTab } from "~/components/app/source-detail/ConfigTab";
 import { LogsTab } from "~/components/app/source-detail/LogsTab";
+import { RawInputsTab } from "~/components/app/source-detail/RawInputsTab";
+import { hasRawInputs } from "~/components/app/source-detail/sourceDetailUtils";
 
 type SourcePatch = Parameters<typeof api.patchSource>[1];
 
@@ -114,6 +116,7 @@ export default function SourceDetailPage() {
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="config">Config</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          {hasRawInputs(source) && <TabsTrigger value="raw-inputs">Raw Inputs</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="schedule">
@@ -131,6 +134,11 @@ export default function SourceDetailPage() {
         <TabsContent value="logs">
           <LogsTab sourceName={source.name} />
         </TabsContent>
+        {hasRawInputs(source) && (
+          <TabsContent value="raw-inputs">
+            <RawInputsTab source={source} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
