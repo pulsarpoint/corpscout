@@ -96,17 +96,21 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 
 	scheduleKind := src.ScheduleKind
 	scheduleExpr := src.ScheduleExpression
-	if req.ScheduleKind != nil {
-		scheduleKind = *req.ScheduleKind
-	}
-	if req.ScheduleExpression != nil {
-		scheduleExpr = req.ScheduleExpression
-	}
-	if req.ScheduleKind != nil || req.ScheduleExpression != nil {
-		if scheduleKind == "interval" && scheduleExpr != nil {
-			if _, err := parsePositiveDuration(*scheduleExpr); err != nil {
-				writeError(w, http.StatusUnprocessableEntity, "invalid schedule expression")
+		if req.ScheduleKind != nil {
+			scheduleKind = *req.ScheduleKind
+		}
+		if req.ScheduleExpression != nil {
+			scheduleExpr = req.ScheduleExpression
+		}
+		if req.ScheduleKind != nil || req.ScheduleExpression != nil {
+			if !validScheduleKind(scheduleKind) {
+				writeError(w, http.StatusUnprocessableEntity, "invalid schedule kind")
 				return
+			}
+			if scheduleKind == "interval" && scheduleExpr != nil {
+				if _, err := parsePositiveDuration(*scheduleExpr); err != nil {
+					writeError(w, http.StatusUnprocessableEntity, "invalid schedule expression")
+					return
 			}
 		}
 	}
@@ -239,6 +243,15 @@ func validateNestedConfigKeys(path string, value any) error {
 		}
 	}
 	return nil
+}
+
+func validScheduleKind(kind string) bool {
+	switch kind {
+	case "manual", "interval", "cron", "event":
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePositiveDuration(expr string) (time.Duration, error) {

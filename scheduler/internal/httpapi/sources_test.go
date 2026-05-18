@@ -196,6 +196,26 @@ func TestPatchSource_invalid_schedule_expression_returns_422(t *testing.T) {
 	q.AssertExpectations(t)
 }
 
+func TestPatchSource_invalid_schedule_kind_returns_422(t *testing.T) {
+	q := &stubQuerier{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:         "gleif",
+		ScheduleKind: "interval",
+	}, nil)
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{"schedule_kind": "daily"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	q.AssertExpectations(t)
+}
+
 func TestPatchSource_non_positive_schedule_expression_returns_422(t *testing.T) {
 	for _, expr := range []string{"0s", "-1h"} {
 		t.Run(expr, func(t *testing.T) {
