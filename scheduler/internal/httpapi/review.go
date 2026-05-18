@@ -52,8 +52,20 @@ func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	type reviewItem struct {
+		db.ListDomainsRow
+		Evidence json.RawMessage `json:"evidence"`
+	}
+	out := make([]reviewItem, len(items))
+	for i, it := range items {
+		ev := json.RawMessage(it.Evidence)
+		if len(ev) == 0 {
+			ev = json.RawMessage("null")
+		}
+		out[i] = reviewItem{ListDomainsRow: it, Evidence: ev}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": items, "total": total, "page": page, "limit": limit,
+		"items": out, "total": total, "page": page, "limit": limit,
 	})
 }
 
