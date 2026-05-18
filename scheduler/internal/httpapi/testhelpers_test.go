@@ -129,6 +129,11 @@ func (s *stubQuerier) UpdateSourceSchedule(ctx context.Context, arg db.UpdateSou
 	return ret.Error(0)
 }
 
+func (s *stubQuerier) UpdateSourceScheduleEnabled(ctx context.Context, arg db.UpdateSourceScheduleEnabledParams) error {
+	ret := s.Called(ctx, arg)
+	return ret.Error(0)
+}
+
 func (s *stubQuerier) UpdateSourceConfig(ctx context.Context, arg db.UpdateSourceConfigParams) error {
 	return nil
 }
@@ -403,6 +408,46 @@ func (s *stubQuerier) MarkBrregRawInputProcessed(ctx context.Context, id uuid.UU
 }
 func (s *stubQuerier) MarkBrregRawInputFailed(ctx context.Context, arg db.MarkBrregRawInputFailedParams) error {
 	return nil
+}
+func (s *stubQuerier) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
 }
 
 // Section suggestion stubs (new in Task 10)

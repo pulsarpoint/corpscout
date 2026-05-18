@@ -441,6 +441,7 @@ type DataSource struct {
 	ConsecutiveFailures  int32              `json:"consecutive_failures"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+	ScheduleEnabled      bool               `json:"schedule_enabled"`
 }
 
 type Domain struct {
@@ -747,4 +748,18 @@ type VResolvedEntity struct {
 	Website       *string   `json:"website"`
 	Status        string    `json:"status"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type VSourceRawInput struct {
+	ID                 uuid.UUID `json:"id"`
+	SourceName         string    `json:"source_name"`
+	SourceInputTable   string    `json:"source_input_table"`
+	SourceNativeID     string    `json:"source_native_id"`
+	ProcessingStatus   string    `json:"processing_status"`
+	ProcessingAttempts int32     `json:"processing_attempts"`
+	ProcessingError    *string   `json:"processing_error"`
+	FirstSeenAt        time.Time `json:"first_seen_at"`
+	LastSeenAt         time.Time `json:"last_seen_at"`
+	PayloadHash        string    `json:"payload_hash"`
+	HasSuggestion      bool      `json:"has_suggestion"`
 }
