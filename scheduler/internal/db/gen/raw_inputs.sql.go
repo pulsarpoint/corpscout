@@ -212,6 +212,86 @@ func (q *Queries) ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendi
 	return items, nil
 }
 
+const ignoreAIRawInput = `-- name: IgnoreAIRawInput :one
+UPDATE ai_company_profile_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreAIRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ignoreBrregRawInput = `-- name: IgnoreBrregRawInput :one
+UPDATE brreg_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreBrregRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ignoreCompaniesHouseRawInput = `-- name: IgnoreCompaniesHouseRawInput :one
+UPDATE companies_house_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreCompaniesHouseRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ignoreDomainDiscoveryRawInput = `-- name: IgnoreDomainDiscoveryRawInput :one
+UPDATE domain_discovery_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreDomainDiscoveryRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ignoreGLEIFRawInput = `-- name: IgnoreGLEIFRawInput :one
+UPDATE gleif_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreGLEIFRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const markBrregRawInputFailed = `-- name: MarkBrregRawInputFailed :exec
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'failed', processing_error = $2, updated_at = now()
@@ -291,6 +371,96 @@ WHERE id = $1
 func (q *Queries) MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markGLEIFRawInputProcessed, id)
 	return err
+}
+
+const retryAIRawInput = `-- name: RetryAIRawInput :one
+UPDATE ai_company_profile_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryAIRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const retryBrregRawInput = `-- name: RetryBrregRawInput :one
+UPDATE brreg_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryBrregRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const retryCompaniesHouseRawInput = `-- name: RetryCompaniesHouseRawInput :one
+UPDATE companies_house_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryCompaniesHouseRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const retryDomainDiscoveryRawInput = `-- name: RetryDomainDiscoveryRawInput :one
+UPDATE domain_discovery_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryDomainDiscoveryRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const retryGLEIFRawInput = `-- name: RetryGLEIFRawInput :one
+UPDATE gleif_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryGLEIFRawInput, id)
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertBrregRawInput = `-- name: UpsertBrregRawInput :one

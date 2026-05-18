@@ -13,7 +13,7 @@ import (
 )
 
 const getSourceByName = `-- name: GetSourceByName :one
-SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at FROM data_sources WHERE name = $1
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled FROM data_sources WHERE name = $1
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource, error) {
@@ -42,12 +42,13 @@ func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource,
 		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScheduleEnabled,
 	)
 	return i, err
 }
 
 const listSources = `-- name: ListSources :many
-SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at FROM data_sources ORDER BY name
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled FROM data_sources ORDER BY name
 `
 
 func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
@@ -82,6 +83,7 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 			&i.ConsecutiveFailures,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ScheduleEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -192,5 +194,19 @@ type UpdateSourceScheduleParams struct {
 
 func (q *Queries) UpdateSourceSchedule(ctx context.Context, arg UpdateSourceScheduleParams) error {
 	_, err := q.db.Exec(ctx, updateSourceSchedule, arg.Name, arg.ScheduleKind, arg.ScheduleExpression)
+	return err
+}
+
+const updateSourceScheduleEnabled = `-- name: UpdateSourceScheduleEnabled :exec
+UPDATE data_sources SET schedule_enabled = $2, updated_at = now() WHERE name = $1
+`
+
+type UpdateSourceScheduleEnabledParams struct {
+	Name            string `json:"name"`
+	ScheduleEnabled bool   `json:"schedule_enabled"`
+}
+
+func (q *Queries) UpdateSourceScheduleEnabled(ctx context.Context, arg UpdateSourceScheduleEnabledParams) error {
+	_, err := q.db.Exec(ctx, updateSourceScheduleEnabled, arg.Name, arg.ScheduleEnabled)
 	return err
 }

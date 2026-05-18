@@ -29,7 +29,7 @@ The only new column is:
 ALTER TABLE data_sources ADD COLUMN schedule_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ```
 
-**`enabled` semantics (current behaviour, preserved):** `enabled = false` only prevents the source from being auto-scheduled — `scheduleOnce` in `app.go` queries `ListEnabledSources` which filters by `enabled = true`. It does **not** block manual triggers (`handleTriggerSource` does not check `enabled`) and does not block workers (`SourcePullWorker.Work` does not check `enabled`). This spec preserves that behaviour; manual trigger and worker execution remain unaffected by the `enabled` flag.
+**`enabled` semantics (current behaviour, preserved):** `enabled = false` only prevents the source from being auto-scheduled — `scheduleOnce` in `app.go` queries `ListSources` and skips sources where `enabled = false`. It does **not** block manual triggers (`handleTriggerSource` does not check `enabled`) and does not block workers (`SourcePullWorker.Work` does not check `enabled`). This spec preserves that behaviour; manual trigger and worker execution remain unaffected by the `enabled` flag.
 
 **`schedule_enabled` semantics:** `schedule_enabled = false` prevents `scheduleOnce` from enqueuing the next periodic job. Manual trigger still works. The `PATCH` handler stores the value; `scheduleOnce` is extended with `if !src.ScheduleEnabled { continue }`.
 
@@ -140,6 +140,18 @@ CREATE OR REPLACE VIEW v_source_raw_inputs AS
         AND ssl.source_input_key   = id::text
     ) AS has_suggestion
   FROM domain_discovery_raw_inputs;
+```
+
+The migration must grant PostgREST read access for the new view and the base raw input tables used by the Sheet drawer:
+
+```sql
+GRANT SELECT ON v_source_raw_inputs TO corpscout_anon;
+GRANT SELECT ON gleif_company_raw_inputs TO corpscout_anon;
+GRANT SELECT ON companies_house_company_raw_inputs TO corpscout_anon;
+GRANT SELECT ON brreg_company_raw_inputs TO corpscout_anon;
+GRANT SELECT ON ai_company_profile_raw_inputs TO corpscout_anon;
+GRANT SELECT ON domain_discovery_raw_inputs TO corpscout_anon;
+GRANT SELECT ON suggestion_source_links TO corpscout_anon;
 ```
 
 **Status groups for filtering:**
@@ -274,7 +286,7 @@ Data from PostgREST `v_source_raw_inputs` filtered by `source_name=eq.{name}` an
 **Sheet drawer** (2× standard width, opens on row click):
 
 - Header: native ID, `source_input_table`, status badge, `processing_attempts` count
-- Action buttons (failed/ignored rows only): **Retry** + **Ignore**. For sources without a processor (`ai_company_profile`, `domain_discovery`), Retry resets to pending only — no job is enqueued. A note clarifies: "Row reset to pending. Will be processed on next pull."
+- Action buttons (failed/ignored rows only): **Retry** + **Ignore**. For sources without a processor (`ai_company_profile`, `domain_discovery`), Retry resets to pending only — no job is enqueued. A note clarifies: "Row reset to pending. No processor is currently registered for this source."
 - Metadata cards: First Seen, Last Seen, Payload Hash
 - Suggestion links: fetched from `suggestion_source_links?source_input_table=eq.{table}&source_input_key=eq.{id}` — shows `suggestion_table` + `suggestion_id` per link, or "None produced"
 - Last Error block (red, monospace, only if `processing_error` is set)

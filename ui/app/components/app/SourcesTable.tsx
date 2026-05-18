@@ -25,10 +25,10 @@ export function SourcesTable({ sources, onToggle, onTrigger, triggeringName }: S
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
-          <TableHead>Type</TableHead>
+          <TableHead>Group</TableHead>
           <TableHead>Enabled</TableHead>
-          <TableHead>Interval (h)</TableHead>
-          <TableHead>Last Crawled</TableHead>
+          <TableHead>Schedule</TableHead>
+          <TableHead>Last Started</TableHead>
           <TableHead></TableHead>
         </TableRow>
       </TableHeader>
@@ -46,16 +46,16 @@ export function SourcesTable({ sources, onToggle, onTrigger, triggeringName }: S
                 <p className="text-xs text-muted-foreground mt-0.5 max-w-sm line-clamp-2">{s.description}</p>
               )}
             </TableCell>
-            <TableCell className="text-sm text-muted-foreground">{s.source_type}</TableCell>
+            <TableCell className="text-sm text-muted-foreground">{s.source_group}</TableCell>
             <TableCell>
               <Switch
                 checked={s.enabled}
                 onCheckedChange={(checked) => onToggle(s.name, checked)}
               />
             </TableCell>
-            <TableCell>{s.crawl_interval_hours}h</TableCell>
+            <TableCell>{s.schedule_expression ?? "-"}</TableCell>
             <TableCell className="text-sm">
-              {s.last_crawled_at ? timeAgo(s.last_crawled_at) : "Never"}
+              {s.last_started_at ? timeAgo(s.last_started_at) : "Never"}
             </TableCell>
             <TableCell>
               <Button

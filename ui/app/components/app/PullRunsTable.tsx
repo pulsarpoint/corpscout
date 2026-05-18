@@ -12,15 +12,15 @@ import {
 import { differenceInSeconds } from "date-fns";
 
 function statusVariant(status: string): string {
-  if (status === "completed") return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+  if (status === "succeeded") return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
   if (status === "failed") return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
   if (status === "running") return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
   return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
 }
 
 function duration(run: PullRun): string {
-  if (!run.completed_at) return "—";
-  const secs = differenceInSeconds(new Date(run.completed_at), new Date(run.started_at));
+  if (!run.finished_at) return "-";
+  const secs = differenceInSeconds(new Date(run.finished_at), new Date(run.started_at));
   if (secs < 60) return `${secs}s`;
   return `${Math.floor(secs / 60)}m ${secs % 60}s`;
 }
@@ -51,8 +51,8 @@ export function PullRunsTable({ runs }: PullRunsTableProps) {
                 {run.status}
               </Badge>
             </TableCell>
-            <TableCell className="text-right">{run.records_fetched.toLocaleString()}</TableCell>
-            <TableCell className="text-right">{run.records_upserted.toLocaleString()}</TableCell>
+            <TableCell className="text-right">{run.rows_seen.toLocaleString()}</TableCell>
+            <TableCell className="text-right">{(run.raw_rows_inserted + run.raw_rows_updated).toLocaleString()}</TableCell>
             <TableCell className="text-sm">{formatDate(run.started_at)}</TableCell>
             <TableCell className="text-sm">{duration(run)}</TableCell>
           </TableRow>

@@ -7,6 +7,9 @@ SELECT * FROM data_sources ORDER BY name;
 -- name: UpdateSourceEnabled :exec
 UPDATE data_sources SET enabled = $2, updated_at = now() WHERE name = $1;
 
+-- name: UpdateSourceScheduleEnabled :exec
+UPDATE data_sources SET schedule_enabled = $2, updated_at = now() WHERE name = $1;
+
 -- name: UpdateSourceSchedule :exec
 UPDATE data_sources
 SET schedule_kind = $2, schedule_expression = $3, updated_at = now()

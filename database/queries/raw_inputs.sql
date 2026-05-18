@@ -112,3 +112,103 @@ WHERE id = $1;
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'failed', processing_error = $2, updated_at = now()
 WHERE id = $1;
+
+-- name: RetryGLEIFRawInput :one
+UPDATE gleif_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreGLEIFRawInput :one
+UPDATE gleif_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
+-- name: RetryCompaniesHouseRawInput :one
+UPDATE companies_house_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreCompaniesHouseRawInput :one
+UPDATE companies_house_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
+-- name: RetryBrregRawInput :one
+UPDATE brreg_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreBrregRawInput :one
+UPDATE brreg_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
+-- name: RetryAIRawInput :one
+UPDATE ai_company_profile_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreAIRawInput :one
+UPDATE ai_company_profile_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
+-- name: RetryDomainDiscoveryRawInput :one
+UPDATE domain_discovery_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreDomainDiscoveryRawInput :one
+UPDATE domain_discovery_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;

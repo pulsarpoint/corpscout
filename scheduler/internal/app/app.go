@@ -108,26 +108,15 @@ func scheduleOnce(ctx context.Context, q db.Querier, rc *river.Client[pgx.Tx]) {
 		return
 	}
 
+	now := time.Now()
 	for _, src := range sources {
-		if !src.Enabled {
-			continue
-		}
-		if src.ScheduleKind != "interval" {
-			continue
-		}
-		if src.ScheduleExpression == nil {
-			continue
-		}
-		interval, err := time.ParseDuration(*src.ScheduleExpression)
+		due, err := sourceScheduleDue(src, now)
 		if err != nil {
-			slog.Warn("schedule sources: invalid schedule_expression", "source", src.Name, "expr", *src.ScheduleExpression)
+			slog.Warn("schedule sources: source schedule due", "source", src.Name, "error", err)
 			continue
 		}
-		if src.LastStartedAt.Valid {
-			due := src.LastStartedAt.Time.Add(interval)
-			if time.Now().Before(due) {
-				continue
-			}
+		if !due {
+			continue
 		}
 		if _, err := rc.Insert(ctx, workers.SourcePullArgs{
 			SourceName:  src.Name,
@@ -142,4 +131,38 @@ func scheduleOnce(ctx context.Context, q db.Querier, rc *river.Client[pgx.Tx]) {
 			slog.Error("schedule sources: insert job", "source", src.Name, "error", err)
 		}
 	}
+}
+
+func sourceScheduleDue(src db.DataSource, now time.Time) (bool, error) {
+	if !src.Enabled {
+		return false, nil
+	}
+	if !src.ScheduleEnabled {
+		return false, nil
+	}
+	if src.ScheduleKind != "interval" {
+		return false, nil
+	}
+	if src.ScheduleExpression == nil {
+		return false, nil
+	}
+	interval, err := parsePositiveDuration(*src.ScheduleExpression)
+	if err != nil {
+		return false, err
+	}
+	if src.LastStartedAt.Valid && now.Before(src.LastStartedAt.Time.Add(interval)) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func parsePositiveDuration(expr string) (time.Duration, error) {
+	duration, err := time.ParseDuration(expr)
+	if err != nil {
+		return 0, errors.Wrap(err, "parse schedule expression")
+	}
+	if duration <= 0 {
+		return 0, errors.Newf("schedule expression must be positive")
+	}
+	return duration, nil
 }

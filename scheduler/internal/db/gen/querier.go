@@ -47,6 +47,11 @@ type Querier interface {
 	GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (Organization, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
+	IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	InsertCPEEntityLink(ctx context.Context, arg InsertCPEEntityLinkParams) (CpeEntityLink, error)
 	InsertCPELinkSuggestion(ctx context.Context, arg InsertCPELinkSuggestionParams) (CpeEntityLinkSuggestion, error)
 	InsertCVEEntityLink(ctx context.Context, arg InsertCVEEntityLinkParams) (CveEntityLink, error)
@@ -89,6 +94,11 @@ type Querier interface {
 	MarkCompaniesHouseRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkGLEIFRawInputFailed(ctx context.Context, arg MarkGLEIFRawInputFailedParams) error
 	MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error
 	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
 	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error
@@ -113,6 +123,7 @@ type Querier interface {
 	UpdateSourcePullStarted(ctx context.Context, name string) error
 	UpdateSourcePullSucceeded(ctx context.Context, arg UpdateSourcePullSucceededParams) error
 	UpdateSourceSchedule(ctx context.Context, arg UpdateSourceScheduleParams) error
+	UpdateSourceScheduleEnabled(ctx context.Context, arg UpdateSourceScheduleEnabledParams) error
 	// Brreg
 	UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInputParams) (BrregCompanyRawInput, error)
 	// Companies House
