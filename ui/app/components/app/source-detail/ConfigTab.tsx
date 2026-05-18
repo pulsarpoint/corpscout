@@ -12,6 +12,7 @@ interface ConfigRow {
   key: string;
   value: string;
   isExisting: boolean;
+  originalValue?: string;
   error?: string;
 }
 
@@ -27,6 +28,7 @@ function configToRows(config: Record<string, unknown>): ConfigRow[] {
     key,
     value: JSON.stringify(value),
     isExisting: true,
+    originalValue: JSON.stringify(value),
   }));
 }
 
@@ -67,7 +69,10 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
       }
 
       try {
-        nextConfig[key] = JSON.parse(row.value);
+        const parsedValue = JSON.parse(row.value);
+        if (!row.isExisting || row.value !== row.originalValue) {
+          nextConfig[key] = parsedValue;
+        }
         seenKeys.add(key);
         return { ...row, key };
       } catch {
@@ -78,6 +83,7 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
 
     setRows(validatedRows);
     if (hasError) return;
+    if (Object.keys(nextConfig).length === 0) return;
 
     await onPatch({ config: nextConfig });
   }
