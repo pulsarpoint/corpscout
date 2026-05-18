@@ -323,6 +323,87 @@ func TestPatchSource_config_secret_key_inside_array_returns_422(t *testing.T) {
 	require.Nil(t, q.updateSourceConfigParams)
 }
 
+func TestRetryRawInput_unsupported_source_returns_422(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "nvd_cpe").Return(db.DataSource{
+		Name:           "nvd_cpe",
+		InputTableName: "cpe_dictionary",
+	}, nil)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/nvd_cpe/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestRetryRawInput_aiCompanyProfile_returnsOKWithoutRiver(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "ai_company_profile").Return(db.DataSource{
+		Name:           "ai_company_profile",
+		InputTableName: "ai_company_profile_raw_inputs",
+	}, nil)
+	q.On("RetryAIRawInput", mock.Anything, id).Return(id, nil)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/ai_company_profile/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.JSONEq(t, `{"status":"retried"}`, w.Body.String())
+	q.AssertExpectations(t)
+}
+
+func TestIgnoreRawInput_domainDiscovery_returnsOK(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "domain_discovery").Return(db.DataSource{
+		Name:           "domain_discovery",
+		InputTableName: "domain_discovery_raw_inputs",
+	}, nil)
+	q.On("IgnoreDomainDiscoveryRawInput", mock.Anything, id).Return(id, nil)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/domain_discovery/raw-inputs/"+id.String()+"/ignore", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.JSONEq(t, `{"status":"ignored"}`, w.Body.String())
+	q.AssertExpectations(t)
+}
+
+func TestRetryRawInput_processorSourceWithNilRiver_returns503BeforeReset(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:           "gleif",
+		InputTableName: "gleif_company_raw_inputs",
+	}, nil)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	q.AssertExpectations(t)
+	q.AssertNotCalled(t, "RetryGLEIFRawInput", mock.Anything, id)
+}
+
 func TestTriggerSource_returns_404_for_unknown(t *testing.T) {
 	q := &stubQuerier{}
 

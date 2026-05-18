@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
-	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
+	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
 
 // Handlers holds shared dependencies for all REST API handlers.
@@ -47,6 +47,8 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Patch("/sources/{name}", h.handlePatchSource)
 		r.Post("/sources/{name}/trigger", h.handleTriggerSource)
 		r.Post("/sources/{name}/probe", h.handleProbeSource)
+		r.Post("/sources/{name}/raw-inputs/{id}/retry", h.handleRetryRawInput)
+		r.Post("/sources/{name}/raw-inputs/{id}/ignore", h.handleIgnoreRawInput)
 		r.Get("/jobs", h.handleListJobs)
 		r.Get("/jobs/stats", h.handleJobStats)
 		r.Post("/jobs/cancel-bulk", h.handleCancelBulk)
@@ -110,4 +112,3 @@ func derefString(s *string) string {
 	}
 	return *s
 }
-
