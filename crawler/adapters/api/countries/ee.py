@@ -5,7 +5,7 @@ import csv
 import io
 import zipfile
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import httpx
 
@@ -122,10 +122,14 @@ class EstoniaAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
+        _cfg = config or {}
+        data_url = _cfg.get("api_url") or self.data_url
+
         async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
             resp = await client.get(
-                self.data_url,
+                data_url,
                 headers={"User-Agent": _USER_AGENT},
             )
             resp.raise_for_status()
