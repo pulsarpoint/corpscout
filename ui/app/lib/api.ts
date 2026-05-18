@@ -12,6 +12,11 @@ import type {
   JobStat,
   Job,
   Country,
+  DomainDetail,
+  DomainCrawlJob,
+  DomainCrawlPage,
+  TriggerCrawlRequest,
+  TriggerCrawlResponse,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -76,6 +81,12 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) throw await responseError(res);
   return res.json() as Promise<T>;
+}
+
+async function getRaw(path: string): Promise<string> {
+  const res = await fetch(BASE + path);
+  if (!res.ok) throw await responseError(res);
+  return res.text();
 }
 
 export const api = {
@@ -203,3 +214,32 @@ export const api = {
 
   getCountries: () => get<Country[]>("/countries"),
 };
+
+export function triggerDomainCrawl(domainId: string, req: TriggerCrawlRequest): Promise<TriggerCrawlResponse> {
+  return post<TriggerCrawlResponse>(`/domains/${domainId}/crawl`, req);
+}
+
+export function getDomain(domainId: string): Promise<DomainDetail> {
+  return get<DomainDetail>(`/domains/${domainId}`);
+}
+
+export function getDomainCrawlJobs(domainId: string): Promise<DomainCrawlJob[]> {
+  return get<DomainCrawlJob[]>(`/domains/${domainId}/crawl-jobs`);
+}
+
+export function getDomainCrawlPages(domainId: string, jobId: string): Promise<DomainCrawlPage[]> {
+  return get<DomainCrawlPage[]>(`/domains/${domainId}/crawl-jobs/${jobId}/pages`);
+}
+
+export function getDomainCrawlPageContent(
+  domainId: string,
+  jobId: string,
+  pageNum: number,
+  type: "markdown" | "html" | "headers"
+): Promise<string> {
+  return getRaw(`/domains/${domainId}/crawl-jobs/${jobId}/pages/${pageNum}/${type}`);
+}
+
+export function getDomainFaviconUrl(domainId: string, jobId: string): string {
+  return `/api/v1/domains/${domainId}/crawl-jobs/${jobId}/favicon`;
+}

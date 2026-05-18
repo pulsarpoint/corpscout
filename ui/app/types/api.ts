@@ -373,3 +373,48 @@ export interface VDomain {
   primary_company_id: string | null;
   primary_signal: string | null;
 }
+
+export interface DomainDetail {
+  id: string;
+  domain: string;
+  first_seen_at: string;
+  last_verified_at: string | null;
+}
+
+export interface DomainCrawlJob {
+  id: string;
+  domain_id: string;
+  river_job_id: number | null;
+  mode: "homepage" | "deep";
+  max_pages: number;
+  s3_prefix: string | null;
+  favicon_s3_key: string | null;
+  favicon_url: string | null;
+  created_at: string;
+  river_state: string | null;
+  river_finalized_at: string | null;
+  river_errors: unknown[] | null;
+}
+
+export interface DomainCrawlPage {
+  id: string;
+  job_id: string;
+  page_num: number;
+  url: string;
+  title: string | null;
+  status_code: number | null;
+  content_type: string | null;
+  md_s3_key: string;
+  html_s3_key: string;
+  headers_s3_key: string;
+}
+
+export interface TriggerCrawlRequest {
+  mode: "homepage" | "deep";
+  max_pages: number;
+}
+
+export interface TriggerCrawlResponse {
+  job_id: string;
+  river_job_id: number;
+}
