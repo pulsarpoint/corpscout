@@ -21,8 +21,14 @@ class CVRAdapter(SourceAdapter):
         since: datetime | None,
         cursor: str | None,
         page: int,
+        config: dict[str, Any] | None = None,
     ) -> CrawlResponse:
-        token = (os.getenv("CVR_API_TOKEN") or "").strip()
+        _cfg = config or {}
+        api_url = _cfg.get("api_url") or self.endpoint
+        page_size = int(_cfg.get("page_size") or self.page_size)
+        auth_env = _cfg.get("auth_env") or "CVR_API_TOKEN"
+
+        token = (os.getenv(auth_env) or "").strip()
         if not token or token.startswith("#"):
             return CrawlResponse(records=[], has_more=False, total=0, next_cursor=None)
 
@@ -35,7 +41,7 @@ class CVRAdapter(SourceAdapter):
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(self.endpoint, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            resp = await client.get(api_url, params=params, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
             resp.raise_for_status()
             data = resp.json()
 
@@ -90,8 +96,8 @@ class CVRAdapter(SourceAdapter):
                 )
             )
 
-        has_more = len(results) >= self.page_size
-        next_cursor = str(offset + self.page_size) if has_more else None
+        has_more = len(results) >= page_size
+        next_cursor = str(offset + page_size) if has_more else None
 
         return CrawlResponse(
             records=records,
