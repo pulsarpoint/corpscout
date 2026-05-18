@@ -51,6 +51,7 @@ interface BulkReviewTableProps<TData extends { id: string }> {
   onFilterChange?: (filters: ActiveFilter[]) => void;
   onSearch?: (q: string) => void;
   onRowClick?: (row: TData) => void;
+  searchPlaceholder?: string;
 }
 
 export function BulkReviewTable<TData extends { id: string }>({
@@ -69,6 +70,7 @@ export function BulkReviewTable<TData extends { id: string }>({
   onFilterChange,
   onSearch,
   onRowClick,
+  searchPlaceholder = "Search…",
 }: BulkReviewTableProps<TData>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -77,12 +79,21 @@ export function BulkReviewTable<TData extends { id: string }>({
   const [filterOpen, setFilterOpen] = useState(false);
   const [pendingFilter, setPendingFilter] = useState<Record<string, string>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSearchRef = useRef(onSearch);
+
+  useEffect(() => {
+    onSearchRef.current = onSearch;
+  });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => onSearch?.(searchValue), 300);
+    debounceRef.current = setTimeout(() => onSearchRef.current?.(searchValue), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [searchValue, onSearch]);
+  }, [searchValue]);
+
+  useEffect(() => {
+    setRowSelection({});
+  }, [data]);
 
   const allColumns = useMemo<ColumnDef<TData, unknown>[]>(
     () => [
@@ -190,7 +201,7 @@ export function BulkReviewTable<TData extends { id: string }>({
       <div className="flex flex-wrap items-center gap-2">
         {onSearch && (
           <Input
-            placeholder="Search company or domain…"
+            placeholder={searchPlaceholder}
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             className="h-8 w-56"
