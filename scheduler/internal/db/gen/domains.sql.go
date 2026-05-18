@@ -43,6 +43,24 @@ func (q *Queries) CountDomains(ctx context.Context, arg CountDomainsParams) (int
 	return count, err
 }
 
+const getDomainByID = `-- name: GetDomainByID :one
+SELECT id, domain, first_seen_at, last_verified_at
+FROM domains
+WHERE id = $1
+`
+
+func (q *Queries) GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error) {
+	row := q.db.QueryRow(ctx, getDomainByID, id)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.FirstSeenAt,
+		&i.LastVerifiedAt,
+	)
+	return i, err
+}
+
 const listDomains = `-- name: ListDomains :many
 SELECT d.domain, c.name AS company_name, cd.id, cd.company_id, cd.domain_id, cd.relationship_type, cd.status, cd.signal, cd.confidence, cd.evidence, cd.first_seen_at, cd.last_seen_at
 FROM company_domains cd

@@ -41,6 +41,9 @@ type Querier interface {
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
 	GetCountryIDByISO2(ctx context.Context, isoAlpha2 string) (uuid.UUID, error)
+	GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error)
+	GetDomainCrawlJob(ctx context.Context, arg GetDomainCrawlJobParams) (DomainCrawlJob, error)
+	GetDomainCrawlJobPage(ctx context.Context, arg GetDomainCrawlJobPageParams) (DomainCrawlJobPage, error)
 	GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (OpenSourceProject, error)
 	GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (OpenSourceProject, error)
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
@@ -65,6 +68,8 @@ type Querier interface {
 	InsertCompanyStatusSuggestion(ctx context.Context, arg InsertCompanyStatusSuggestionParams) (CompanyStatusSuggestion, error)
 	// Company root suggestions
 	InsertCompanySuggestion(ctx context.Context, arg InsertCompanySuggestionParams) (CompanySuggestion, error)
+	InsertDomainCrawlJob(ctx context.Context, arg InsertDomainCrawlJobParams) (DomainCrawlJob, error)
+	InsertDomainCrawlJobPage(ctx context.Context, arg InsertDomainCrawlJobPageParams) error
 	// database/queries/open_source_projects.sql
 	InsertOpenSourceProject(ctx context.Context, arg InsertOpenSourceProjectParams) (OpenSourceProject, error)
 	InsertOpenSourceProjectSuggestion(ctx context.Context, arg InsertOpenSourceProjectSuggestionParams) (OpenSourceProjectSuggestion, error)
@@ -79,6 +84,8 @@ type Querier interface {
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
 	ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]CompanyRelationship, error)
 	ListCountries(ctx context.Context) ([]Country, error)
+	ListDomainCrawlJobPages(ctx context.Context, jobID uuid.UUID) ([]DomainCrawlJobPage, error)
+	ListDomainCrawlJobs(ctx context.Context, domainID uuid.UUID) ([]ListDomainCrawlJobsRow, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
 	ListOpenSourceProjects(ctx context.Context, arg ListOpenSourceProjectsParams) ([]OpenSourceProject, error)
@@ -100,6 +107,9 @@ type Querier interface {
 	RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ReviewCompanyDomain(ctx context.Context, arg ReviewCompanyDomainParams) error
+	SetDomainCrawlJobFavicon(ctx context.Context, arg SetDomainCrawlJobFaviconParams) error
+	SetDomainCrawlJobRiverID(ctx context.Context, arg SetDomainCrawlJobRiverIDParams) error
+	SetDomainCrawlJobS3Prefix(ctx context.Context, arg SetDomainCrawlJobS3PrefixParams) error
 	SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error
 	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
 	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error

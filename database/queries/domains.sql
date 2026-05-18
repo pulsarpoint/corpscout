@@ -50,3 +50,8 @@ WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
 
 -- name: ReviewCompanyDomain :exec
 UPDATE company_domains SET status = $2 WHERE id = $1;
+
+-- name: GetDomainByID :one
+SELECT id, domain, first_seen_at, last_verified_at
+FROM domains
+WHERE id = $1;

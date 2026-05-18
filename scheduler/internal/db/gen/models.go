@@ -5,12 +5,62 @@
 package db
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type RiverJobState string
+
+const (
+	RiverJobStateAvailable RiverJobState = "available"
+	RiverJobStateCancelled RiverJobState = "cancelled"
+	RiverJobStateCompleted RiverJobState = "completed"
+	RiverJobStateDiscarded RiverJobState = "discarded"
+	RiverJobStatePending   RiverJobState = "pending"
+	RiverJobStateRetryable RiverJobState = "retryable"
+	RiverJobStateRunning   RiverJobState = "running"
+	RiverJobStateScheduled RiverJobState = "scheduled"
+)
+
+func (e *RiverJobState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RiverJobState(s)
+	case string:
+		*e = RiverJobState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RiverJobState: %T", src)
+	}
+	return nil
+}
+
+type NullRiverJobState struct {
+	RiverJobState RiverJobState `json:"river_job_state"`
+	Valid         bool          `json:"valid"` // Valid is true if RiverJobState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRiverJobState) Scan(value interface{}) error {
+	if value == nil {
+		ns.RiverJobState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RiverJobState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRiverJobState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RiverJobState), nil
+}
 
 type AiCompanyProfileRawInput struct {
 	ID                   uuid.UUID          `json:"id"`
@@ -451,6 +501,31 @@ type Domain struct {
 	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
 }
 
+type DomainCrawlJob struct {
+	ID           uuid.UUID `json:"id"`
+	DomainID     uuid.UUID `json:"domain_id"`
+	RiverJobID   *int64    `json:"river_job_id"`
+	Mode         string    `json:"mode"`
+	MaxPages     int32     `json:"max_pages"`
+	S3Prefix     *string   `json:"s3_prefix"`
+	FaviconS3Key *string   `json:"favicon_s3_key"`
+	FaviconUrl   *string   `json:"favicon_url"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type DomainCrawlJobPage struct {
+	ID           uuid.UUID `json:"id"`
+	JobID        uuid.UUID `json:"job_id"`
+	PageNum      int32     `json:"page_num"`
+	Url          string    `json:"url"`
+	Title        *string   `json:"title"`
+	StatusCode   *int32    `json:"status_code"`
+	ContentType  *string   `json:"content_type"`
+	MdS3Key      string    `json:"md_s3_key"`
+	HtmlS3Key    string    `json:"html_s3_key"`
+	HeadersS3Key string    `json:"headers_s3_key"`
+}
+
 type DomainDiscoveryRawInput struct {
 	ID                   uuid.UUID          `json:"id"`
 	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
@@ -567,6 +642,25 @@ type OrganizationSuggestion struct {
 	UpdatedAt                time.Time          `json:"updated_at"`
 }
 
+type RiverJob struct {
+	ID          int64              `json:"id"`
+	State       RiverJobState      `json:"state"`
+	Attempt     int16              `json:"attempt"`
+	MaxAttempts int16              `json:"max_attempts"`
+	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	FinalizedAt pgtype.Timestamptz `json:"finalized_at"`
+	ScheduledAt time.Time          `json:"scheduled_at"`
+	Priority    int16              `json:"priority"`
+	Args        json.RawMessage    `json:"args"`
+	AttemptedBy []string           `json:"attempted_by"`
+	Errors      []json.RawMessage  `json:"errors"`
+	Kind        string             `json:"kind"`
+	Metadata    json.RawMessage    `json:"metadata"`
+	Queue       string             `json:"queue"`
+	Tags        []string           `json:"tags"`
+}
+
 type SourceProcessorState struct {
 	SourceID                uuid.UUID          `json:"source_id"`
 	ProcessorTaskType       string             `json:"processor_task_type"`
@@ -614,19 +708,28 @@ type SuggestionSourceLink struct {
 }
 
 type VCompany struct {
-	ID                       uuid.UUID `json:"id"`
-	Name                     string    `json:"name"`
-	RegistrationNumber       *string   `json:"registration_number"`
-	Lei                      *string   `json:"lei"`
-	Status                   string    `json:"status"`
-	CreatedAt                time.Time `json:"created_at"`
-	UpdatedAt                time.Time `json:"updated_at"`
-	CountryID                uuid.UUID `json:"country_id"`
-	CountryName              string    `json:"country_name"`
-	CountryIso2              string    `json:"country_iso2"`
-	PrimarySource            *string   `json:"primary_source"`
-	PrimarySourceDisplayName *string   `json:"primary_source_display_name"`
-	DomainCount              int32     `json:"domain_count"`
+	ID                       uuid.UUID       `json:"id"`
+	Name                     string          `json:"name"`
+	ShortName                *string         `json:"short_name"`
+	RegistrationNumber       *string         `json:"registration_number"`
+	Lei                      *string         `json:"lei"`
+	Status                   string          `json:"status"`
+	Website                  *string         `json:"website"`
+	ShortDescription         *string         `json:"short_description"`
+	Description              *string         `json:"description"`
+	FoundedYear              *int32          `json:"founded_year"`
+	EmployeeEstimate         json.RawMessage `json:"employee_estimate"`
+	RevenueEstimate          json.RawMessage `json:"revenue_estimate"`
+	Ownership                json.RawMessage `json:"ownership"`
+	CreatedAt                time.Time       `json:"created_at"`
+	UpdatedAt                time.Time       `json:"updated_at"`
+	CountryID                uuid.UUID       `json:"country_id"`
+	CountryName              string          `json:"country_name"`
+	CountryIso2              string          `json:"country_iso2"`
+	PrimarySource            *string         `json:"primary_source"`
+	PrimarySourceDisplayName *string         `json:"primary_source_display_name"`
+	DomainCount              int32           `json:"domain_count"`
+	HeadquartersLocation     bool            `json:"headquarters_location"`
 }
 
 type VCompanyDomain struct {
@@ -726,6 +829,16 @@ type VCompanyService struct {
 	Confidence  *float32        `json:"confidence"`
 	Evidence    json.RawMessage `json:"evidence"`
 	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type VCompanySource struct {
+	CompanyID         uuid.UUID          `json:"company_id"`
+	ExternalID        *string            `json:"external_id"`
+	FetchedAt         pgtype.Timestamptz `json:"fetched_at"`
+	SourceID          uuid.UUID          `json:"source_id"`
+	SourceName        string             `json:"source_name"`
+	SourceDisplayName *string            `json:"source_display_name"`
+	SourceType        string             `json:"source_type"`
 }
 
 type VDomain struct {
