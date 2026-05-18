@@ -14,6 +14,7 @@ export function CompanySuggestionsTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const fetchPage = useCallback(async (p: number) => {
     setLoading(true);
@@ -92,11 +93,18 @@ export function CompanySuggestionsTab() {
               size="sm"
               variant="default"
               className="h-7 bg-green-600 hover:bg-green-700 text-xs"
-              onClick={() =>
-                handleApprove([row.original.id]).then(() =>
-                  toast.success("Approved."),
-                )
-              }
+              disabled={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await handleApprove([row.original.id]);
+                  toast.success("Approved.");
+                } catch {
+                  toast.error("Failed to approve suggestion.");
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
             >
               ✓
             </Button>
@@ -104,11 +112,18 @@ export function CompanySuggestionsTab() {
               size="sm"
               variant="destructive"
               className="h-7 text-xs"
-              onClick={() =>
-                handleReject([row.original.id]).then(() =>
-                  toast.success("Rejected."),
-                )
-              }
+              disabled={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await handleReject([row.original.id]);
+                  toast.success("Rejected.");
+                } catch {
+                  toast.error("Failed to reject suggestion.");
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
             >
               ✗
             </Button>
