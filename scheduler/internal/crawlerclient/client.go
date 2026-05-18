@@ -87,6 +87,32 @@ type GLEIFRelationshipResponse struct {
 	UltimateParentLEI *string `json:"ultimate_parent_lei,omitempty"`
 }
 
+// DomainCrawlRequest is the request body for POST /crawl-domain.
+type DomainCrawlRequest struct {
+	Domain   string `json:"domain"`
+	Mode     string `json:"mode"`
+	MaxPages int    `json:"max_pages"`
+}
+
+// CrawledPage is a single page returned by the domain crawler.
+type CrawledPage struct {
+	URL         string            `json:"url"`
+	Title       *string           `json:"title"`
+	Markdown    string            `json:"markdown"`
+	HTML        string            `json:"html"`
+	Headers     map[string]string `json:"headers"`
+	StatusCode  int               `json:"status_code"`
+	ContentType *string           `json:"content_type"`
+}
+
+// DomainCrawlResponse is returned by POST /crawl-domain.
+type DomainCrawlResponse struct {
+	Pages        []CrawledPage `json:"pages"`
+	TotalPages   int           `json:"total_pages"`
+	FaviconURL   *string       `json:"favicon_url"`
+	FaviconBytes *string       `json:"favicon_bytes"` // base64-encoded
+}
+
 // Client is a typed HTTP client for the Python crawler service.
 type Client struct {
 	baseURL string
@@ -158,6 +184,16 @@ func (c *Client) GLEIFRelationship(ctx context.Context, lei string) (*GLEIFRelat
 		return nil, errors.Wrap(err, "crawler POST /enrich/gleif/relationship")
 	}
 	return &result, nil
+}
+
+// CrawlDomain calls POST /crawl-domain to crawl a domain and extract page content.
+func (c *Client) CrawlDomain(ctx context.Context, domain, mode string, maxPages int) (*DomainCrawlResponse, error) {
+	req := DomainCrawlRequest{Domain: domain, Mode: mode, MaxPages: maxPages}
+	var resp DomainCrawlResponse
+	if err := c.postJSON(ctx, "/crawl-domain", req, &resp); err != nil {
+		return nil, errors.Wrap(err, "crawler POST /crawl-domain")
+	}
+	return &resp, nil
 }
 
 // postJSON sends a POST request with a JSON body and decodes the JSON response into dest.
