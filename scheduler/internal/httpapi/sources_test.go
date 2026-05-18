@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,6 +17,16 @@ import (
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
 
+type sourceConfigStubQuerier struct {
+	stubQuerier
+	updateSourceConfigParams *db.UpdateSourceConfigParams
+}
+
+func (s *sourceConfigStubQuerier) UpdateSourceConfig(_ context.Context, arg db.UpdateSourceConfigParams) error {
+	s.updateSourceConfigParams = &arg
+	return nil
+}
+
 func TestListSources_returns_all(t *testing.T) {
 	q := &stubQuerier{}
 
@@ -25,7 +36,7 @@ func TestListSources_returns_all(t *testing.T) {
 
 	q.On("ListSources", mock.Anything).Return(sources, nil)
 
-	r := routerForHandlers(q)
+	r := routerFor(newTestHandlers(q))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/sources", nil)
 	w := httptest.NewRecorder()
@@ -47,7 +58,7 @@ func TestPatchSource_updates_enabled(t *testing.T) {
 		Name: "gleif", Enabled: false,
 	}).Return(nil)
 
-	r := routerForHandlers(q)
+	r := routerFor(newTestHandlers(q))
 
 	body := strings.NewReader(`{"enabled": false}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
@@ -83,6 +94,83 @@ func TestPatchSource_updates_schedule(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	q.AssertExpectations(t)
+}
+
+func TestPatchSource_updates_schedule_enabled(t *testing.T) {
+	q := &stubQuerier{}
+
+	q.On("UpdateSourceScheduleEnabled", mock.Anything, db.UpdateSourceScheduleEnabledParams{
+		Name: "gleif", ScheduleEnabled: false,
+	}).Return(nil)
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{"schedule_enabled": false}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestPatchSource_invalid_schedule_expression_returns_422(t *testing.T) {
+	q := &stubQuerier{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:         "gleif",
+		ScheduleKind: "interval",
+	}, nil)
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{"schedule_expression": "daily"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestPatchSource_config_merge_preserves_json_numeric_type(t *testing.T) {
+	q := &sourceConfigStubQuerier{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:   "gleif",
+		Config: json.RawMessage(`{"limit":10,"nested":{"threshold":0.5},"unchanged":true}`),
+	}, nil)
+
+	r := routerFor(newTestHandlers(q))
+
+	body := strings.NewReader(`{"config":{"limit":25,"nested":{"threshold":0.75}}}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, q.updateSourceConfigParams)
+	require.Equal(t, "gleif", q.updateSourceConfigParams.Name)
+	require.JSONEq(t, `{"limit":25,"nested":{"threshold":0.75},"unchanged":true}`, string(q.updateSourceConfigParams.Config))
+	require.Equal(t, `{"limit":25,"nested":{"threshold":0.75},"unchanged":true}`, string(q.updateSourceConfigParams.Config))
+	q.AssertExpectations(t)
+}
+
+func TestPatchSource_config_secret_key_returns_422(t *testing.T) {
+	q := &stubQuerier{}
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{"config":{"api_token":"secret"}}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
 
 func TestTriggerSource_returns_404_for_unknown(t *testing.T) {
