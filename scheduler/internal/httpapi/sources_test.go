@@ -469,7 +469,7 @@ func TestRetryRawInput_processorSourceWithNilPool_returns503BeforeReset(t *testi
 
 	rv, err := river.NewClient[pgx.Tx](riverpgxv5.New(nil), &river.Config{})
 	require.NoError(t, err)
-	r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, ""))
+	r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, nil, ""))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/raw-inputs/"+id.String()+"/retry", nil)
 	w := httptest.NewRecorder()

@@ -522,7 +522,7 @@ func (s *stubQuerier) UpdateCompanyWebsite(ctx context.Context, arg db.UpdateCom
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
 func newTestHandlers(q db.Querier) *httpapi.Handlers {
-	return httpapi.NewHandlers(q, nil, nil, nil, "")
+	return httpapi.NewHandlers(q, nil, nil, nil, nil, "")
 }
 
 var errNotFound = errors.New("not found")

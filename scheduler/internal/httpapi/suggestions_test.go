@@ -28,7 +28,7 @@ func TestHandleListCompanySuggestions_ReturnsPendingSuggestions(t *testing.T) {
 		Return(int64(1), nil)
 
 	r := chi.NewRouter()
-	httpapi.NewHandlers(q, nil, nil, nil, "").RegisterRoutes(r)
+	httpapi.NewHandlers(q, nil, nil, nil, nil, "").RegisterRoutes(r)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/suggestions/companies", nil)
 	w := httptest.NewRecorder()
@@ -52,7 +52,7 @@ func TestHandleTriggerSource_NonPullTaskType_Returns422(t *testing.T) {
 		}, nil)
 
 	r := chi.NewRouter()
-	httpapi.NewHandlers(q, nil, nil, nil, "").RegisterRoutes(r)
+	httpapi.NewHandlers(q, nil, nil, nil, nil, "").RegisterRoutes(r)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/ai_company_profile/trigger", nil)
 	w := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestHandleTriggerSource_NonPullTaskType_Returns422(t *testing.T) {
 func TestHandleApproveCompanyStatusSuggestion_NilPool_Returns503(t *testing.T) {
 	q := &stubQuerier{}
 	r := chi.NewRouter()
-	httpapi.NewHandlers(q, nil, nil, nil, "").RegisterRoutes(r)
+	httpapi.NewHandlers(q, nil, nil, nil, nil, "").RegisterRoutes(r)
 
 	body := strings.NewReader(`{"reviewed_by":"admin","review_note":"ok"}`)
 	req := httptest.NewRequest(http.MethodPost,
@@ -79,7 +79,7 @@ func TestHandleApproveCompanyStatusSuggestion_NilPool_Returns503(t *testing.T) {
 func TestHandleApproveCompanyWithSections_NilPool_Returns503(t *testing.T) {
 	q := &stubQuerier{}
 	r := chi.NewRouter()
-	httpapi.NewHandlers(q, nil, nil, nil, "").RegisterRoutes(r)
+	httpapi.NewHandlers(q, nil, nil, nil, nil, "").RegisterRoutes(r)
 
 	body := strings.NewReader(`{
 		"reviewed_by":"admin",

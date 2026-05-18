@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
 
@@ -47,4 +50,19 @@ func (h *Handlers) handleListDomains(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": domains, "total": total, "page": page, "limit": limit,
 	})
+}
+
+func (h *Handlers) handleGetDomain(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain id")
+		return
+	}
+	domain, err := h.db.GetDomainByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, domain)
 }

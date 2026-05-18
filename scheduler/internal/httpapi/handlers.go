@@ -13,6 +13,7 @@ import (
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/s3client"
 )
 
 // Handlers holds shared dependencies for all REST API handlers.
@@ -21,12 +22,13 @@ type Handlers struct {
 	rv           *river.Client[pgx.Tx]
 	pool         *pgxpool.Pool
 	crawler      *crawlerclient.Client
+	s3           *s3client.Client
 	postgrestURL string
 }
 
-// NewHandlers constructs Handlers. pool, rv and crawler may be nil in tests.
-func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, postgrestURL string) *Handlers {
-	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, postgrestURL: postgrestURL}
+// NewHandlers constructs Handlers. pool, rv, crawler and s3 may be nil in tests.
+func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string) *Handlers {
+	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, s3: s3, postgrestURL: postgrestURL}
 }
 
 // RegisterRoutes mounts all /api/v1 routes on the router.
@@ -41,6 +43,15 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/companies", h.handleListCompanies)
 		r.Get("/companies/{id}", h.handleGetCompany)
 		r.Get("/domains", h.handleListDomains)
+		r.Get("/domains/{id}", h.handleGetDomain)
+		r.Post("/domains/{id}/crawl", h.handleTriggerDomainCrawl)
+		r.Get("/domains/{id}/crawl-jobs", h.handleListDomainCrawlJobs)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}", h.handleGetDomainCrawlJob)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}/pages", h.handleListDomainCrawlJobPages)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}/pages/{page_num}/markdown", h.handleGetPageMarkdown)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}/pages/{page_num}/html", h.handleGetPageHTML)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}/pages/{page_num}/headers", h.handleGetPageHeaders)
+		r.Get("/domains/{id}/crawl-jobs/{job_id}/favicon", h.handleGetJobFavicon)
 		r.Get("/countries", h.handleListCountries)
 		r.Get("/sources", h.handleListSources)
 		r.Get("/sources/{name}", h.handleGetSource)
@@ -114,4 +125,8 @@ func derefString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func decodeJSON(r *http.Request, v any) error {
+	return json.NewDecoder(r.Body).Decode(v)
 }
