@@ -22,6 +22,7 @@ from adapters.api.countries.no import BrregAdapter
 from adapters.api.countries.uk import CompaniesHouseAdapter
 from adapters.base import CrawlResponse, ResolveResponse
 from adapters.crawl4ai.generic import Crawl4AIGenericAdapter, Crawl4AIUnconfiguredError
+from domain_crawler import DomainCrawlRequest, DomainCrawlResponse, crawl_domain
 from domain_resolver import DomainResolver
 
 app = FastAPI(title="corpscout-crawler", version="0.2.0")
@@ -152,3 +153,8 @@ async def enrich_gleif_relationship(req: GLEIFRelationshipRequest) -> GLEIFRelat
         direct_parent_lei=direct_parent_lei,
         ultimate_parent_lei=ultimate_parent_lei,
     )
+
+
+@app.post("/crawl-domain", response_model=DomainCrawlResponse)
+async def crawl_domain_endpoint(req: DomainCrawlRequest) -> DomainCrawlResponse:
+    return await crawl_domain(req)
