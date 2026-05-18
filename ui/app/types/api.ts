@@ -92,27 +92,32 @@ export interface DomainListResponse {
   limit: number;
 }
 
-export interface SourceConfig {
-  api_url: string;
-  docs_url: string;
-  protocol: string;
-  page_size: number;
-  fields: string[];
-  auth_env: string | null;
-  notes: string;
-}
+export type SourceConfig = Record<string, unknown>;
 
 export interface DataSource {
   id: string;
   name: string;
-  display_name: string;
-  description: string;
-  source_type: string;
-  adapter_type: string;
+  display_name: string | null;
+  description: string | null;
+  source_group: string;
+  input_table_name: string;
+  pull_task_type: string;
+  processor_task_type: string | null;
   enabled: boolean;
-  crawl_interval_hours: number;
-  last_crawled_at: string | null;
-  config: SourceConfig | null;
+  schedule_enabled: boolean;
+  schedule_kind: "manual" | "interval" | "cron" | "event";
+  schedule_expression: string | null;
+  config: SourceConfig;
+  last_started_at: string | null;
+  last_success_at: string | null;
+  last_failed_at: string | null;
+  last_source_marker_type: string | null;
+  last_source_marker: string | null;
+  last_source_modified_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SourceProbeResult {
@@ -126,20 +131,58 @@ export interface SourceProbeResult {
 
 export interface PullRun {
   id: string;
+  source_id: string;
   source_name: string;
   river_job_id: number | null;
+  task_type: string;
+  trigger_type: string;
+  status: "running" | "succeeded" | "failed" | "cancelled";
   started_at: string;
-  completed_at: string | null;
-  status: string;
-  records_fetched: number;
-  records_upserted: number;
+  finished_at: string | null;
+  rows_seen: number;
+  raw_rows_inserted: number;
+  raw_rows_updated: number;
+  raw_rows_unchanged: number;
   error_message: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface PullRunsResponse {
   items: PullRun[];
   page: number;
   limit: number;
+}
+
+export interface SourceRawInput {
+  id: string;
+  source_name: string;
+  source_input_table: string;
+  source_native_id: string;
+  processing_status: "pending" | "processing" | "processed" | "failed" | "ignored" | "superseded";
+  processing_attempts: number;
+  processing_error: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  payload_hash: string;
+  has_suggestion: boolean;
+}
+
+export interface SuggestionSourceLink {
+  id: string;
+  suggestion_table: string;
+  suggestion_id: string;
+  source_id: string;
+  source_input_table: string;
+  source_input_key: string;
+  source_pull_run_id: string | null;
+  confidence: number | null;
+  evidence_excerpt: string | null;
+  created_at: string;
+}
+
+export interface RawPayloadRow {
+  raw_payload: Record<string, unknown>;
 }
 
 export interface JobError {

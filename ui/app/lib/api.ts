@@ -90,7 +90,16 @@ export const api = {
 
   getSource: (name: string) => get<DataSource>(`/sources/${name}`),
 
-  patchSource: (name: string, body: { enabled?: boolean; crawl_interval_hours?: number }) =>
+  patchSource: (
+    name: string,
+    body: {
+      enabled?: boolean;
+      schedule_enabled?: boolean;
+      schedule_kind?: DataSource["schedule_kind"];
+      schedule_expression?: string | null;
+      config?: Record<string, unknown>;
+    },
+  ) =>
     patch<{ status: string }>(`/sources/${name}`, body),
 
   triggerSource: (name: string) =>
@@ -98,6 +107,12 @@ export const api = {
 
   probeSource: (name: string) =>
     post<SourceProbeResult>(`/sources/${name}/probe`, {}),
+
+  retryRawInput: (name: string, id: string) =>
+    post<{ status: string }>(`/sources/${name}/raw-inputs/${id}/retry`, {}),
+
+  ignoreRawInput: (name: string, id: string) =>
+    post<{ status: string }>(`/sources/${name}/raw-inputs/${id}/ignore`, {}),
 
   getPullRuns: (page = 1, limit = 20, source?: string) => {
     const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
