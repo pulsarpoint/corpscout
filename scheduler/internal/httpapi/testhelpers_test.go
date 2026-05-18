@@ -541,5 +541,46 @@ func (s *stubQuerier) ReviewCompanyDomain(ctx context.Context, arg db.ReviewComp
 	return ret.Error(0)
 }
 
+// Domain crawl job stubs (new in recent sqlc-generate)
+func (s *stubQuerier) GetDomainByID(ctx context.Context, id uuid.UUID) (db.Domain, error) {
+	return db.Domain{}, nil
+}
+
+func (s *stubQuerier) GetDomainCrawlJob(ctx context.Context, arg db.GetDomainCrawlJobParams) (db.DomainCrawlJob, error) {
+	return db.DomainCrawlJob{}, nil
+}
+
+func (s *stubQuerier) GetDomainCrawlJobPage(ctx context.Context, arg db.GetDomainCrawlJobPageParams) (db.DomainCrawlJobPage, error) {
+	return db.DomainCrawlJobPage{}, nil
+}
+
+func (s *stubQuerier) InsertDomainCrawlJob(ctx context.Context, arg db.InsertDomainCrawlJobParams) (db.DomainCrawlJob, error) {
+	return db.DomainCrawlJob{}, nil
+}
+
+func (s *stubQuerier) InsertDomainCrawlJobPage(ctx context.Context, arg db.InsertDomainCrawlJobPageParams) error {
+	return nil
+}
+
+func (s *stubQuerier) ListDomainCrawlJobPages(ctx context.Context, jobID uuid.UUID) ([]db.DomainCrawlJobPage, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) ListDomainCrawlJobs(ctx context.Context, domainID uuid.UUID) ([]db.ListDomainCrawlJobsRow, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) SetDomainCrawlJobFavicon(ctx context.Context, arg db.SetDomainCrawlJobFaviconParams) error {
+	return nil
+}
+
+func (s *stubQuerier) SetDomainCrawlJobRiverID(ctx context.Context, arg db.SetDomainCrawlJobRiverIDParams) error {
+	return nil
+}
+
+func (s *stubQuerier) SetDomainCrawlJobS3Prefix(ctx context.Context, arg db.SetDomainCrawlJobS3PrefixParams) error {
+	return nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)
