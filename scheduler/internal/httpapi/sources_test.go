@@ -10,11 +10,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/httpapi"
 )
 
 type sourceConfigStubQuerier struct {
@@ -35,6 +39,16 @@ type sourcePatchWriteRecorder struct {
 func (s *sourcePatchWriteRecorder) UpdateSourceEnabled(_ context.Context, _ db.UpdateSourceEnabledParams) error {
 	s.updateSourceEnabledCalled = true
 	return nil
+}
+
+type rawInputRetryRecorder struct {
+	stubQuerier
+	retryGLEIFCalled bool
+}
+
+func (r *rawInputRetryRecorder) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	r.retryGLEIFCalled = true
+	return r.stubQuerier.RetryGLEIFRawInput(ctx, id)
 }
 
 func TestListSources_returns_all(t *testing.T) {
@@ -385,7 +399,7 @@ func TestIgnoreRawInput_domainDiscovery_returnsOK(t *testing.T) {
 }
 
 func TestRetryRawInput_processorSourceWithNilRiver_returns503BeforeReset(t *testing.T) {
-	q := &stubQuerier{}
+	q := &rawInputRetryRecorder{}
 	id := uuid.New()
 
 	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
@@ -393,7 +407,7 @@ func TestRetryRawInput_processorSourceWithNilRiver_returns503BeforeReset(t *test
 		InputTableName: "gleif_company_raw_inputs",
 	}, nil)
 
-	r := routerForHandlers(q)
+	r := routerFor(newTestHandlers(q))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/raw-inputs/"+id.String()+"/retry", nil)
 	w := httptest.NewRecorder()
@@ -401,7 +415,45 @@ func TestRetryRawInput_processorSourceWithNilRiver_returns503BeforeReset(t *test
 
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	q.AssertExpectations(t)
-	q.AssertNotCalled(t, "RetryGLEIFRawInput", mock.Anything, id)
+	require.False(t, q.retryGLEIFCalled)
+}
+
+func TestRetryRawInput_processorSourceEnqueueFailure_returns500BeforeReset(t *testing.T) {
+	q := &rawInputRetryRecorder{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name:           "gleif",
+		InputTableName: "gleif_company_raw_inputs",
+	}, nil)
+
+	rv, err := river.NewClient[pgx.Tx](riverpgxv5.New(nil), &river.Config{})
+	require.NoError(t, err)
+	r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, ""))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	q.AssertExpectations(t)
+	require.False(t, q.retryGLEIFCalled)
+}
+
+func TestRetryRawInput_sourceLookupError_returns500(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{}, errors.New("database down"))
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	q.AssertExpectations(t)
 }
 
 func TestTriggerSource_returns_404_for_unknown(t *testing.T) {

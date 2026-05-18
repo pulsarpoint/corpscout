@@ -66,6 +66,21 @@ func (h *Handlers) handleRetryRawInput(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
 		return
 	}
+	if support.canProcess {
+		if _, err := h.rv.Insert(r.Context(), workers.SourceProcessArgs{
+			SourceName: src.Name,
+		}, &river.InsertOpts{
+			Queue: "source_process",
+			UniqueOpts: river.UniqueOpts{
+				ByArgs:  true,
+				ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateScheduled},
+			},
+		}); err != nil {
+			slog.Error("enqueue raw input retry processor", "source", src.Name, "id", rowID, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
 	if _, err := support.retry(r.Context(), rowID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnprocessableEntity, "raw input row is not retryable")
@@ -74,21 +89,6 @@ func (h *Handlers) handleRetryRawInput(w http.ResponseWriter, r *http.Request) {
 		slog.Error("retry raw input", "source", src.Name, "id", rowID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
-	}
-	if support.canProcess {
-		if _, err := h.rv.Insert(r.Context(), workers.SourceProcessArgs{
-			SourceName: src.Name,
-		}, &river.InsertOpts{
-			Queue: "source_process",
-			UniqueOpts: river.UniqueOpts{
-				ByArgs:  true,
-				ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
-			},
-		}); err != nil {
-			slog.Error("enqueue raw input retry processor", "source", src.Name, "id", rowID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "retried"})
 }
@@ -121,7 +121,12 @@ func (h *Handlers) resolveRawInputAction(w http.ResponseWriter, r *http.Request)
 	name := chi.URLParam(r, "name")
 	src, err := h.db.GetSourceByName(r.Context(), name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "source not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "source not found")
+			return db.DataSource{}, uuid.UUID{}, rawInputSupport{}, false
+		}
+		slog.Error("resolve raw input source", "source", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return db.DataSource{}, uuid.UUID{}, rawInputSupport{}, false
 	}
 
