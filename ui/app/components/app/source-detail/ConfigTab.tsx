@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Save } from "lucide-react";
 import type { DataSource } from "~/types/api";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -42,10 +42,6 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
 
   function updateRow(id: string, patch: Partial<ConfigRow>) {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch, error: undefined } : row));
-  }
-
-  function removeRow(id: string) {
-    setRows((current) => current.filter((row) => row.id !== id));
   }
 
   async function saveConfig() {
@@ -108,7 +104,7 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
           <p className="text-sm text-muted-foreground">No editable config fields.</p>
         ) : (
           rows.map((row) => (
-            <div key={row.id} className="grid gap-2 rounded-md border p-3 md:grid-cols-[minmax(160px,240px)_1fr_auto]">
+            <div key={row.id} className="grid gap-2 rounded-md border p-3 md:grid-cols-[minmax(160px,240px)_1fr]">
               <Input
                 value={row.key}
                 onChange={(event) => updateRow(row.id, { key: event.target.value })}
@@ -122,16 +118,8 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
                 aria-invalid={Boolean(row.error)}
                 className="font-mono"
               />
-              <Button
-                aria-label={`Remove ${row.key || "field"}`}
-                onClick={() => removeRow(row.id)}
-                size="icon"
-                variant="ghost"
-              >
-                <Trash2 className="size-4" />
-              </Button>
               {row.error && (
-                <p className="text-sm text-destructive md:col-span-3">{row.error}</p>
+                <p className="text-sm text-destructive md:col-span-2">{row.error}</p>
               )}
             </div>
           ))

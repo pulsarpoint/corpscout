@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ type SourcePatch = Parameters<typeof api.patchSource>[1];
 
 export default function SourceDetailPage() {
   const { name } = useParams<{ name: string }>();
+  const latestNameRef = useRef<string | undefined>(undefined);
   const [source, setSource] = useState<DataSource>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -25,46 +26,65 @@ export default function SourceDetailPage() {
   useEffect(() => {
     if (!name) return;
 
+    latestNameRef.current = name;
+    let ignore = false;
+
+    setSource(undefined);
     setLoading(true);
     setError(undefined);
+    setSaving(false);
+    setTriggering(false);
     api.getSource(name)
-      .then(setSource)
-      .catch(() => setError("Source not found."))
-      .finally(() => setLoading(false));
+      .then((loadedSource) => {
+        if (!ignore) setSource(loadedSource);
+      })
+      .catch(() => {
+        if (!ignore) setError("Source not found.");
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [name]);
 
-  async function refreshSource() {
-    if (!name) return;
-    const refreshed = await api.getSource(name);
-    setSource(refreshed);
+  async function refreshSource(sourceName: string) {
+    const refreshed = await api.getSource(sourceName);
+    if (latestNameRef.current === sourceName) {
+      setSource(refreshed);
+    }
   }
 
   async function handlePatch(patch: SourcePatch) {
-    if (!name) return;
+    const sourceName = source?.name;
+    if (!sourceName) return;
 
     setSaving(true);
     try {
-      await api.patchSource(name, patch);
-      await refreshSource();
+      await api.patchSource(sourceName, patch);
+      await refreshSource(sourceName);
       toast.success("Source updated.");
     } catch {
       toast.error("Failed to update source.");
     } finally {
-      setSaving(false);
+      if (latestNameRef.current === sourceName) setSaving(false);
     }
   }
 
   async function handleTrigger() {
-    if (!name) return;
+    const sourceName = source?.name;
+    if (!sourceName) return;
 
     setTriggering(true);
     try {
-      await api.triggerSource(name);
-      toast.success(`${name} pull queued.`);
+      await api.triggerSource(sourceName);
+      toast.success(`${sourceName} pull queued.`);
     } catch {
-      toast.error(`Failed to trigger ${name}.`);
+      toast.error(`Failed to trigger ${sourceName}.`);
     } finally {
-      setTriggering(false);
+      if (latestNameRef.current === sourceName) setTriggering(false);
     }
   }
 
@@ -89,7 +109,7 @@ export default function SourceDetailPage() {
 
       <SourceHeader source={source} />
 
-      <Tabs defaultValue="schedule" className="space-y-4">
+      <Tabs key={source.name} defaultValue="schedule" className="space-y-4">
         <TabsList>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="config">Config</TabsTrigger>
