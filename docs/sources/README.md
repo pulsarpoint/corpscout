@@ -1,6 +1,6 @@
 # Corpscout — Country Source Index
 
-Top 100 countries by GDP (IMF 2024 nominal). One file per country documenting
+Top 100 countries by GDP (IMF 2024 nominal). Last updated: 2026-05-18. All 100 files present. Update a country file directly when new sources are found. One file per country documenting
 all known company data sources: access method, cost, fields, and adapter status.
 
 To update: edit the country file directly and update the row below if the
