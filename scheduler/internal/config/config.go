@@ -10,6 +10,10 @@ type Config struct {
 	CrawlConcurrency       int
 	DomainConcurrency      int
 	GLEIFEnrichConcurrency int
+	S3Endpoint             string
+	S3AccessKey            string
+	S3SecretKey            string
+	S3Bucket               string
 }
 
 func Load() Config {
@@ -21,6 +25,10 @@ func Load() Config {
 		CrawlConcurrency:       getEnvInt("CORPSCOUT_CRAWL_CONCURRENCY", 5),
 		DomainConcurrency:      getEnvInt("CORPSCOUT_DOMAIN_CONCURRENCY", 10),
 		GLEIFEnrichConcurrency: getEnvInt("CORPSCOUT_GLEIF_ENRICH_CONCURRENCY", 3),
+		S3Endpoint:             getEnv("CORPSCOUT_S3_ENDPOINT", "http://localhost:9000"),
+		S3AccessKey:            getEnv("CORPSCOUT_S3_ACCESS_KEY", "corpscout"),
+		S3SecretKey:            getEnv("CORPSCOUT_S3_SECRET_KEY", "corpscout123"),
+		S3Bucket:               getEnv("CORPSCOUT_S3_BUCKET", "crawls"),
 	}
 }
 
