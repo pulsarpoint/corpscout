@@ -18,6 +18,7 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/httpapi"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/s3client"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
@@ -40,11 +41,19 @@ func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
 	queries := db.New(pool)
 	crawler := crawlerclient.New(cfg.CrawlerURL)
 
+	s3, err := s3client.New(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+	if err != nil {
+		return nil, errors.Wrap(err, "create s3 client")
+	}
+	if err := s3.EnsureBucket(ctx); err != nil {
+		return nil, errors.Wrap(err, "ensure S3 bucket")
+	}
+
 	if err := queries.InterruptStalePullRuns(ctx); err != nil {
 		slog.Warn("startup: could not interrupt stale pull runs", "error", err)
 	}
 
-	riverClient, err := setupRiver(ctx, pool, cfg, queries, crawler)
+	riverClient, err := setupRiver(ctx, pool, cfg, queries, crawler, s3)
 	if err != nil {
 		return nil, errors.Wrap(err, "setup river")
 	}
