@@ -39,3 +39,6 @@ SELECT COUNT(*) FROM company_domains cd
 WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
   AND (sqlc.narg('signal')::text IS NULL OR cd.signal = sqlc.narg('signal'))
   AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'));
+
+-- name: ReviewCompanyDomain :exec
+UPDATE company_domains SET status = $2 WHERE id = $1;

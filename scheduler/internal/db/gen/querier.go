@@ -99,6 +99,7 @@ type Querier interface {
 	RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	ReviewCompanyDomain(ctx context.Context, arg ReviewCompanyDomainParams) error
 	SucceedPullRun(ctx context.Context, arg SucceedPullRunParams) error
 	UpdateCPELinkSuggestionStatus(ctx context.Context, arg UpdateCPELinkSuggestionStatusParams) error
 	UpdateCVELinkSuggestionStatus(ctx context.Context, arg UpdateCVELinkSuggestionStatusParams) error

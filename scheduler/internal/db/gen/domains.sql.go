@@ -160,6 +160,20 @@ func (q *Queries) ListDomainsForCompany(ctx context.Context, companyID uuid.UUID
 	return items, nil
 }
 
+const reviewCompanyDomain = `-- name: ReviewCompanyDomain :exec
+UPDATE company_domains SET status = $2 WHERE id = $1
+`
+
+type ReviewCompanyDomainParams struct {
+	ID     uuid.UUID `json:"id"`
+	Status string    `json:"status"`
+}
+
+func (q *Queries) ReviewCompanyDomain(ctx context.Context, arg ReviewCompanyDomainParams) error {
+	_, err := q.db.Exec(ctx, reviewCompanyDomain, arg.ID, arg.Status)
+	return err
+}
+
 const updateCompanyDomainStatus = `-- name: UpdateCompanyDomainStatus :exec
 UPDATE company_domains SET status = $2, relationship_type = $3 WHERE id = $1
 `
