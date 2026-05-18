@@ -418,7 +418,7 @@ func TestRetryRawInput_processorSourceWithNilRiver_returns503BeforeReset(t *test
 	require.False(t, q.retryGLEIFCalled)
 }
 
-func TestRetryRawInput_processorSourceEnqueueFailure_returns500BeforeReset(t *testing.T) {
+func TestRetryRawInput_processorSourceWithNilPool_returns503BeforeReset(t *testing.T) {
 	q := &rawInputRetryRecorder{}
 	id := uuid.New()
 
@@ -435,7 +435,7 @@ func TestRetryRawInput_processorSourceEnqueueFailure_returns500BeforeReset(t *te
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	q.AssertExpectations(t)
 	require.False(t, q.retryGLEIFCalled)
 }

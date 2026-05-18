@@ -18,8 +18,8 @@ import (
 
 type rawInputSupport struct {
 	canProcess bool
-	retry      func(context.Context, uuid.UUID) (uuid.UUID, error)
-	ignore     func(context.Context, uuid.UUID) (uuid.UUID, error)
+	retry      func(db.Querier, context.Context, uuid.UUID) (uuid.UUID, error)
+	ignore     func(db.Querier, context.Context, uuid.UUID) (uuid.UUID, error)
 }
 
 func (h *Handlers) rawInputSupport(src db.DataSource) rawInputSupport {
@@ -27,30 +27,50 @@ func (h *Handlers) rawInputSupport(src db.DataSource) rawInputSupport {
 	case "gleif_company_raw_inputs":
 		return rawInputSupport{
 			canProcess: true,
-			retry:      h.db.RetryGLEIFRawInput,
-			ignore:     h.db.IgnoreGLEIFRawInput,
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryGLEIFRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreGLEIFRawInput(ctx, id)
+			},
 		}
 	case "companies_house_company_raw_inputs":
 		return rawInputSupport{
 			canProcess: true,
-			retry:      h.db.RetryCompaniesHouseRawInput,
-			ignore:     h.db.IgnoreCompaniesHouseRawInput,
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryCompaniesHouseRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreCompaniesHouseRawInput(ctx, id)
+			},
 		}
 	case "brreg_company_raw_inputs":
 		return rawInputSupport{
 			canProcess: true,
-			retry:      h.db.RetryBrregRawInput,
-			ignore:     h.db.IgnoreBrregRawInput,
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryBrregRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreBrregRawInput(ctx, id)
+			},
 		}
 	case "ai_company_profile_raw_inputs":
 		return rawInputSupport{
-			retry:  h.db.RetryAIRawInput,
-			ignore: h.db.IgnoreAIRawInput,
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryAIRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreAIRawInput(ctx, id)
+			},
 		}
 	case "domain_discovery_raw_inputs":
 		return rawInputSupport{
-			retry:  h.db.RetryDomainDiscoveryRawInput,
-			ignore: h.db.IgnoreDomainDiscoveryRawInput,
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryDomainDiscoveryRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreDomainDiscoveryRawInput(ctx, id)
+			},
 		}
 	default:
 		return rawInputSupport{}
@@ -67,21 +87,23 @@ func (h *Handlers) handleRetryRawInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if support.canProcess {
-		if _, err := h.rv.Insert(r.Context(), workers.SourceProcessArgs{
-			SourceName: src.Name,
-		}, &river.InsertOpts{
-			Queue: "source_process",
-			UniqueOpts: river.UniqueOpts{
-				ByArgs:  true,
-				ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateScheduled},
-			},
-		}); err != nil {
-			slog.Error("enqueue raw input retry processor", "source", src.Name, "id", rowID, "error", err)
+		if h.pool == nil {
+			writeError(w, http.StatusServiceUnavailable, "database pool not available")
+			return
+		}
+		if err := h.retryRawInputWithProcessJob(r.Context(), src, rowID, support); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, http.StatusUnprocessableEntity, "raw input row is not retryable")
+				return
+			}
+			slog.Error("retry raw input with processor", "source", src.Name, "id", rowID, "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "retried"})
+		return
 	}
-	if _, err := support.retry(r.Context(), rowID); err != nil {
+	if _, err := support.retry(h.db, r.Context(), rowID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnprocessableEntity, "raw input row is not retryable")
 			return
@@ -93,12 +115,44 @@ func (h *Handlers) handleRetryRawInput(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "retried"})
 }
 
+func (h *Handlers) retryRawInputWithProcessJob(ctx context.Context, src db.DataSource, rowID uuid.UUID, support rawInputSupport) error {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return errors.Wrap(err, "begin raw input retry transaction")
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.Error("rollback raw input retry transaction", "source", src.Name, "id", rowID, "error", err)
+		}
+	}()
+
+	qtx := db.New(tx)
+	if _, err := support.retry(qtx, ctx, rowID); err != nil {
+		return err
+	}
+	if _, err := h.rv.InsertTx(ctx, tx, workers.SourceProcessArgs{
+		SourceName: src.Name,
+	}, &river.InsertOpts{
+		Queue: "source_process",
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:  true,
+			ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateScheduled},
+		},
+	}); err != nil {
+		return errors.Wrap(err, "enqueue raw input retry processor")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return errors.Wrap(err, "commit raw input retry transaction")
+	}
+	return nil
+}
+
 func (h *Handlers) handleIgnoreRawInput(w http.ResponseWriter, r *http.Request) {
 	_, rowID, support, ok := h.resolveRawInputAction(w, r)
 	if !ok {
 		return
 	}
-	if _, err := support.ignore(r.Context(), rowID); err != nil {
+	if _, err := support.ignore(h.db, r.Context(), rowID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnprocessableEntity, "raw input row cannot be ignored")
 			return
