@@ -377,6 +377,26 @@ func TestRetryRawInput_aiCompanyProfile_returnsOKWithoutRiver(t *testing.T) {
 	q.AssertExpectations(t)
 }
 
+func TestRetryRawInput_nonRetryableRow_returns422(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "ai_company_profile").Return(db.DataSource{
+		Name:           "ai_company_profile",
+		InputTableName: "ai_company_profile_raw_inputs",
+	}, nil)
+	q.On("RetryAIRawInput", mock.Anything, id).Return(uuid.UUID{}, pgx.ErrNoRows)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/ai_company_profile/raw-inputs/"+id.String()+"/retry", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	q.AssertExpectations(t)
+}
+
 func TestIgnoreRawInput_domainDiscovery_returnsOK(t *testing.T) {
 	q := &stubQuerier{}
 	id := uuid.New()
@@ -395,6 +415,26 @@ func TestIgnoreRawInput_domainDiscovery_returnsOK(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.JSONEq(t, `{"status":"ignored"}`, w.Body.String())
+	q.AssertExpectations(t)
+}
+
+func TestIgnoreRawInput_nonIgnorableRow_returns422(t *testing.T) {
+	q := &stubQuerier{}
+	id := uuid.New()
+
+	q.On("GetSourceByName", mock.Anything, "domain_discovery").Return(db.DataSource{
+		Name:           "domain_discovery",
+		InputTableName: "domain_discovery_raw_inputs",
+	}, nil)
+	q.On("IgnoreDomainDiscoveryRawInput", mock.Anything, id).Return(uuid.UUID{}, pgx.ErrNoRows)
+
+	r := routerForHandlers(q)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/domain_discovery/raw-inputs/"+id.String()+"/ignore", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	q.AssertExpectations(t)
 }
 
