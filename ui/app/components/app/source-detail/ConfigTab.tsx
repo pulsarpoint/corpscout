@@ -11,6 +11,7 @@ interface ConfigRow {
   id: string;
   key: string;
   value: string;
+  isExisting: boolean;
   error?: string;
 }
 
@@ -25,11 +26,12 @@ function configToRows(config: Record<string, unknown>): ConfigRow[] {
     id: `${key}-${index}`,
     key,
     value: JSON.stringify(value),
+    isExisting: true,
   }));
 }
 
 function newRow(): ConfigRow {
-  return { id: crypto.randomUUID(), key: "", value: "null" };
+  return { id: crypto.randomUUID(), key: "", value: "null", isExisting: false };
 }
 
 export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
@@ -110,6 +112,8 @@ export function ConfigTab({ source, saving, onPatch }: ConfigTabProps) {
                 onChange={(event) => updateRow(row.id, { key: event.target.value })}
                 placeholder="field_name"
                 aria-invalid={Boolean(row.error)}
+                readOnly={row.isExisting}
+                className={row.isExisting ? "bg-muted font-mono text-muted-foreground" : undefined}
               />
               <Input
                 value={row.value}
