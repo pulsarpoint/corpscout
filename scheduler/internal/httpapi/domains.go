@@ -24,6 +24,7 @@ func (h *Handlers) handleListDomains(w http.ResponseWriter, r *http.Request) {
 	params := db.ListDomainsParams{
 		Status:        queryString(r, "status"),
 		Signal:        queryString(r, "signal"),
+		Q:             queryString(r, "q"),
 		MinConfidence: minConf,
 		Offset:        offset,
 		Limit:         int32(limit),
@@ -36,7 +37,7 @@ func (h *Handlers) handleListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, err := h.db.CountDomains(r.Context(), db.CountDomainsParams{
-		Status: params.Status, Signal: params.Signal, MinConfidence: params.MinConfidence,
+		Status: params.Status, Signal: params.Signal, Q: params.Q, MinConfidence: params.MinConfidence,
 	})
 	if err != nil {
 		slog.Error("count domains", "error", err)
