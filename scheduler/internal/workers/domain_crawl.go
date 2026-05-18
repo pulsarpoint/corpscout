@@ -68,6 +68,7 @@ func (w *DomainCrawlWorker) Work(ctx context.Context, job *river.Job[DomainCrawl
 		ID:       jobID,
 		S3Prefix: &prefix,
 	}); err != nil {
+		slog.Error("set s3 prefix", "error", err, "job_id", jobID)
 		return errors.Wrap(err, "set s3 prefix")
 	}
 
@@ -81,7 +82,9 @@ func (w *DomainCrawlWorker) Work(ctx context.Context, job *river.Job[DomainCrawl
 	// 4. Upload favicon
 	if resp.FaviconBytes != nil && resp.FaviconURL != nil {
 		decoded, decErr := base64.StdEncoding.DecodeString(*resp.FaviconBytes)
-		if decErr == nil {
+		if decErr != nil {
+			slog.Warn("failed to decode favicon bytes", "domain", args.Domain, "error", decErr)
+		} else {
 			ext := filepath.Ext(*resp.FaviconURL)
 			if ext == "" {
 				ext = ".ico"
@@ -136,6 +139,7 @@ func (w *DomainCrawlWorker) Work(ctx context.Context, job *river.Job[DomainCrawl
 			HtmlS3Key:    htmlKey,
 			HeadersS3Key: headersKey,
 		}); err != nil {
+			slog.Error("insert page row", "error", err, "job_id", jobID, "page_num", pageNum)
 			return errors.Wrap(err, "insert page row")
 		}
 	}

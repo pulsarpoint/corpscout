@@ -14,7 +14,8 @@ UPDATE domain_crawl_jobs SET favicon_s3_key = $2, favicon_url = $3 WHERE id = $1
 
 -- name: InsertDomainCrawlJobPage :exec
 INSERT INTO domain_crawl_job_pages (job_id, page_num, url, title, status_code, content_type, md_s3_key, html_s3_key, headers_s3_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (job_id, page_num) DO NOTHING;
 
 -- name: ListDomainCrawlJobs :many
 SELECT
