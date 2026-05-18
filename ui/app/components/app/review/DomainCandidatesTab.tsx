@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { api } from "~/lib/api";
@@ -33,6 +33,11 @@ export function DomainCandidatesTab() {
   const [searchQ, setSearchQ] = useState("");
   const [selected, setSelected] = useState<ReviewCandidate | null>(null);
 
+  const searchQRef = useRef(searchQ);
+  useEffect(() => {
+    searchQRef.current = searchQ;
+  }, [searchQ]);
+
   const buildFilters = useCallback(
     (f: ActiveFilter[], q: string) => ({
       signal: f.find((x) => x.key === "signal")?.value,
@@ -66,10 +71,10 @@ export function DomainCandidatesTab() {
     fetchPage(1, [], "");
   }, [fetchPage]);
 
-  const handleFilterChange = (filters: ActiveFilter[]) => {
+  const handleFilterChange = useCallback((filters: ActiveFilter[]) => {
     setActiveFilters(filters);
-    fetchPage(1, filters, searchQ);
-  };
+    fetchPage(1, filters, searchQRef.current);
+  }, [fetchPage]);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -93,26 +98,29 @@ export function DomainCandidatesTab() {
     setTotal((prev) => Math.max(0, prev - ids.length));
   };
 
-  const handleSingleAction = async (id: string, action: "approved" | "rejected" | "superseded") => {
-    await api.createReview(id, action);
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    setTotal((prev) => Math.max(0, prev - 1));
-    if (selected?.id === id) setSelected(null);
-    toast.success(`Candidate ${action}.`);
-  };
+  const handleSingleAction = useCallback(
+    async (id: string, action: "approved" | "rejected" | "superseded") => {
+      await api.createReview(id, action);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      setSelected((prev) => (prev?.id === id ? null : prev));
+      toast.success(`Candidate ${action}.`);
+    },
+    [],
+  );
 
   const columns = useMemo<ColumnDef<ReviewCandidate, unknown>[]>(
     () => [
       {
         accessorKey: "company_name",
         header: "Company",
-        enableSorting: true,
+        enableSorting: false,
         cell: ({ getValue }) => <span className="font-medium">{getValue() as string}</span>,
       },
       {
         accessorKey: "domain",
         header: "Domain",
-        enableSorting: true,
+        enableSorting: false,
         cell: ({ getValue }) => (
           <span className="font-mono text-sm text-primary">{getValue() as string}</span>
         ),
@@ -129,7 +137,7 @@ export function DomainCandidatesTab() {
       {
         accessorKey: "confidence",
         header: "Conf",
-        enableSorting: true,
+        enableSorting: false,
         cell: ({ getValue }) => {
           const v = getValue() as number;
           return <span className="font-bold">{v}</span>;
@@ -169,7 +177,6 @@ export function DomainCandidatesTab() {
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [handleSingleAction],
   );
 
