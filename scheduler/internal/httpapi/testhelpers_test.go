@@ -533,8 +533,12 @@ func routerFor(h *httpapi.Handlers) chi.Router {
 	return r
 }
 
-func (s *stubQuerier) ReviewCompanyDomain(_ context.Context, _ db.ReviewCompanyDomainParams) error {
-	return nil
+func (s *stubQuerier) ReviewCompanyDomain(ctx context.Context, arg db.ReviewCompanyDomainParams) error {
+	if !s.hasExpectation("ReviewCompanyDomain") {
+		return nil
+	}
+	ret := s.Called(ctx, arg)
+	return ret.Error(0)
 }
 
 // ensure stubQuerier satisfies the interface at compile time
