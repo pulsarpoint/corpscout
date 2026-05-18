@@ -80,11 +80,23 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 export const api = {
   getStats: () => get<StatsResponse>("/stats"),
 
-  getReview: (page = 1, limit = 50) =>
-    get<ReviewListResponse>(`/review?page=${page}&limit=${limit}`),
+  getReview: (
+    page = 1,
+    limit = 50,
+    filters?: { signal?: string; min_confidence?: number; q?: string },
+  ) => {
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (filters?.signal) qs.set("signal", filters.signal);
+    if (filters?.min_confidence != null) qs.set("min_confidence", String(filters.min_confidence));
+    if (filters?.q) qs.set("q", filters.q);
+    return get<ReviewListResponse>(`/review?${qs.toString()}`);
+  },
 
   createReview: (id: string, action: "approved" | "rejected" | "superseded") =>
     post<unknown>(`/review/${id}/reviews`, { action, reviewed_by: "ops" }),
+
+  bulkReview: (ids: string[], action: "approved" | "rejected" | "superseded") =>
+    post<{ updated: number; skipped: number }>("/review/bulk", { ids, action }),
 
   getCompanies: (params: {
     page?: number;
