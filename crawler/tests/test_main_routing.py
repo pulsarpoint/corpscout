@@ -13,7 +13,7 @@ from adapters.base import CompanyRecord, CrawlResponse, SourceAdapter, compute_h
 class _EchoAdapter(SourceAdapter):
     source_name = "echo"
 
-    async def crawl(self, since, cursor, page):  # type: ignore[override]
+    async def crawl(self, since, cursor, page, config=None):  # type: ignore[override]
         rec = CompanyRecord(
             name="Echo",
             country_iso2="GB",
