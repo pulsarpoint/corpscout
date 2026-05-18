@@ -64,6 +64,9 @@ func TestListSources_returns_all(t *testing.T) {
 func TestPatchSource_updates_enabled(t *testing.T) {
 	q := &stubQuerier{}
 
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name: "gleif",
+	}, nil)
 	q.On("UpdateSourceEnabled", mock.Anything, db.UpdateSourceEnabledParams{
 		Name: "gleif", Enabled: false,
 	}).Return(nil)
@@ -78,6 +81,51 @@ func TestPatchSource_updates_enabled(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	q.AssertExpectations(t)
+}
+
+func TestPatchSource_unknown_field_returns_400(t *testing.T) {
+	q := &stubQuerier{}
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{"crawl_interval_hours": 24}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestPatchSource_empty_object_returns_400(t *testing.T) {
+	q := &stubQuerier{}
+
+	r := routerForHandlers(q)
+
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/gleif", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestPatchSource_enabled_only_missing_source_returns_404_without_update(t *testing.T) {
+	q := &sourcePatchWriteRecorder{}
+
+	q.On("GetSourceByName", mock.Anything, "missing").Return(db.DataSource{}, errors.New("not found"))
+
+	r := routerFor(newTestHandlers(q))
+
+	body := strings.NewReader(`{"enabled": false}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/sources/missing", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.False(t, q.updateSourceEnabledCalled)
 }
 
 func TestPatchSource_updates_schedule(t *testing.T) {
@@ -109,6 +157,9 @@ func TestPatchSource_updates_schedule(t *testing.T) {
 func TestPatchSource_updates_schedule_enabled(t *testing.T) {
 	q := &stubQuerier{}
 
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name: "gleif",
+	}, nil)
 	q.On("UpdateSourceScheduleEnabled", mock.Anything, db.UpdateSourceScheduleEnabledParams{
 		Name: "gleif", ScheduleEnabled: false,
 	}).Return(nil)

@@ -73,21 +73,25 @@ var forbiddenConfigKey = regexp.MustCompile(`(?i)(key|secret|token|password)`)
 func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var req patchSourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	ctx := r.Context()
-	needsCurrentSource := req.ScheduleKind != nil || req.ScheduleExpression != nil || req.Config != nil
-	var src db.DataSource
-	if needsCurrentSource {
-		var err error
-		src, err = h.db.GetSourceByName(ctx, name)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "source not found")
-			return
-		}
+	configRequested := req.Config != nil && len(req.Config) > 0
+	hasWrites := req.Enabled != nil || req.ScheduleEnabled != nil || req.ScheduleKind != nil || req.ScheduleExpression != nil || configRequested
+	if !hasWrites {
+		writeError(w, http.StatusBadRequest, "empty patch request")
+		return
+	}
+
+	src, err := h.db.GetSourceByName(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
 	}
 
 	scheduleKind := src.ScheduleKind
@@ -108,7 +112,7 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var mergedConfig json.RawMessage
-	if req.Config != nil {
+	if configRequested {
 		if err := validateConfigPatch(req.Config); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "invalid config patch")
 			return
@@ -123,7 +127,6 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeDB := h.db
-	hasWrites := req.Enabled != nil || req.ScheduleEnabled != nil || req.ScheduleKind != nil || req.ScheduleExpression != nil || req.Config != nil
 	var tx pgx.Tx
 	if h.pool != nil && hasWrites {
 		var err error
@@ -173,7 +176,7 @@ func (h *Handlers) handlePatchSource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.Config != nil {
+	if configRequested {
 		if err := writeDB.UpdateSourceConfig(ctx, db.UpdateSourceConfigParams{
 			Name:   name,
 			Config: mergedConfig,
