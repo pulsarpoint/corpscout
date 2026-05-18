@@ -20,16 +20,19 @@ type Client struct {
 
 // New creates an S3-compatible client using static credentials and a custom endpoint.
 // UsePathStyle is enabled, which is required for S3-compatible stores such as rustfs/minio.
-func New(endpoint, accessKey, secretKey, bucket string) *Client {
-	cfg, _ := awsconfig.LoadDefaultConfig(context.Background(),
+func New(endpoint, accessKey, secretKey, bucket string) (*Client, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion("us-east-1"),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
 	)
+	if err != nil {
+		return nil, errors.Wrap(err, "s3client: load config")
+	}
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.BaseEndpoint = aws.String(endpoint)
 	})
-	return &Client{s3: client, bucket: bucket}
+	return &Client{s3: client, bucket: bucket}, nil
 }
 
 // EnsureBucket creates the configured bucket if it does not already exist.
