@@ -1,6 +1,7 @@
 import type {
   StatsResponse,
   ReviewListResponse,
+  CompanySuggestionListResponse,
   CompanyListResponse,
   CompanyDetail,
   DomainListResponse,
@@ -97,6 +98,15 @@ export const api = {
 
   bulkReview: (ids: string[], action: "approved" | "rejected" | "superseded") =>
     post<{ updated: number; skipped: number }>("/review/bulk", { ids, action }),
+
+  getCompanySuggestions: (page = 1, limit = 50) =>
+    get<CompanySuggestionListResponse>(`/suggestions/companies?page=${page}&limit=${limit}`),
+
+  approveCompanySuggestion: (id: string) =>
+    post<unknown>(`/suggestions/companies/${id}/approve`, { reviewed_by: "ops" }),
+
+  rejectCompanySuggestion: (id: string) =>
+    post<unknown>(`/suggestions/companies/${id}/reject`, { reviewed_by: "ops" }),
 
   getCompanies: (params: {
     page?: number;

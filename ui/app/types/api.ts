@@ -34,6 +34,28 @@ export interface ReviewListResponse {
   total: number;
 }
 
+export interface CompanySuggestion {
+  id: string;
+  proposed_display_name: string;
+  proposed_legal_name: string | null;
+  proposed_website: string | null;
+  proposed_country_id: string | null;
+  proposed_profile: Record<string, unknown>;
+  confidence: number | null;
+  status: string;
+  reviewed_by: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanySuggestionListResponse {
+  items: CompanySuggestion[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 export interface Company {
   id: string;
   lei: string | null;
