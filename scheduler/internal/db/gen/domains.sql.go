@@ -14,19 +14,30 @@ import (
 
 const countDomains = `-- name: CountDomains :one
 SELECT COUNT(*) FROM company_domains cd
+JOIN domains d ON d.id = cd.domain_id
+JOIN companies c ON c.id = cd.company_id
 WHERE ($1::text IS NULL OR cd.status = $1)
   AND ($2::text IS NULL OR cd.signal = $2)
   AND ($3::smallint IS NULL OR cd.confidence >= $3)
+  AND ($4::text IS NULL
+       OR c.name ILIKE '%' || $4 || '%'
+       OR d.domain ILIKE '%' || $4 || '%')
 `
 
 type CountDomainsParams struct {
 	Status        *string `json:"status"`
 	Signal        *string `json:"signal"`
 	MinConfidence *int16  `json:"min_confidence"`
+	Q             *string `json:"q"`
 }
 
 func (q *Queries) CountDomains(ctx context.Context, arg CountDomainsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDomains, arg.Status, arg.Signal, arg.MinConfidence)
+	row := q.db.QueryRow(ctx, countDomains,
+		arg.Status,
+		arg.Signal,
+		arg.MinConfidence,
+		arg.Q,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -40,14 +51,18 @@ JOIN companies c ON c.id = cd.company_id
 WHERE ($1::text IS NULL OR cd.status = $1)
   AND ($2::text IS NULL OR cd.signal = $2)
   AND ($3::smallint IS NULL OR cd.confidence >= $3)
+  AND ($4::text IS NULL
+       OR c.name ILIKE '%' || $4 || '%'
+       OR d.domain ILIKE '%' || $4 || '%')
 ORDER BY cd.confidence DESC, d.domain
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListDomainsParams struct {
 	Status        *string `json:"status"`
 	Signal        *string `json:"signal"`
 	MinConfidence *int16  `json:"min_confidence"`
+	Q             *string `json:"q"`
 	Offset        int32   `json:"offset"`
 	Limit         int32   `json:"limit"`
 }
@@ -72,6 +87,7 @@ func (q *Queries) ListDomains(ctx context.Context, arg ListDomainsParams) ([]Lis
 		arg.Status,
 		arg.Signal,
 		arg.MinConfidence,
+		arg.Q,
 		arg.Offset,
 		arg.Limit,
 	)

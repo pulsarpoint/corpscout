@@ -31,14 +31,22 @@ JOIN companies c ON c.id = cd.company_id
 WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
   AND (sqlc.narg('signal')::text IS NULL OR cd.signal = sqlc.narg('signal'))
   AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'))
+  AND (sqlc.narg('q')::text IS NULL
+       OR c.name ILIKE '%' || sqlc.narg('q') || '%'
+       OR d.domain ILIKE '%' || sqlc.narg('q') || '%')
 ORDER BY cd.confidence DESC, d.domain
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountDomains :one
 SELECT COUNT(*) FROM company_domains cd
+JOIN domains d ON d.id = cd.domain_id
+JOIN companies c ON c.id = cd.company_id
 WHERE (sqlc.narg('status')::text IS NULL OR cd.status = sqlc.narg('status'))
   AND (sqlc.narg('signal')::text IS NULL OR cd.signal = sqlc.narg('signal'))
-  AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'));
+  AND (sqlc.narg('min_confidence')::smallint IS NULL OR cd.confidence >= sqlc.narg('min_confidence'))
+  AND (sqlc.narg('q')::text IS NULL
+       OR c.name ILIKE '%' || sqlc.narg('q') || '%'
+       OR d.domain ILIKE '%' || sqlc.narg('q') || '%');
 
 -- name: ReviewCompanyDomain :exec
 UPDATE company_domains SET status = $2 WHERE id = $1;
