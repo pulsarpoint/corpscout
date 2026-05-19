@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"log/slog"
 	"strings"
 
@@ -15,6 +14,8 @@ import (
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
+
+const evidenceJSON = `{"source":"csv_upload"}`
 
 // s3Downloader is the subset of s3client.Client that DomainImportWorker needs.
 type s3Downloader interface {
@@ -137,7 +138,6 @@ func (w *DomainImportWorker) processRow(ctx context.Context, domainStr, companyN
 		return errors.Wrap(err, "lookup company by name")
 	}
 
-	evidence, _ := json.Marshal(map[string]any{"source": "csv_upload"})
 	_, err = w.db.UpsertCompanyDomain(ctx, db.UpsertCompanyDomainParams{
 		CompanyID:        company.ID,
 		DomainID:         d.ID,
@@ -145,7 +145,10 @@ func (w *DomainImportWorker) processRow(ctx context.Context, domainStr, companyN
 		Status:           "needs_review",
 		Signal:           "manual_upload",
 		Confidence:       int16(90),
-		Evidence:         evidence,
+		Evidence:         []byte(evidenceJSON),
 	})
-	return errors.Wrap(err, "upsert company domain")
+	if err != nil {
+		return errors.Wrap(err, "upsert company domain")
+	}
+	return nil
 }
