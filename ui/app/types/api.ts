@@ -10,7 +10,7 @@ export interface StatsResponse {
   records_upserted_7d: number;
 }
 
-export type Signal = "registry_website" | "wikidata" | "certsh" | "whois" | "search";
+export type Signal = "registry_website" | "wikidata" | "certsh" | "whois" | "search" | "manual_upload";
 
 export interface ReviewCandidate {
   id: string;
