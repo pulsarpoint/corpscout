@@ -39,3 +39,6 @@ WHERE c.registration_number = $1
 INSERT INTO companies (canonical_slug, name, country_id, status)
 VALUES ($1, $2, $3, coalesce($4, 'active'))
 RETURNING *;
+
+-- name: GetCompanyByExactName :one
+SELECT * FROM companies WHERE lower(name) = lower($1) LIMIT 1;

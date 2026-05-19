@@ -55,3 +55,9 @@ UPDATE company_domains SET status = $2 WHERE id = $1;
 SELECT id, domain, first_seen_at, last_verified_at
 FROM domains
 WHERE id = $1;
+
+-- name: UpsertDomainWithSource :one
+INSERT INTO domains (domain, import_source)
+VALUES ($1, $2)
+ON CONFLICT (domain) DO UPDATE SET last_verified_at = now()
+RETURNING *;
