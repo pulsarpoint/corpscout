@@ -98,6 +98,12 @@ export function DomainCandidatesTab() {
     setTotal((prev) => Math.max(0, prev - ids.length));
   };
 
+  const handleSelectAllFiltered = useCallback(async () => {
+    const filters = buildFilters(activeFilters, searchQRef.current);
+    const res = await api.getReviewIDs(filters);
+    return res.ids;
+  }, [activeFilters, buildFilters]);
+
   const handleSingleAction = useCallback(
     async (id: string, action: "approved" | "rejected" | "superseded") => {
       await api.createReview(id, action);
@@ -199,6 +205,7 @@ export function DomainCandidatesTab() {
         onSearch={handleSearch}
         searchPlaceholder="Search company or domain…"
         onRowClick={setSelected}
+        onSelectAllFiltered={handleSelectAllFiltered}
       />
       <ReviewSheet
         candidate={selected}

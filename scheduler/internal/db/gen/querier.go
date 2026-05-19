@@ -83,6 +83,7 @@ type Querier interface {
 	// Provenance links
 	InsertSuggestionSourceLink(ctx context.Context, arg InsertSuggestionSourceLinkParams) (SuggestionSourceLink, error)
 	InterruptStalePullRuns(ctx context.Context) error
+	ListAllPendingCompanySuggestionIDs(ctx context.Context) ([]uuid.UUID, error)
 	ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]CveEntityLink, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
 	ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]CompanyRelationship, error)
@@ -98,6 +99,7 @@ type Querier interface {
 	ListPendingCVELinkSuggestions(ctx context.Context, arg ListPendingCVELinkSuggestionsParams) ([]CveEntityLinkSuggestion, error)
 	ListPendingCompanySuggestions(ctx context.Context, arg ListPendingCompanySuggestionsParams) ([]CompanySuggestion, error)
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
+	ListReviewCandidateIDs(ctx context.Context, arg ListReviewCandidateIDsParams) ([]uuid.UUID, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
 	MarkBrregRawInputFailed(ctx context.Context, arg MarkBrregRawInputFailedParams) error
 	MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error

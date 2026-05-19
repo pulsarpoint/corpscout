@@ -30,21 +30,25 @@ export function CompanySuggestionsTab() {
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     fetchPage(1);
   }, [fetchPage]);
 
   const handleApprove = useCallback(async (ids: string[]) => {
-    await Promise.all(ids.map((id) => api.approveCompanySuggestion(id)));
+    await api.bulkCompanySuggestions(ids, "approve");
     setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
     setTotal((prev) => Math.max(0, prev - ids.length));
   }, []);
 
   const handleReject = useCallback(async (ids: string[]) => {
-    await Promise.all(ids.map((id) => api.rejectCompanySuggestion(id)));
+    await api.bulkCompanySuggestions(ids, "reject");
     setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
     setTotal((prev) => Math.max(0, prev - ids.length));
+  }, []);
+
+  const handleSelectAllFiltered = useCallback(async () => {
+    const res = await api.getCompanySuggestionIDs();
+    return res.ids;
   }, []);
 
   const columns = useMemo<ColumnDef<CompanySuggestion, unknown>[]>(
@@ -131,7 +135,7 @@ export function CompanySuggestionsTab() {
         ),
       },
     ],
-    [handleApprove, handleReject],
+    [handleApprove, handleReject, actionLoading],
   );
 
   if (!loading && total === 0) {
@@ -154,6 +158,7 @@ export function CompanySuggestionsTab() {
       onPageChange={fetchPage}
       onApprove={handleApprove}
       onReject={handleReject}
+      onSelectAllFiltered={handleSelectAllFiltered}
     />
   );
 }

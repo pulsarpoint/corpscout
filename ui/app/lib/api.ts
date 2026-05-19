@@ -111,8 +111,22 @@ export const api = {
   bulkReview: (ids: string[], action: "approved" | "rejected" | "superseded") =>
     post<{ updated: number; skipped: number }>("/review/bulk", { ids, action }),
 
+  getReviewIDs: (filters?: { signal?: string; min_confidence?: number; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (filters?.signal) qs.set("signal", filters.signal);
+    if (filters?.min_confidence != null) qs.set("min_confidence", String(filters.min_confidence));
+    if (filters?.q) qs.set("q", filters.q);
+    return get<{ ids: string[] }>(`/review/ids${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
   getCompanySuggestions: (page = 1, limit = 50) =>
     get<CompanySuggestionListResponse>(`/suggestions/companies?page=${page}&limit=${limit}`),
+
+  getCompanySuggestionIDs: () =>
+    get<{ ids: string[] }>("/suggestions/companies/ids"),
+
+  bulkCompanySuggestions: (ids: string[], action: "approve" | "reject") =>
+    post<{ updated: number; skipped: number }>("/suggestions/companies/bulk", { ids, action }),
 
   approveCompanySuggestion: (id: string) =>
     post<unknown>(`/suggestions/companies/${id}/approve`, { reviewed_by: "ops" }),

@@ -586,6 +586,30 @@ func (q *Queries) InsertSuggestionSourceLink(ctx context.Context, arg InsertSugg
 	return i, err
 }
 
+const listAllPendingCompanySuggestionIDs = `-- name: ListAllPendingCompanySuggestionIDs :many
+SELECT id FROM company_suggestions WHERE status = 'pending' ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAllPendingCompanySuggestionIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAllPendingCompanySuggestionIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingCompanySuggestions = `-- name: ListPendingCompanySuggestions :many
 SELECT id, proposed_display_name, proposed_legal_name, proposed_website, proposed_canonical_slug, proposed_country_id, proposed_profile, confidence, status, created_company_id, reviewed_by, reviewed_at, review_note, created_at, updated_at FROM company_suggestions
 WHERE status = 'pending'

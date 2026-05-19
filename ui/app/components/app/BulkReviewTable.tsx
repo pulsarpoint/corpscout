@@ -52,6 +52,7 @@ interface BulkReviewTableProps<TData extends { id: string }> {
   onSearch?: (q: string) => void;
   onRowClick?: (row: TData) => void;
   searchPlaceholder?: string;
+  onSelectAllFiltered?: () => Promise<string[]>;
 }
 
 export function BulkReviewTable<TData extends { id: string }>({
@@ -71,8 +72,12 @@ export function BulkReviewTable<TData extends { id: string }>({
   onSearch,
   onRowClick,
   searchPlaceholder = "Search…",
+  onSelectAllFiltered,
 }: BulkReviewTableProps<TData>) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  // Extended selection holds IDs across all pages (set when "select all filtered" is used)
+  const [extendedIds, setExtendedIds] = useState<Set<string> | null>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
   const [searchValue, setSearchValue] = useState("");
@@ -91,9 +96,15 @@ export function BulkReviewTable<TData extends { id: string }>({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchValue]);
 
+  // Clear selection when data changes (page turn, filter change)
   useEffect(() => {
     setRowSelection({});
+    setExtendedIds(null);
   }, [data]);
+
+  const effectiveSelectedIds: string[] = extendedIds
+    ? [...extendedIds]
+    : Object.keys(rowSelection);
 
   const allColumns = useMemo<ColumnDef<TData, unknown>[]>(
     () => [
@@ -102,14 +113,26 @@ export function BulkReviewTable<TData extends { id: string }>({
         header: ({ table }) => (
           <Checkbox
             checked={table.getIsAllPageRowsSelected()}
-            onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+            onCheckedChange={(v) => {
+              setExtendedIds(null);
+              table.toggleAllPageRowsSelected(!!v);
+            }}
             aria-label="Select all"
           />
         ),
         cell: ({ row }) => (
           <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            checked={extendedIds ? extendedIds.has(row.original.id) : row.getIsSelected()}
+            onCheckedChange={(v) => {
+              if (extendedIds) {
+                // Switch from extended to per-page mode
+                const next = new Set(extendedIds);
+                if (v) next.add(row.original.id); else next.delete(row.original.id);
+                setExtendedIds(next);
+              } else {
+                row.toggleSelected(!!v);
+              }
+            }}
             aria-label="Select row"
             onClick={(e) => e.stopPropagation()}
           />
@@ -118,7 +141,7 @@ export function BulkReviewTable<TData extends { id: string }>({
       },
       ...columns,
     ],
-    [columns],
+    [columns, extendedIds],
   );
 
   const table = useReactTable({
@@ -135,23 +158,38 @@ export function BulkReviewTable<TData extends { id: string }>({
     enableRowSelection: true,
   });
 
-  const selectedIds = Object.keys(rowSelection);
   const pageCount = Math.ceil(total / pageSize);
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
+  const hasFilters = activeFilters.length > 0 || searchValue.trim() !== "";
+
+  const handleSelectAllFiltered = async () => {
+    if (!onSelectAllFiltered) return;
+    setSelectingAll(true);
+    try {
+      const ids = await onSelectAllFiltered();
+      setExtendedIds(new Set(ids));
+      setRowSelection({});
+    } catch {
+      toast.error("Failed to load all IDs.");
+    } finally {
+      setSelectingAll(false);
+    }
+  };
 
   const handleBulkAction = async (action: "approve" | "reject") => {
-    if (selectedIds.length === 0) return;
+    if (effectiveSelectedIds.length === 0) return;
     setBulkLoading(true);
     try {
       if (action === "approve") {
-        await onApprove(selectedIds);
-        toast.success(`Approved ${selectedIds.length} items.`);
+        await onApprove(effectiveSelectedIds);
+        toast.success(`Approved ${effectiveSelectedIds.length} items.`);
       } else {
-        await onReject(selectedIds);
-        toast.success(`Rejected ${selectedIds.length} items.`);
+        await onReject(effectiveSelectedIds);
+        toast.success(`Rejected ${effectiveSelectedIds.length} items.`);
       }
       setRowSelection({});
+      setExtendedIds(null);
     } catch {
       toast.error("Bulk action failed. Some items may not have been updated.");
     } finally {
@@ -261,16 +299,35 @@ export function BulkReviewTable<TData extends { id: string }>({
             Clear all
           </button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
-          {total.toLocaleString()} total
-        </span>
+        {onSelectAllFiltered && (hasFilters || total > pageSize) && !extendedIds && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 ml-auto"
+            disabled={selectingAll}
+            onClick={handleSelectAllFiltered}
+          >
+            {selectingAll ? "Selecting…" : `Select all ${total.toLocaleString()} ${hasFilters ? "filtered" : ""}`}
+          </Button>
+        )}
+        {!onSelectAllFiltered && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {total.toLocaleString()} total
+          </span>
+        )}
+        {onSelectAllFiltered && !(!extendedIds && (hasFilters || total > pageSize)) && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {total.toLocaleString()} total
+          </span>
+        )}
       </div>
 
       {/* Bulk action bar */}
-      {selectedIds.length > 0 && (
+      {effectiveSelectedIds.length > 0 && (
         <div className="flex items-center gap-3 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 dark:border-blue-800 dark:bg-blue-950">
           <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-            {selectedIds.length} selected
+            {effectiveSelectedIds.length.toLocaleString()} selected
+            {extendedIds && <span className="ml-1 text-xs font-normal">(all filtered)</span>}
           </span>
           <Button
             size="sm"
@@ -279,7 +336,7 @@ export function BulkReviewTable<TData extends { id: string }>({
             disabled={bulkLoading}
             onClick={() => handleBulkAction("approve")}
           >
-            Approve {selectedIds.length}
+            Approve {effectiveSelectedIds.length.toLocaleString()}
           </Button>
           <Button
             size="sm"
@@ -288,13 +345,13 @@ export function BulkReviewTable<TData extends { id: string }>({
             disabled={bulkLoading}
             onClick={() => handleBulkAction("reject")}
           >
-            Reject {selectedIds.length}
+            Reject {effectiveSelectedIds.length.toLocaleString()}
           </Button>
           <Button
             size="sm"
             variant="ghost"
             className="ml-auto h-7"
-            onClick={() => setRowSelection({})}
+            onClick={() => { setRowSelection({}); setExtendedIds(null); }}
           >
             Deselect all
           </Button>
@@ -352,7 +409,7 @@ export function BulkReviewTable<TData extends { id: string }>({
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() ? "selected" : undefined}
+                  data-state={(extendedIds ? extendedIds.has(row.original.id) : row.getIsSelected()) ? "selected" : undefined}
                   className={onRowClick ? "cursor-pointer" : ""}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                 >

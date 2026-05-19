@@ -35,6 +35,66 @@ func (h *Handlers) handleListCompanySuggestions(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (h *Handlers) handleListCompanySuggestionIDs(w http.ResponseWriter, r *http.Request) {
+	ids, err := h.db.ListAllPendingCompanySuggestionIDs(r.Context())
+	if err != nil {
+		slog.Error("list company suggestion ids", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = id.String()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ids": strs})
+}
+
+func (h *Handlers) handleBulkCompanySuggestions(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs    []string `json:"ids"`
+		Action string   `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(body.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "ids must not be empty")
+		return
+	}
+	if body.Action != "approve" && body.Action != "reject" {
+		writeError(w, http.StatusBadRequest, "action must be approve or reject")
+		return
+	}
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "database pool not available")
+		return
+	}
+	updated, skipped := 0, 0
+	for _, idStr := range body.IDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			skipped++
+			continue
+		}
+		if body.Action == "approve" {
+			if _, err := service.ApproveCompanySuggestion(r.Context(), h.pool, id, "ops", ""); err != nil {
+				slog.Error("bulk approve company suggestion", "id", id, "error", err)
+				skipped++
+				continue
+			}
+		} else {
+			if err := service.RejectCompanySuggestion(r.Context(), h.pool, id, "ops", ""); err != nil {
+				slog.Error("bulk reject company suggestion", "id", id, "error", err)
+				skipped++
+				continue
+			}
+		}
+		updated++
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"updated": updated, "skipped": skipped})
+}
+
 func (h *Handlers) handleGetCompanySuggestion(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {

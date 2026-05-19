@@ -21,6 +21,9 @@ LIMIT $2 OFFSET $1;
 -- name: CountPendingCompanySuggestions :one
 SELECT COUNT(*) FROM company_suggestions WHERE status = 'pending';
 
+-- name: ListAllPendingCompanySuggestionIDs :many
+SELECT id FROM company_suggestions WHERE status = 'pending' ORDER BY created_at DESC;
+
 -- name: UpdateCompanySuggestionApproved :exec
 UPDATE company_suggestions
 SET status = 'approved',

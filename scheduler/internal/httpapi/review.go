@@ -69,6 +69,34 @@ func (h *Handlers) handleListReview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handlers) handleListReviewIDs(w http.ResponseWriter, r *http.Request) {
+	status := "needs_review"
+	var minConf *int16
+	if s := r.URL.Query().Get("min_confidence"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			v := int16(n)
+			minConf = &v
+		}
+	}
+	params := db.ListReviewCandidateIDsParams{
+		Status:        &status,
+		Signal:        queryString(r, "signal"),
+		MinConfidence: minConf,
+		Q:             queryString(r, "q"),
+	}
+	ids, err := h.db.ListReviewCandidateIDs(r.Context(), params)
+	if err != nil {
+		slog.Error("list review candidate ids", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = id.String()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ids": strs})
+}
+
 func (h *Handlers) handleCreateReview(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)

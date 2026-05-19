@@ -202,6 +202,51 @@ func (q *Queries) ListDomainsForCompany(ctx context.Context, companyID uuid.UUID
 	return items, nil
 }
 
+const listReviewCandidateIDs = `-- name: ListReviewCandidateIDs :many
+SELECT cd.id FROM company_domains cd
+JOIN domains d ON d.id = cd.domain_id
+JOIN companies c ON c.id = cd.company_id
+WHERE ($1::text IS NULL OR cd.status = $1)
+  AND ($2::text IS NULL OR cd.signal = $2)
+  AND ($3::smallint IS NULL OR cd.confidence >= $3)
+  AND ($4::text IS NULL
+       OR c.name ILIKE '%' || $4 || '%'
+       OR d.domain ILIKE '%' || $4 || '%')
+ORDER BY cd.confidence DESC, d.domain
+`
+
+type ListReviewCandidateIDsParams struct {
+	Status        *string `json:"status"`
+	Signal        *string `json:"signal"`
+	MinConfidence *int16  `json:"min_confidence"`
+	Q             *string `json:"q"`
+}
+
+func (q *Queries) ListReviewCandidateIDs(ctx context.Context, arg ListReviewCandidateIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listReviewCandidateIDs,
+		arg.Status,
+		arg.Signal,
+		arg.MinConfidence,
+		arg.Q,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reviewCompanyDomain = `-- name: ReviewCompanyDomain :exec
 UPDATE company_domains SET status = $2 WHERE id = $1
 `
