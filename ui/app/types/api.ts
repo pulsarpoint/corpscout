@@ -365,6 +365,7 @@ export interface VCompanySource {
 export interface VDomain {
   id: string;
   domain: string;
+  import_source: string;
   first_seen_at: string | null;
   last_verified_at: string | null;
   company_count: number;
@@ -374,6 +375,21 @@ export interface VDomain {
   primary_signal: string | null;
   crawled: boolean;
   last_crawled_at: string | null;
+}
+
+export interface DomainImportBatch {
+  id: string;
+  filename: string;
+  csv_s3_key: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  rows_total: number;
+  rows_imported: number;
+  rows_skipped: number;
+  rows_failed: number;
+  error_message: string | null;
+  river_job_id: number | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 export interface DomainDetail {
