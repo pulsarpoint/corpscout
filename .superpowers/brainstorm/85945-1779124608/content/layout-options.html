@@ -1,0 +1,122 @@
+<h2>Review Table — Layout Approach</h2>
+<p class="subtitle">25,289 pending candidates. How should filters, selection, and bulk actions be arranged?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6">
+        <div style="background:#161b22;padding:4px 8px;border-radius:3px;margin-bottom:6px;display:flex;gap:8px;align-items:center">
+          <span style="background:#1f6feb;color:white;padding:1px 6px;border-radius:3px;font-size:10px">✓ 4 selected</span>
+          <span style="background:#238636;color:white;padding:1px 8px;border-radius:3px;font-size:10px">✓ Approve all</span>
+          <span style="background:#da3633;color:white;padding:1px 8px;border-radius:3px;font-size:10px">✗ Reject all</span>
+          <span style="color:#8b949e;margin-left:auto">Clear</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <span style="background:#21262d;padding:2px 8px;border-radius:3px;font-size:10px">Signal ▾</span>
+          <span style="background:#21262d;padding:2px 8px;border-radius:3px;font-size:10px">Confidence ▾</span>
+          <span style="background:#21262d;padding:2px 8px;border-radius:3px;font-size:10px">Company ▾</span>
+          <span style="color:#8b949e;font-size:10px;margin-left:auto">50 shown · 25,289 total</span>
+        </div>
+        <div style="border:1px solid #30363d;border-radius:4px;overflow:hidden">
+          <div style="background:#161b22;padding:3px 6px;display:grid;grid-template-columns:20px 1fr 1fr 60px 60px 80px;gap:8px;font-size:10px;color:#8b949e">
+            <span>☐</span><span>Company ↕</span><span>Domain ↕</span><span>Signal ↕</span><span>Conf ↕</span><span>Actions</span>
+          </div>
+          <div style="padding:3px 6px;display:grid;grid-template-columns:20px 1fr 1fr 60px 60px 80px;gap:8px;font-size:10px;border-top:1px solid #21262d">
+            <span style="color:#1f6feb">☑</span><span>ACME Corp</span><span style="color:#58a6ff">acme.co.uk</span><span style="background:#0d419d;color:#79c0ff;padding:1px 4px;border-radius:3px;font-size:9px">certsh</span><span style="color:#3fb950">85</span><span style="color:#8b949e">···</span>
+          </div>
+          <div style="padding:3px 6px;display:grid;grid-template-columns:20px 1fr 1fr 60px 60px 80px;gap:8px;font-size:10px;border-top:1px solid #21262d">
+            <span style="color:#1f6feb">☑</span><span>Mining Inst.</span><span style="color:#58a6ff">mining.org</span><span style="background:#0d419d;color:#79c0ff;padding:1px 4px;border-radius:3px;font-size:9px">certsh</span><span style="color:#3fb950">80</span><span style="color:#8b949e">···</span>
+          </div>
+          <div style="padding:3px 6px;display:grid;grid-template-columns:20px 1fr 1fr 60px 60px 80px;gap:8px;font-size:10px;border-top:1px solid #21262d;color:#8b949e">
+            <span>☐</span><span>Norsk AS</span><span style="color:#58a6ff">norsk.no</span><span style="background:#1a3224;color:#56d364;padding:1px 4px;border-radius:3px;font-size:9px">wikidata</span><span style="color:#d29922">60</span><span style="color:#8b949e">···</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Dropdown filter bar + contextual bulk toolbar</h3>
+      <p>Filter chips above the table. Bulk action bar appears inline (replaces count) when rows are checked. Clean, keeps vertical space.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6;display:grid;grid-template-columns:130px 1fr;gap:8px">
+        <div style="background:#161b22;padding:6px;border-radius:3px">
+          <div style="font-size:9px;color:#8b949e;margin-bottom:4px">FILTERS</div>
+          <div style="font-size:10px;margin-bottom:6px">
+            <div style="color:#8b949e;font-size:9px">Signal</div>
+            <div style="margin:2px 0">☑ certsh</div>
+            <div style="margin:2px 0">☑ wikidata</div>
+            <div style="margin:2px 0">☐ whois</div>
+          </div>
+          <div style="font-size:10px;margin-bottom:6px">
+            <div style="color:#8b949e;font-size:9px">Confidence</div>
+            <div style="background:#21262d;padding:2px 4px;border-radius:2px;font-size:9px">≥ 60</div>
+          </div>
+          <div style="background:#238636;color:white;padding:2px 6px;border-radius:3px;font-size:9px;text-align:center">Apply</div>
+        </div>
+        <div>
+          <div style="background:#da3633;color:white;padding:2px 8px;border-radius:3px;font-size:9px;margin-bottom:4px;display:inline-block">✗ Reject 12 filtered</div>
+          <div style="border:1px solid #30363d;border-radius:4px;overflow:hidden">
+            <div style="background:#161b22;padding:3px 6px;display:grid;grid-template-columns:14px 1fr 60px 40px;gap:6px;font-size:10px;color:#8b949e">
+              <span>☐</span><span>Company</span><span>Domain</span><span>Conf</span>
+            </div>
+            <div style="padding:3px 6px;display:grid;grid-template-columns:14px 1fr 60px 40px;gap:6px;font-size:10px;border-top:1px solid #21262d">
+              <span style="color:#1f6feb">☑</span><span>ACME</span><span style="color:#58a6ff">acme.co</span><span style="color:#3fb950">85</span>
+            </div>
+            <div style="padding:3px 6px;display:grid;grid-template-columns:14px 1fr 60px 40px;gap:6px;font-size:10px;border-top:1px solid #21262d">
+              <span>☐</span><span>Norsk</span><span style="color:#58a6ff">norsk.no</span><span style="color:#d29922">60</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Left filter panel + bulk action bar</h3>
+      <p>Persistent filter sidebar with checkboxes and ranges. Bulk actions shown when rows selected. More room for complex filters but takes horizontal space.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6">
+        <div style="margin-bottom:4px;display:flex;gap:6px;align-items:center">
+          <input style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:2px 6px;border-radius:3px;font-size:10px;flex:1" placeholder="🔍 Search company or domain…">
+          <span style="background:#21262d;padding:2px 8px;border-radius:3px;font-size:10px">Filter ▾</span>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="background:#0d419d;color:#79c0ff;padding:1px 6px;border-radius:10px;font-size:9px">signal: certsh ×</span>
+          <span style="background:#1a3224;color:#56d364;padding:1px 6px;border-radius:10px;font-size:9px">conf ≥ 60 ×</span>
+          <span style="color:#8b949e;font-size:9px">+ Add filter</span>
+        </div>
+        <div style="background:#161b22;padding:3px 6px;margin-bottom:2px;border-radius:3px;display:flex;align-items:center;gap:6px">
+          <span style="color:#1f6feb">☑ 3 selected</span>
+          <span style="color:#8b949e;font-size:9px">→</span>
+          <span style="background:#238636;color:white;padding:1px 6px;border-radius:3px;font-size:9px">Approve 3</span>
+          <span style="background:#da3633;color:white;padding:1px 6px;border-radius:3px;font-size:9px">Reject 3</span>
+          <span style="color:#8b949e;font-size:9px;margin-left:auto">Clear</span>
+        </div>
+        <div style="border:1px solid #30363d;border-radius:4px;overflow:hidden">
+          <div style="background:#161b22;padding:3px 6px;display:grid;grid-template-columns:14px 1fr 1fr 55px 45px 50px;gap:6px;font-size:10px;color:#8b949e">
+            <span>☐</span><span>Company ↕</span><span>Domain ↕</span><span>Signal</span><span>Conf ↕</span><span></span>
+          </div>
+          <div style="padding:3px 6px;display:grid;grid-template-columns:14px 1fr 1fr 55px 45px 50px;gap:6px;font-size:10px;border-top:1px solid #21262d">
+            <span style="color:#1f6feb">☑</span><span>ACME Corp</span><span style="color:#58a6ff">acme.co.uk</span><span style="background:#0d419d;color:#79c0ff;padding:1px 4px;border-radius:3px;font-size:9px">certsh</span><span style="color:#3fb950">85</span><span style="color:#8b949e;font-size:9px">View</span>
+          </div>
+          <div style="padding:3px 6px;display:grid;grid-template-columns:14px 1fr 1fr 55px 45px 50px;gap:6px;font-size:10px;border-top:1px solid #21262d">
+            <span style="color:#1f6feb">☑</span><span>Mining Inst.</span><span style="color:#58a6ff">mining.org</span><span style="background:#0d419d;color:#79c0ff;padding:1px 4px;border-radius:3px;font-size:9px">certsh</span><span style="color:#3fb950">80</span><span style="color:#8b949e;font-size:9px">View</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Search + active filter chips + selection banner</h3>
+      <p>Free-text search + "Filter ▾" popover to add filters. Applied filters shown as dismissible chips. Selection count banner appears above the table when rows checked. Most compact and flexible.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click a card to select your preferred layout approach.</p>

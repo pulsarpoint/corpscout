@@ -1,0 +1,87 @@
+<h2>Review Page — Component Architecture</h2>
+<p class="subtitle">Shared bulk-review shell wraps each tab. Tabs only provide columns + data + action handlers.</p>
+
+<div class="mockup">
+  <div class="mockup-header">ui/app/routes/review.tsx</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:11px;line-height:1.7;background:#0d1117;color:#c9d1d9;padding:12px;border-radius:4px">
+
+    <div style="color:#8b949e;margin-bottom:12px">── routes/review.tsx ─── thin orchestrator, just tabs</div>
+
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:10px">
+      <div style="color:#ff7b72;margin-bottom:6px">📄 review.tsx</div>
+      <div style="color:#c9d1d9;font-size:10px">
+        <span style="color:#79c0ff">&lt;Tabs&gt;</span><br>
+        &nbsp;&nbsp;<span style="color:#79c0ff">&lt;TabsTrigger&gt;</span><span style="color:#a5d6ff">Domain Candidates</span> <span style="background:#1f6feb;color:white;padding:0 5px;border-radius:10px;font-size:9px">25,288</span><span style="color:#79c0ff">&lt;/TabsTrigger&gt;</span><br>
+        &nbsp;&nbsp;<span style="color:#79c0ff">&lt;TabsTrigger&gt;</span><span style="color:#a5d6ff">New Companies</span> <span style="background:#21262d;color:#8b949e;padding:0 5px;border-radius:10px;font-size:9px">0</span><span style="color:#79c0ff">&lt;/TabsTrigger&gt;</span><br>
+        &nbsp;&nbsp;<span style="color:#8b949e">// future tabs…</span><br>
+        &nbsp;&nbsp;<span style="color:#79c0ff">&lt;TabsContent&gt;</span> <span style="color:#79c0ff">&lt;DomainCandidatesTab /&gt;</span> <span style="color:#79c0ff">&lt;/TabsContent&gt;</span><br>
+        &nbsp;&nbsp;<span style="color:#79c0ff">&lt;TabsContent&gt;</span> <span style="color:#79c0ff">&lt;CompanySuggestionsTab /&gt;</span> <span style="color:#79c0ff">&lt;/TabsContent&gt;</span><br>
+        <span style="color:#79c0ff">&lt;/Tabs&gt;</span>
+      </div>
+    </div>
+
+    <div style="text-align:center;color:#8b949e;font-size:16px;margin:4px 0">↓ &nbsp; ↓</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px">
+        <div style="color:#79c0ff;margin-bottom:6px;font-size:10px">📄 DomainCandidatesTab.tsx</div>
+        <div style="font-size:9px;color:#a5d6ff">Provides to BulkReviewTable:</div>
+        <div style="font-size:9px;color:#c9d1d9;margin-top:4px">
+          columns = [company, domain,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;signal, confidence]<br>
+          data = useReviewQueue()<br>
+          onApprove = api.createReview(id, 'approved')<br>
+          onReject = api.createReview(id, 'rejected')<br>
+          filterFields = [signal, confidence]
+        </div>
+      </div>
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px">
+        <div style="color:#79c0ff;margin-bottom:6px;font-size:10px">📄 CompanySuggestionsTab.tsx</div>
+        <div style="font-size:9px;color:#a5d6ff">Provides to BulkReviewTable:</div>
+        <div style="font-size:9px;color:#c9d1d9;margin-top:4px">
+          columns = [name, country,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;confidence, source]<br>
+          data = useCompanySuggestions()<br>
+          onApprove = api.approveSuggestion(id)<br>
+          onReject = api.rejectSuggestion(id)<br>
+          filterFields = [country, confidence]
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;color:#8b949e;font-size:16px;margin:4px 0">↓</div>
+
+    <div style="background:#0d419d;border:1px solid #1f6feb;border-radius:6px;padding:10px">
+      <div style="color:#79c0ff;margin-bottom:6px">🧩 BulkReviewTable&lt;TData&gt; — SHARED COMPONENT</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:9px">
+        <div>
+          <div style="color:#a5d6ff;margin-bottom:4px">Props interface:</div>
+          <div style="color:#c9d1d9">
+            columns: ColumnDef&lt;TData&gt;[]<br>
+            data: TData[]<br>
+            total: number<br>
+            loading: boolean<br>
+            onApprove(ids: string[]): Promise&lt;void&gt;<br>
+            onReject(ids: string[]): Promise&lt;void&gt;<br>
+            filterDefs: FilterDef[]<br>
+            onFilterChange(f): void<br>
+            page, onPageChange
+          </div>
+        </div>
+        <div>
+          <div style="color:#a5d6ff;margin-bottom:4px">Owns internally:</div>
+          <div style="color:#c9d1d9">
+            • Row selection state (rowSelection)<br>
+            • Bulk action bar (appears when &gt;0 selected)<br>
+            • Filter chip bar (active filters shown)<br>
+            • "Select all on page" checkbox<br>
+            • Column sorting state<br>
+            • Detail sheet (onRowClick)<br>
+            • Loading / empty states
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:12px">Does this component split feel right? BulkReviewTable owns all selection/filter/bulk-action logic. Tabs are just columns + data + handlers.</p>

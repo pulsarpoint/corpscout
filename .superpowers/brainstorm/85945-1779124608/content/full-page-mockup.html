@@ -1,0 +1,138 @@
+<h2>Review Page — Full Layout Mockup</h2>
+<p class="subtitle">BulkReviewTable with 3 rows selected. Filter chips active. Bulk bar visible.</p>
+
+<div class="mockup">
+  <div class="mockup-header">http://localhost:8094/review</div>
+  <div class="mockup-body" style="font-family:system-ui,sans-serif;font-size:12px;background:#09090b;color:#fafafa;padding:16px;border-radius:4px;min-height:420px">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h1 style="font-size:16px;font-weight:600;margin:0">Review Queue</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:1px solid #27272a;margin-bottom:14px">
+      <div style="padding:6px 14px;border-bottom:2px solid #fafafa;font-weight:500;font-size:12px;cursor:pointer">
+        Domain Candidates
+        <span style="background:#1d4ed8;color:white;padding:1px 6px;border-radius:9px;font-size:10px;margin-left:6px">25,288</span>
+      </div>
+      <div style="padding:6px 14px;border-bottom:2px solid transparent;color:#71717a;font-size:12px;cursor:pointer">
+        New Companies
+        <span style="background:#27272a;color:#71717a;padding:1px 6px;border-radius:9px;font-size:10px;margin-left:6px">0</span>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <input style="background:#18181b;border:1px solid #27272a;color:#fafafa;padding:4px 10px;border-radius:5px;font-size:11px;width:200px" placeholder="🔍  Search company or domain…">
+      <button style="background:#18181b;border:1px solid #27272a;color:#fafafa;padding:4px 10px;border-radius:5px;font-size:11px">Filter ▾</button>
+      <!-- Active filter chips -->
+      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:12px;font-size:10px;display:flex;align-items:center;gap:4px">signal: certsh <span style="cursor:pointer;opacity:0.7">×</span></span>
+      <span style="background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:12px;font-size:10px;display:flex;align-items:center;gap:4px">conf ≥ 70 <span style="cursor:pointer;opacity:0.7">×</span></span>
+      <span style="color:#71717a;font-size:10px;margin-left:2px;cursor:pointer">Clear all</span>
+      <span style="color:#71717a;font-size:10px;margin-left:auto">8,431 matching · 25,288 total</span>
+    </div>
+
+    <!-- Bulk action bar — appears when rows selected -->
+    <div style="background:#1e3a5f;border:1px solid #1d4ed8;border-radius:6px;padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <span style="color:#93c5fd;font-weight:500;font-size:11px">3 selected</span>
+      <span style="color:#3b82f6;font-size:10px">·</span>
+      <button style="background:#16a34a;color:white;padding:3px 12px;border-radius:4px;font-size:11px;font-weight:500;border:none;cursor:pointer">✓ Approve 3</button>
+      <button style="background:#dc2626;color:white;padding:3px 12px;border-radius:4px;font-size:11px;font-weight:500;border:none;cursor:pointer">✗ Reject 3</button>
+      <button style="background:transparent;color:#71717a;padding:3px 10px;border-radius:4px;font-size:11px;border:1px solid #27272a;cursor:pointer;margin-left:auto">Deselect all</button>
+    </div>
+
+    <!-- Table -->
+    <div style="border:1px solid #27272a;border-radius:6px;overflow:hidden">
+      <!-- Header -->
+      <div style="background:#18181b;display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px;color:#71717a;border-bottom:1px solid #27272a">
+        <div style="padding:7px 10px;display:flex;align-items:center">
+          <span style="color:#3b82f6">☑</span>
+        </div>
+        <div style="padding:7px 8px;cursor:pointer;display:flex;align-items:center;gap:3px">Company <span style="opacity:0.5">↕</span></div>
+        <div style="padding:7px 8px;cursor:pointer;display:flex;align-items:center;gap:3px">Domain <span style="opacity:0.5">↕</span></div>
+        <div style="padding:7px 8px;cursor:pointer;display:flex;align-items:center;gap:3px">Signal <span style="color:#60a5fa;opacity:0.8">↑</span></div>
+        <div style="padding:7px 8px;cursor:pointer;display:flex;align-items:center;gap:3px">Conf <span style="opacity:0.5">↕</span></div>
+        <div style="padding:7px 8px;text-align:right">Actions</div>
+      </div>
+      <!-- Row 1 — selected -->
+      <div style="background:#0f1f3d;display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px;border-bottom:1px solid #27272a">
+        <div style="padding:8px 10px;display:flex;align-items:center"><span style="color:#3b82f6">☑</span></div>
+        <div style="padding:8px 8px;font-weight:500">ACME Corp Ltd</div>
+        <div style="padding:8px 8px;font-family:monospace;color:#60a5fa">acme.co.uk</div>
+        <div style="padding:8px 8px"><span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:10px">certsh</span></div>
+        <div style="padding:8px 8px;color:#4ade80;font-weight:600">85</div>
+        <div style="padding:8px 8px;text-align:right;display:flex;gap:3px;justify-content:flex-end">
+          <button style="background:#16a34a;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✓</button>
+          <button style="background:#dc2626;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✗</button>
+          <button style="background:#27272a;color:#fafafa;padding:2px 7px;border-radius:3px;font-size:10px;border:none">···</button>
+        </div>
+      </div>
+      <!-- Row 2 — selected -->
+      <div style="background:#0f1f3d;display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px;border-bottom:1px solid #27272a">
+        <div style="padding:8px 10px;display:flex;align-items:center"><span style="color:#3b82f6">☑</span></div>
+        <div style="padding:8px 8px;font-weight:500">Mining Institute</div>
+        <div style="padding:8px 8px;font-family:monospace;color:#60a5fa">mininginstitute.org.uk</div>
+        <div style="padding:8px 8px"><span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:10px">certsh</span></div>
+        <div style="padding:8px 8px;color:#4ade80;font-weight:600">80</div>
+        <div style="padding:8px 8px;text-align:right;display:flex;gap:3px;justify-content:flex-end">
+          <button style="background:#16a34a;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✓</button>
+          <button style="background:#dc2626;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✗</button>
+          <button style="background:#27272a;color:#fafafa;padding:2px 7px;border-radius:3px;font-size:10px;border:none">···</button>
+        </div>
+      </div>
+      <!-- Row 3 — selected -->
+      <div style="background:#0f1f3d;display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px;border-bottom:1px solid #27272a">
+        <div style="padding:8px 10px;display:flex;align-items:center"><span style="color:#3b82f6">☑</span></div>
+        <div style="padding:8px 8px;font-weight:500">Test Norsk AS</div>
+        <div style="padding:8px 8px;font-family:monospace;color:#60a5fa">testnorsk.no</div>
+        <div style="padding:8px 8px"><span style="background:#14532d;color:#86efac;padding:2px 6px;border-radius:4px;font-size:10px">wikidata</span></div>
+        <div style="padding:8px 8px;color:#4ade80;font-weight:600">75</div>
+        <div style="padding:8px 8px;text-align:right;display:flex;gap:3px;justify-content:flex-end">
+          <button style="background:#16a34a;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✓</button>
+          <button style="background:#dc2626;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✗</button>
+          <button style="background:#27272a;color:#fafafa;padding:2px 7px;border-radius:3px;font-size:10px;border:none">···</button>
+        </div>
+      </div>
+      <!-- Row 4 — not selected -->
+      <div style="display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px;border-bottom:1px solid #27272a">
+        <div style="padding:8px 10px;display:flex;align-items:center"><span style="color:#71717a">☐</span></div>
+        <div style="padding:8px 8px;font-weight:500">Dansk ApS</div>
+        <div style="padding:8px 8px;font-family:monospace;color:#60a5fa">dansk.dk</div>
+        <div style="padding:8px 8px"><span style="background:#3b1e1e;color:#fca5a5;padding:2px 6px;border-radius:4px;font-size:10px">whois</span></div>
+        <div style="padding:8px 8px;color:#facc15;font-weight:600">70</div>
+        <div style="padding:8px 8px;text-align:right;display:flex;gap:3px;justify-content:flex-end">
+          <button style="background:#16a34a;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✓</button>
+          <button style="background:#dc2626;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✗</button>
+          <button style="background:#27272a;color:#fafafa;padding:2px 7px;border-radius:3px;font-size:10px;border:none">···</button>
+        </div>
+      </div>
+      <!-- Row 5 — not selected -->
+      <div style="display:grid;grid-template-columns:32px 1fr 1fr 80px 64px 110px;gap:0;font-size:11px">
+        <div style="padding:8px 10px;display:flex;align-items:center"><span style="color:#71717a">☐</span></div>
+        <div style="padding:8px 8px;font-weight:500">Estonian OÜ</div>
+        <div style="padding:8px 8px;font-family:monospace;color:#60a5fa">estonian.ee</div>
+        <div style="padding:8px 8px"><span style="background:#1e3a5f;color:#93c5fd;padding:2px 6px;border-radius:4px;font-size:10px">certsh</span></div>
+        <div style="padding:8px 8px;color:#facc15;font-weight:600">70</div>
+        <div style="padding:8px 8px;text-align:right;display:flex;gap:3px;justify-content:flex-end">
+          <button style="background:#16a34a;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✓</button>
+          <button style="background:#dc2626;color:white;padding:2px 7px;border-radius:3px;font-size:10px;border:none">✗</button>
+          <button style="background:#27272a;color:#fafafa;padding:2px 7px;border-radius:3px;font-size:10px;border:none">···</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:#71717a">
+      <span>1–50 of 8,431</span>
+      <div style="display:flex;gap:6px">
+        <button style="background:#18181b;border:1px solid #27272a;color:#71717a;padding:3px 10px;border-radius:4px;font-size:10px">Previous</button>
+        <span style="padding:3px 8px;color:#fafafa">Page 1 of 169</span>
+        <button style="background:#18181b;border:1px solid #27272a;color:#fafafa;padding:3px 10px;border-radius:4px;font-size:10px">Next</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:12px">The ··· button opens the existing detail sheet. Bulk bar only appears when ≥1 row is checked. Filter chips show what's active. Does this look right?</p>
