@@ -11,6 +11,15 @@ import type { Country } from "~/types/api";
 
 const PAGE_SIZE = 50;
 
+function fmtRevenue(cents: number | null): string {
+  if (cents == null) return "—";
+  const usd = cents / 100;
+  if (usd < 1_000) return "<$1K";
+  if (usd < 1_000_000) return `$${Math.round(usd / 1_000)}K`;
+  if (usd < 1_000_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  return `$${(usd / 1_000_000_000).toFixed(1)}B`;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   active: "text-green-700 border-green-300 bg-green-50",
   inactive: "text-yellow-700 border-yellow-300 bg-yellow-50",
@@ -65,6 +74,32 @@ const columns: ColumnDef<VCompany, unknown>[] = [
         {row.original.domain_count}
       </span>
     ),
+  },
+  {
+    accessorKey: "employee_count",
+    header: "Employees",
+    enableSorting: false,
+    cell: ({ row }) => {
+      const v = row.original.employee_count;
+      return (
+        <span className={v == null ? "text-muted-foreground" : ""}>
+          {v == null ? "—" : v.toLocaleString()}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "revenue_usd",
+    header: "Revenue",
+    enableSorting: false,
+    cell: ({ row }) => {
+      const formatted = fmtRevenue(row.original.revenue_usd);
+      return (
+        <span className={formatted === "—" ? "text-muted-foreground" : ""}>
+          {formatted}
+        </span>
+      );
+    },
   },
   {
     accessorKey: "headquarters_location",
