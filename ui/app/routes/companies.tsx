@@ -95,6 +95,10 @@ export default function CompaniesPage() {
   const country = searchParams.get("country") ?? "";
   const sortKey = searchParams.get("sort") ?? "name";
   const sortDir = (searchParams.get("dir") ?? "asc") as "asc" | "desc";
+  const minEmployees = searchParams.get("min_emp") ?? "";
+  const maxEmployees = searchParams.get("max_emp") ?? "";
+  const minRevUsd = searchParams.get("min_rev") ?? "";
+  const maxRevUsd = searchParams.get("max_rev") ?? "";
 
   const sorting: SortingState = useMemo(
     () => [{ id: sortKey, desc: sortDir === "desc" }],
@@ -108,7 +112,7 @@ export default function CompaniesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = {
+      const params: Record<string, string | number | string[]> = {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
         order: `${sortKey}.${sortDir}`,
@@ -117,13 +121,27 @@ export default function CompaniesPage() {
       if (status) params["status"] = `eq.${status}`;
       if (country) params["country_iso2"] = `eq.${country}`;
 
+      // employee_count range — PostgREST needs duplicate keys, use array values
+      const empFilter: string[] = [];
+      if (minEmployees) empFilter.push(`gte.${minEmployees}`);
+      if (maxEmployees) empFilter.push(`lte.${maxEmployees}`);
+      if (empFilter.length === 1) params["employee_count"] = empFilter[0];
+      else if (empFilter.length === 2) params["employee_count"] = empFilter;
+
+      // revenue_usd range — inputs are in $M, stored as USD cents (multiply by 100_000_00)
+      const revFilter: string[] = [];
+      if (minRevUsd) revFilter.push(`gte.${Math.round(Number(minRevUsd) * 100_000_00)}`);
+      if (maxRevUsd) revFilter.push(`lte.${Math.round(Number(maxRevUsd) * 100_000_00)}`);
+      if (revFilter.length === 1) params["revenue_usd"] = revFilter[0];
+      else if (revFilter.length === 2) params["revenue_usd"] = revFilter;
+
       const res = await pgrest<VCompany>("v_companies", params);
       setCompanies(res.data);
       setTotal(res.total);
     } finally {
       setLoading(false);
     }
-  }, [page, q, status, country, sortKey, sortDir]);
+  }, [page, q, status, country, sortKey, sortDir, minEmployees, maxEmployees, minRevUsd, maxRevUsd]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -171,6 +189,46 @@ export default function CompaniesPage() {
             <option key={c.id} value={c.iso_alpha2}>{c.name} ({c.iso_alpha2})</option>
           ))}
         </select>
+        <input
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32 focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Min employees"
+          type="number"
+          min={0}
+          defaultValue={minEmployees}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setParam({ min_emp: e.currentTarget.value, page: "1" });
+          }}
+        />
+        <input
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32 focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Max employees"
+          type="number"
+          min={0}
+          defaultValue={maxEmployees}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setParam({ max_emp: e.currentTarget.value, page: "1" });
+          }}
+        />
+        <input
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm w-36 focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Min revenue $M"
+          type="number"
+          min={0}
+          defaultValue={minRevUsd}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setParam({ min_rev: e.currentTarget.value, page: "1" });
+          }}
+        />
+        <input
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm w-36 focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Max revenue $M"
+          type="number"
+          min={0}
+          defaultValue={maxRevUsd}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setParam({ max_rev: e.currentTarget.value, page: "1" });
+          }}
+        />
       </div>
 
       <DataTable
