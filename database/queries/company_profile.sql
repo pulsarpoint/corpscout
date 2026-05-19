@@ -151,3 +151,15 @@ UPDATE companies SET
     updated_at          = now()
 WHERE id = sqlc.arg('id')::uuid
 RETURNING *;
+
+-- name: UpdateCompanyInfo :one
+UPDATE companies SET
+    name                = COALESCE(sqlc.narg('name')::text,              name),
+    short_name          = COALESCE(sqlc.narg('short_name')::text,        short_name),
+    short_description   = COALESCE(sqlc.narg('short_description')::text, short_description),
+    description         = COALESCE(sqlc.narg('description')::text,       description),
+    website             = COALESCE(sqlc.narg('website')::text,           website),
+    founded_year        = COALESCE(sqlc.narg('founded_year')::int,       founded_year),
+    updated_at          = now()
+WHERE id = sqlc.arg('id')::uuid
+RETURNING *;

@@ -335,6 +335,74 @@ func (q *Queries) UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompany
 	return i, err
 }
 
+const updateCompanyInfo = `-- name: UpdateCompanyInfo :one
+UPDATE companies SET
+    name                = COALESCE($1::text,              name),
+    short_name          = COALESCE($2::text,        short_name),
+    short_description   = COALESCE($3::text, short_description),
+    description         = COALESCE($4::text,       description),
+    website             = COALESCE($5::text,           website),
+    founded_year        = COALESCE($6::int,       founded_year),
+    updated_at          = now()
+WHERE id = $7::uuid
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd
+`
+
+type UpdateCompanyInfoParams struct {
+	Name             *string   `json:"name"`
+	ShortName        *string   `json:"short_name"`
+	ShortDescription *string   `json:"short_description"`
+	Description      *string   `json:"description"`
+	Website          *string   `json:"website"`
+	FoundedYear      *int32    `json:"founded_year"`
+	ID               uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateCompanyInfo(ctx context.Context, arg UpdateCompanyInfoParams) (Company, error) {
+	row := q.db.QueryRow(ctx, updateCompanyInfo,
+		arg.Name,
+		arg.ShortName,
+		arg.ShortDescription,
+		arg.Description,
+		arg.Website,
+		arg.FoundedYear,
+		arg.ID,
+	)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+		&i.ProfitEstimate,
+		&i.EmployeeCount,
+		&i.RevenueUsd,
+		&i.RevenueOrigAmount,
+		&i.RevenueOrigCurrency,
+		&i.ProfitUsd,
+	)
+	return i, err
+}
+
 const upsertCompanyEmail = `-- name: UpsertCompanyEmail :one
 
 INSERT INTO company_emails (company_id, email, description, purpose, name, source, confidence, evidence)

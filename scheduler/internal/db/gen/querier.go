@@ -125,6 +125,7 @@ type Querier interface {
 	UpdateCompanyDomainStatus(ctx context.Context, arg UpdateCompanyDomainStatusParams) error
 	// ── enrichment update ─────────────────────────────────────────────────────────
 	UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompanyEnrichmentParams) (Company, error)
+	UpdateCompanyInfo(ctx context.Context, arg UpdateCompanyInfoParams) (Company, error)
 	UpdateCompanyRelationshipStatus(ctx context.Context, arg UpdateCompanyRelationshipStatusParams) error
 	UpdateCompanySlug(ctx context.Context, arg UpdateCompanySlugParams) error
 	UpdateCompanyStatus(ctx context.Context, arg UpdateCompanyStatusParams) error

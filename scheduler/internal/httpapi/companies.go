@@ -223,3 +223,43 @@ func (h *Handlers) handlePatchCompanyFinancials(w http.ResponseWriter, r *http.R
 	}
 	writeJSON(w, http.StatusOK, company)
 }
+
+func (h *Handlers) handlePatchCompany(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid company id")
+		return
+	}
+	var body struct {
+		Name             *string `json:"name"`
+		ShortName        *string `json:"short_name"`
+		ShortDescription *string `json:"short_description"`
+		Description      *string `json:"description"`
+		Website          *string `json:"website"`
+		FoundedYear      *int32  `json:"founded_year"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Name != nil && *body.Name == "" {
+		writeError(w, http.StatusBadRequest, "name cannot be empty")
+		return
+	}
+
+	company, err := h.db.UpdateCompanyInfo(r.Context(), db.UpdateCompanyInfoParams{
+		ID:               id,
+		Name:             body.Name,
+		ShortName:        body.ShortName,
+		ShortDescription: body.ShortDescription,
+		Description:      body.Description,
+		Website:          body.Website,
+		FoundedYear:      body.FoundedYear,
+	})
+	if err != nil {
+		slog.Error("patch company", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, company)
+}
