@@ -21,6 +21,7 @@ import type {
   EnrichmentSourcesResponse,
   CompanyFinancial,
   CompanyFinancialPending,
+  VCompany,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -254,6 +255,18 @@ export const api = {
 
   reviewFinancial: (id: string, action: "approve" | "reject") =>
     post<void>(`/financials/${id}/review`, { action }),
+
+  patchCompany: (
+    id: string,
+    body: {
+      name?: string;
+      short_name?: string;
+      short_description?: string;
+      description?: string;
+      website?: string;
+      founded_year?: number;
+    },
+  ) => patch<VCompany>(`/companies/${id}`, body),
 };
 
 export function triggerDomainCrawl(domainId: string, req: TriggerCrawlRequest): Promise<TriggerCrawlResponse> {
