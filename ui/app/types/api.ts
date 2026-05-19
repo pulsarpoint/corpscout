@@ -276,12 +276,8 @@ export interface VCompany {
   founded_year: number | null;
   employee_estimate: Estimate;
   revenue_estimate: Estimate;
-  profit_estimate: Estimate | null;
   employee_count: number | null;
   revenue_usd: number | null;
-  revenue_orig_amount: number | null;
-  revenue_orig_currency: string | null;
-  profit_usd: number | null;
   ownership: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -464,4 +460,26 @@ export interface EnrichmentSource {
 export interface EnrichmentSourcesResponse {
   missing_fields: string[];
   sources: EnrichmentSource[];
+}
+
+export interface CompanyFinancial {
+  id: string;
+  company_id: string;
+  year: number;
+  source_name: string;
+  employee_count: number | null;
+  revenue_amount: number | null;
+  revenue_currency: string | null;
+  revenue_usd: number | null;
+  profit_amount: number | null;
+  profit_usd: number | null;
+  status: "suggested" | "approved" | "rejected";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyFinancialPending extends CompanyFinancial {
+  company_name: string;
 }

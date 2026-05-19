@@ -19,6 +19,8 @@ import type {
   TriggerCrawlResponse,
   DomainImportBatch,
   EnrichmentSourcesResponse,
+  CompanyFinancial,
+  CompanyFinancialPending,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -236,16 +238,22 @@ export const api = {
   enrichCompanyFromSource: (id: string, source: string) =>
     post<{ job_id: number }>(`/companies/${id}/enrich-from-source`, { source }),
 
-  patchCompanyFinancials: (
-    id: string,
-    body: {
-      employee_count?: number;
-      revenue_usd?: number;
-      revenue_orig_amount?: number;
-      revenue_orig_currency?: string;
-      profit_usd?: number;
-    },
-  ) => patch<unknown>(`/companies/${id}/financials`, body),
+  getFinancialSuggestions: (page = 1, limit = 50) =>
+    get<{ items: CompanyFinancialPending[]; total: number; page: number; limit: number }>(
+      `/financials/review?page=${page}&limit=${limit}`,
+    ),
+
+  getFinancialSuggestionIDs: () =>
+    get<{ ids: string[] }>("/financials/review/ids"),
+
+  bulkFinancialSuggestions: (ids: string[], action: "approve" | "reject") =>
+    post<void>("/financials/review/bulk", { ids, action }),
+
+  getCompanyFinancials: (companyId: string) =>
+    get<{ items: CompanyFinancial[] }>(`/companies/${companyId}/financials`),
+
+  reviewFinancial: (id: string, action: "approve" | "reject") =>
+    post<void>(`/financials/${id}/review`, { action }),
 };
 
 export function triggerDomainCrawl(domainId: string, req: TriggerCrawlRequest): Promise<TriggerCrawlResponse> {

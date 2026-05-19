@@ -281,19 +281,7 @@ export default function CompanyDetailPage() {
                     <dd className="text-sm font-medium">
                       {company.revenue_usd != null
                         ? `$${(company.revenue_usd / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD`
-                            + (company.revenue_orig_currency && company.revenue_orig_currency !== "USD"
-                              ? ` (${company.revenue_orig_currency})`
-                              : "")
                         : revEst.label ?? "—"}
-                    </dd>
-                  </div>
-                )}
-                {company.profit_usd != null && (
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="size-3.5 text-muted-foreground shrink-0" />
-                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Profit</dt>
-                    <dd className={`text-sm font-medium ${company.profit_usd < 0 ? "text-red-600" : ""}`}>
-                      {`$${(company.profit_usd / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD`}
                     </dd>
                   </div>
                 )}
