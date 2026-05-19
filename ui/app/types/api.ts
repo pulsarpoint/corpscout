@@ -372,6 +372,8 @@ export interface VDomain {
   primary_company_name: string | null;
   primary_company_id: string | null;
   primary_signal: string | null;
+  crawled: boolean;
+  last_crawled_at: string | null;
 }
 
 export interface DomainDetail {
