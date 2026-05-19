@@ -14,6 +14,8 @@ type Config struct {
 	S3AccessKey            string
 	S3SecretKey            string
 	S3Bucket               string
+	LLMBaseURL             string
+	LLMModel               string
 }
 
 func Load() Config {
@@ -29,6 +31,8 @@ func Load() Config {
 		S3AccessKey:            getEnv("CORPSCOUT_S3_ACCESS_KEY", "corpscout"),
 		S3SecretKey:            getEnv("CORPSCOUT_S3_SECRET_KEY", "corpscout123"),
 		S3Bucket:               getEnv("CORPSCOUT_S3_BUCKET", "crawls"),
+		LLMBaseURL:             getEnv("CORPSCOUT_LLM_BASE_URL", "http://100.77.62.33:8080"),
+		LLMModel:               getEnv("CORPSCOUT_LLM_MODEL", "qwen3:6b"),
 	}
 }
 
