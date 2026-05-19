@@ -39,3 +39,11 @@ SET last_failed_at = now(),
     last_error = $2,
     updated_at = now()
 WHERE name = $1;
+
+-- name: GetSourcesWithCapabilities :many
+SELECT * FROM data_sources
+WHERE array_length(capabilities, 1) > 0
+ORDER BY name;
+
+-- name: UpdateSourceCapabilities :exec
+UPDATE data_sources SET capabilities = $2, updated_at = now() WHERE name = $1;

@@ -131,18 +131,23 @@ SELECT * FROM company_services
 WHERE company_id = $1
 ORDER BY service;
 
--- ── enrichment update ─────────────────────────────────────────────────────────
-
 -- name: UpdateCompanyEnrichment :one
+-- ── enrichment update ─────────────────────────────────────────────────────────
 UPDATE companies SET
-    short_name        = COALESCE(sqlc.narg('short_name')::text,        short_name),
-    short_description = COALESCE(sqlc.narg('short_description')::text, short_description),
-    description       = COALESCE(sqlc.narg('description')::text,       description),
-    website           = COALESCE(sqlc.narg('website')::text,           website),
-    founded_year      = COALESCE(sqlc.narg('founded_year')::int,       founded_year),
-    employee_estimate = COALESCE(sqlc.narg('employee_estimate')::jsonb, employee_estimate),
-    revenue_estimate  = COALESCE(sqlc.narg('revenue_estimate')::jsonb,  revenue_estimate),
-    ownership         = COALESCE(sqlc.narg('ownership')::jsonb,         ownership),
-    updated_at        = now()
+    short_name          = COALESCE(sqlc.narg('short_name')::text,          short_name),
+    short_description   = COALESCE(sqlc.narg('short_description')::text,   short_description),
+    description         = COALESCE(sqlc.narg('description')::text,         description),
+    website             = COALESCE(sqlc.narg('website')::text,             website),
+    founded_year        = COALESCE(sqlc.narg('founded_year')::int,         founded_year),
+    employee_estimate   = COALESCE(sqlc.narg('employee_estimate')::jsonb,  employee_estimate),
+    revenue_estimate    = COALESCE(sqlc.narg('revenue_estimate')::jsonb,   revenue_estimate),
+    profit_estimate     = COALESCE(sqlc.narg('profit_estimate')::jsonb,    profit_estimate),
+    ownership           = COALESCE(sqlc.narg('ownership')::jsonb,          ownership),
+    employee_count      = COALESCE(sqlc.narg('employee_count')::int,       employee_count),
+    revenue_usd         = COALESCE(sqlc.narg('revenue_usd')::bigint,       revenue_usd),
+    revenue_orig_amount = COALESCE(sqlc.narg('revenue_orig_amount')::bigint, revenue_orig_amount),
+    revenue_orig_currency = COALESCE(sqlc.narg('revenue_orig_currency')::text, revenue_orig_currency),
+    profit_usd          = COALESCE(sqlc.narg('profit_usd')::bigint,        profit_usd),
+    updated_at          = now()
 WHERE id = sqlc.arg('id')::uuid
 RETURNING *;
