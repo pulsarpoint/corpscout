@@ -7,6 +7,7 @@ import type { VDomain } from "~/types/api";
 import { DataTable } from "~/components/ui/data-table";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,9 +27,64 @@ export default function DomainsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [crawlTarget, setCrawlTarget] = useState<{ id: string; domain: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCrawlOpen, setBulkCrawlOpen] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
-  const columns = useMemo<ColumnDef<VDomain, unknown>[]>(
-    () => [
+  const page = Math.max(1, Number(searchParams.get("page") ?? 1));
+  const signal = searchParams.get("signal") ?? "";
+  const minConf = searchParams.get("min_confidence") ?? "";
+  const orphan = searchParams.get("orphan") === "1";
+  const crawledFilter = searchParams.get("crawled") ?? "";
+  const sortKey = searchParams.get("sort") ?? "first_seen_at";
+  const sortDir = (searchParams.get("dir") ?? "desc") as "asc" | "desc";
+  const q = searchParams.get("q") ?? "";
+
+  const hasFilters = !!(signal || minConf || orphan || crawledFilter || q);
+
+  // Local input state so typing doesn't immediately trigger a fetch on each keystroke.
+  const [inputValue, setInputValue] = useState(q);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep local input in sync when the URL param changes externally (e.g. back/forward).
+  useEffect(() => { setInputValue(q); }, [q]);
+
+  const columns = useMemo<ColumnDef<VDomain, unknown>[]>(() => {
+    const pageIds = domains.map(d => d.id);
+    const allOnPage = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+    const someOnPage = pageIds.some(id => selectedIds.has(id));
+
+    return [
+      {
+        id: "select",
+        enableSorting: false,
+        header: () => (
+          <Checkbox
+            checked={allOnPage ? true : someOnPage ? "indeterminate" : false}
+            onCheckedChange={(checked) => {
+              setSelectedIds(prev => {
+                const next = new Set(prev);
+                if (checked) pageIds.forEach(id => next.add(id));
+                else pageIds.forEach(id => next.delete(id));
+                return next;
+              });
+            }}
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={selectedIds.has(row.original.id)}
+            onCheckedChange={(checked) => {
+              setSelectedIds(prev => {
+                const next = new Set(prev);
+                if (checked) next.add(row.original.id);
+                else next.delete(row.original.id);
+                return next;
+              });
+            }}
+          />
+        ),
+      },
       {
         accessorKey: "domain",
         header: "Domain",
@@ -146,25 +202,8 @@ export default function DomainsPage() {
           </DropdownMenu>
         ),
       },
-    ],
-    [setCrawlTarget]
-  );
-
-  const page = Math.max(1, Number(searchParams.get("page") ?? 1));
-  const signal = searchParams.get("signal") ?? "";
-  const minConf = searchParams.get("min_confidence") ?? "";
-  const orphan = searchParams.get("orphan") === "1";
-  const crawledFilter = searchParams.get("crawled") ?? "";
-  const sortKey = searchParams.get("sort") ?? "first_seen_at";
-  const sortDir = (searchParams.get("dir") ?? "desc") as "asc" | "desc";
-  const q = searchParams.get("q") ?? "";
-
-  // Local input state so typing doesn't immediately trigger a fetch on each keystroke.
-  const [inputValue, setInputValue] = useState(q);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Keep local input in sync when the URL param changes externally (e.g. back/forward).
-  useEffect(() => { setInputValue(q); }, [q]);
+    ];
+  }, [domains, selectedIds, setCrawlTarget]);
 
   const sorting: SortingState = useMemo(
     () => [{ id: sortKey, desc: sortDir === "desc" }],
@@ -202,6 +241,23 @@ export default function DomainsPage() {
     }
     next.set("page", updates.page ?? "1");
     setSearchParams(next);
+    setSelectedIds(new Set());
+  }
+
+  async function selectAllFiltered() {
+    setSelectingAll(true);
+    try {
+      const params: Record<string, string | number> = { select: "id", limit: 100000 };
+      if (signal) params["primary_signal"] = `eq.${signal}`;
+      if (minConf) params["max_confidence"] = `gte.${minConf}`;
+      if (orphan) params["company_count"] = "eq.0";
+      if (crawledFilter) params["crawled"] = `eq.${crawledFilter}`;
+      if (q) params["domain"] = `ilike.*${q}*`;
+      const res = await pgrest<{ id: string }>("v_domains", params);
+      setSelectedIds(new Set(res.data.map(d => d.id)));
+    } finally {
+      setSelectingAll(false);
+    }
   }
 
   return (
@@ -261,7 +317,27 @@ export default function DomainsPage() {
           />
           Unlinked domains only
         </label>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!hasFilters || selectingAll}
+          onClick={selectAllFiltered}
+        >
+          {selectingAll ? "Selecting…" : `Select all ${total.toLocaleString()} filtered`}
+        </Button>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-md border bg-muted/50 px-4 py-2 text-sm">
+          <span className="font-medium">{selectedIds.size.toLocaleString()} selected</span>
+          <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+            Clear
+          </Button>
+          <Button size="sm" onClick={() => setBulkCrawlOpen(true)}>
+            Crawl {selectedIds.size.toLocaleString()} domain{selectedIds.size !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -279,6 +355,7 @@ export default function DomainsPage() {
         onPageChange={(p) => setParam({ page: String(p) })}
         loading={loading}
       />
+
       {crawlTarget && (
         <CrawlDomainDialog
           domainId={crawlTarget.id}
@@ -287,6 +364,12 @@ export default function DomainsPage() {
           onOpenChange={(open) => { if (!open) setCrawlTarget(null); }}
         />
       )}
+      <CrawlDomainDialog
+        domainIds={[...selectedIds]}
+        open={bulkCrawlOpen}
+        onOpenChange={setBulkCrawlOpen}
+        onSuccess={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 }

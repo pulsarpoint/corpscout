@@ -13,15 +13,17 @@ import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { triggerDomainCrawl } from "~/lib/api";
 
-interface Props {
-  domainId: string;
-  domainName: string;
+type Props = (
+  | { domainId: string; domainName: string; domainIds?: never }
+  | { domainIds: string[]; domainId?: never; domainName?: never }
+) & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-}
+};
 
-export function CrawlDomainDialog({ domainId, domainName, open, onOpenChange, onSuccess }: Props) {
+export function CrawlDomainDialog({ domainId, domainName, domainIds, open, onOpenChange, onSuccess }: Props) {
+  const isBulk = domainIds !== undefined;
   const [mode, setMode] = useState<"homepage" | "deep">("deep");
   const [maxPages, setMaxPages] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -29,8 +31,21 @@ export function CrawlDomainDialog({ domainId, domainName, open, onOpenChange, on
   async function handleSubmit() {
     setLoading(true);
     try {
-      await triggerDomainCrawl(domainId, { mode, max_pages: maxPages });
-      toast.success("Crawl job started");
+      if (isBulk) {
+        if (domainIds.length === 0) { onOpenChange(false); return; }
+        const results = await Promise.allSettled(
+          domainIds.map(id => triggerDomainCrawl(id, { mode, max_pages: maxPages }))
+        );
+        const failed = results.filter(r => r.status === "rejected").length;
+        if (failed === 0) {
+          toast.success(`${domainIds.length} crawl job${domainIds.length !== 1 ? "s" : ""} started`);
+        } else {
+          toast.error(`${domainIds.length - failed} started, ${failed} failed`);
+        }
+      } else {
+        await triggerDomainCrawl(domainId, { mode, max_pages: maxPages });
+        toast.success("Crawl job started");
+      }
       onOpenChange(false);
       onSuccess?.();
     } catch {
@@ -40,13 +55,22 @@ export function CrawlDomainDialog({ domainId, domainName, open, onOpenChange, on
     }
   }
 
+  const title = isBulk
+    ? `Crawl ${domainIds.length} domain${domainIds.length !== 1 ? "s" : ""}?`
+    : `Crawl ${domainName}?`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Crawl {domainName}?</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {isBulk && (
+            <p className="text-sm text-muted-foreground">
+              This will queue crawl jobs for {domainIds.length.toLocaleString()} domain{domainIds.length !== 1 ? "s" : ""}.
+            </p>
+          )}
           <div className="space-y-2">
             <Label>Mode</Label>
             <RadioGroup value={mode} onValueChange={(v) => setMode(v as "homepage" | "deep")}>
@@ -80,7 +104,7 @@ export function CrawlDomainDialog({ domainId, domainName, open, onOpenChange, on
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Starting…" : "Start Crawl"}
+            {loading ? "Starting…" : isBulk ? `Start ${domainIds.length.toLocaleString()} Crawls` : "Start Crawl"}
           </Button>
         </DialogFooter>
       </DialogContent>
