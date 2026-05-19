@@ -33,17 +33,20 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	sourcePullWorker := workers.NewSourcePullWorker(q, crawler, pool)
 	sourceProcessWorker := workers.NewSourceProcessWorker(q, pool)
 	domainCrawlWorker := workers.NewDomainCrawlWorker(q, crawler, s3)
+	domainImportWorker := workers.NewDomainImportWorker(q, s3)
 
 	w := river.NewWorkers()
 	river.AddWorker(w, sourcePullWorker)
 	river.AddWorker(w, sourceProcessWorker)
 	river.AddWorker(w, domainCrawlWorker)
+	river.AddWorker(w, domainImportWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
 			"source_pull":    {MaxWorkers: cfg.CrawlConcurrency},
 			"source_process": {MaxWorkers: cfg.DomainConcurrency},
 			"domain_crawl":   {MaxWorkers: 3},
+			"domain_import":  {MaxWorkers: 2},
 		},
 		Workers: w,
 	}
