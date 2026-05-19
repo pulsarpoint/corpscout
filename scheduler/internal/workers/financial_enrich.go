@@ -33,8 +33,8 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 
 	accounts, err := fetchBrregAccounts(ctx, args.OrgNumber)
 	if err != nil {
-		slog.Warn("brreg regnskap fetch failed", "org", args.OrgNumber, "error", err)
-		return nil
+		slog.Error("brreg regnskap fetch failed", "org", args.OrgNumber, "job_id", job.ID, "error", err)
+		return err
 	}
 	if len(accounts) == 0 {
 		slog.Info("no regnskap accounts found", "org", args.OrgNumber)
