@@ -542,8 +542,8 @@ func (s *stubQuerier) ReviewCompanyDomain(ctx context.Context, arg db.ReviewComp
 }
 
 // Domain crawl job stubs (new in recent sqlc-generate)
-func (s *stubQuerier) GetDomainByID(ctx context.Context, id uuid.UUID) (db.Domain, error) {
-	return db.Domain{}, nil
+func (s *stubQuerier) GetDomainByID(ctx context.Context, id uuid.UUID) (db.GetDomainByIDRow, error) {
+	return db.GetDomainByIDRow{}, nil
 }
 
 func (s *stubQuerier) GetDomainCrawlJob(ctx context.Context, arg db.GetDomainCrawlJobParams) (db.DomainCrawlJob, error) {
@@ -580,6 +580,63 @@ func (s *stubQuerier) SetDomainCrawlJobRiverID(ctx context.Context, arg db.SetDo
 
 func (s *stubQuerier) SetDomainCrawlJobS3Prefix(ctx context.Context, arg db.SetDomainCrawlJobS3PrefixParams) error {
 	return nil
+}
+
+// --- domain import stubs ---
+
+func (s *stubQuerier) GetCompanyByExactName(ctx context.Context, lower string) (db.Company, error) {
+	if !s.hasExpectation("GetCompanyByExactName") {
+		return db.Company{}, nil
+	}
+	ret := s.Called(ctx, lower)
+	return ret.Get(0).(db.Company), ret.Error(1)
+}
+
+func (s *stubQuerier) InsertImportBatch(ctx context.Context, arg db.InsertImportBatchParams) (db.DomainImportBatch, error) {
+	if !s.hasExpectation("InsertImportBatch") {
+		return db.DomainImportBatch{}, nil
+	}
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(db.DomainImportBatch), ret.Error(1)
+}
+
+func (s *stubQuerier) UpdateImportBatchRiverJob(ctx context.Context, arg db.UpdateImportBatchRiverJobParams) error {
+	return nil
+}
+
+func (s *stubQuerier) UpdateImportBatchStarted(ctx context.Context, arg db.UpdateImportBatchStartedParams) error {
+	return nil
+}
+
+func (s *stubQuerier) UpdateImportBatchCompleted(ctx context.Context, arg db.UpdateImportBatchCompletedParams) error {
+	return nil
+}
+
+func (s *stubQuerier) GetImportBatch(ctx context.Context, id uuid.UUID) (db.DomainImportBatch, error) {
+	if !s.hasExpectation("GetImportBatch") {
+		return db.DomainImportBatch{}, nil
+	}
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(db.DomainImportBatch), ret.Error(1)
+}
+
+func (s *stubQuerier) ListImportBatches(ctx context.Context, limit int32) ([]db.DomainImportBatch, error) {
+	if !s.hasExpectation("ListImportBatches") {
+		return nil, nil
+	}
+	ret := s.Called(ctx, limit)
+	if v, ok := ret.Get(0).([]db.DomainImportBatch); ok {
+		return v, ret.Error(1)
+	}
+	return nil, ret.Error(1)
+}
+
+func (s *stubQuerier) UpsertDomainWithSource(ctx context.Context, arg db.UpsertDomainWithSourceParams) (db.Domain, error) {
+	if !s.hasExpectation("UpsertDomainWithSource") {
+		return db.Domain{ID: uuid.New(), Domain: arg.Domain}, nil
+	}
+	ret := s.Called(ctx, arg)
+	return ret.Get(0).(db.Domain), ret.Error(1)
 }
 
 // ensure stubQuerier satisfies the interface at compile time
