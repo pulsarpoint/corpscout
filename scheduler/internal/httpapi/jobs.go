@@ -61,12 +61,12 @@ func (h *Handlers) handleListJobs(w http.ResponseWriter, r *http.Request) {
 			END AS last_error,
 			CASE
 				WHEN j.kind = 'source_crawl' THEN j.args->>'source_name'
-				WHEN j.kind = 'domain_resolve' THEN COALESCE(c.name, j.args->>'company_id')
+				WHEN j.kind IN ('domain_resolve', 'enrich_company_financials') THEN COALESCE(c.name, j.args->>'company_id')
 			END AS subject,
 			array_to_json(j.errors)::text AS errors
 		FROM river_job j
 		LEFT JOIN companies c
-			ON j.kind = 'domain_resolve'
+			ON j.kind IN ('domain_resolve', 'enrich_company_financials')
 			AND c.id = (j.args->>'company_id')::uuid
 		WHERE ($1::text IS NULL OR j.state::text = $1)
 		  AND ($2::text IS NULL OR j.args->>'source_name' = $2)
@@ -133,12 +133,12 @@ func (h *Handlers) handleGetJob(w http.ResponseWriter, r *http.Request) {
 			END AS last_error,
 			CASE
 				WHEN j.kind = 'source_crawl' THEN j.args->>'source_name'
-				WHEN j.kind = 'domain_resolve' THEN COALESCE(c.name, j.args->>'company_id')
+				WHEN j.kind IN ('domain_resolve', 'enrich_company_financials') THEN COALESCE(c.name, j.args->>'company_id')
 			END AS subject,
 			array_to_json(j.errors)::text AS errors
 		FROM river_job j
 		LEFT JOIN companies c
-			ON j.kind = 'domain_resolve'
+			ON j.kind IN ('domain_resolve', 'enrich_company_financials')
 			AND c.id = (j.args->>'company_id')::uuid
 		WHERE j.id = $1
 	`, id)

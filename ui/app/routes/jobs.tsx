@@ -29,9 +29,10 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 const KIND_LABELS: Record<string, string> = {
-  source_crawl:   "Source Crawl",
-  domain_resolve: "Domain Resolve",
-  gleif_enrich:   "GLEIF Enrich",
+  source_crawl:              "Source Crawl",
+  domain_resolve:            "Domain Resolve",
+  gleif_enrich:              "GLEIF Enrich",
+  enrich_company_financials: "Financial Enrich",
 };
 
 const CANCELLABLE_STATES = new Set(["available", "running", "scheduled", "retryable"]);
@@ -60,6 +61,8 @@ function KindBadge({ kind }: { kind: string }) {
     return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 text-xs" variant="outline">Domain Resolve</Badge>;
   if (kind === "gleif_enrich")
     return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs" variant="outline">GLEIF Enrich</Badge>;
+  if (kind === "enrich_company_financials")
+    return <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs" variant="outline">Financial Enrich</Badge>;
   return <Badge variant="outline" className="text-xs">{kind}</Badge>;
 }
 
@@ -323,6 +326,7 @@ export default function JobsPage() {
           <option value="source_crawl">Source Crawl</option>
           <option value="domain_resolve">Domain Resolve</option>
           <option value="gleif_enrich">GLEIF Enrich</option>
+          <option value="enrich_company_financials">Financial Enrich</option>
         </select>
         <select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -443,6 +447,14 @@ export default function JobsPage() {
                         {j.kind === "source_crawl" && j.subject ? (
                           <Link
                             to={`/sources/${j.subject}`}
+                            className="hover:underline text-foreground font-medium"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {j.subject}
+                          </Link>
+                        ) : (j.kind === "domain_resolve" || j.kind === "enrich_company_financials") && j.subject ? (
+                          <Link
+                            to={`/companies/${j.args?.company_id}`}
                             className="hover:underline text-foreground font-medium"
                             onClick={(e) => e.stopPropagation()}
                           >
