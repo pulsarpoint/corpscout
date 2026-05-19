@@ -661,5 +661,41 @@ func (s *stubQuerier) UpdateCompanyInfo(ctx context.Context, arg db.UpdateCompan
 	return db.Company{}, nil
 }
 
+func (s *stubQuerier) CreateCompanyFinancial(ctx context.Context, arg db.CreateCompanyFinancialParams) (db.CompanyFinancial, error) {
+	return db.CompanyFinancial{}, nil
+}
+
+func (s *stubQuerier) ApproveCompanyFinancial(ctx context.Context, arg db.ApproveCompanyFinancialParams) error {
+	return nil
+}
+
+func (s *stubQuerier) RejectCompanyFinancial(ctx context.Context, arg db.RejectCompanyFinancialParams) error {
+	return nil
+}
+
+func (s *stubQuerier) BulkUpdateCompanyFinancialStatus(ctx context.Context, arg db.BulkUpdateCompanyFinancialStatusParams) error {
+	return nil
+}
+
+func (s *stubQuerier) CountPendingCompanyFinancials(ctx context.Context) (int32, error) {
+	return 0, nil
+}
+
+func (s *stubQuerier) GetCompanyFinancial(ctx context.Context, id uuid.UUID) (db.CompanyFinancial, error) {
+	return db.CompanyFinancial{}, nil
+}
+
+func (s *stubQuerier) ListCompanyFinancials(ctx context.Context, companyID uuid.UUID) ([]db.CompanyFinancial, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) ListPendingCompanyFinancialIDs(ctx context.Context) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) ListPendingCompanyFinancials(ctx context.Context, arg db.ListPendingCompanyFinancialsParams) ([]db.ListPendingCompanyFinancialsRow, error) {
+	return nil, nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)

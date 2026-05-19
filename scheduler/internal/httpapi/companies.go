@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -99,9 +100,6 @@ func (h *Handlers) handleGetCompanyEnrichmentSources(w http.ResponseWriter, r *h
 	if company.RevenueUsd == nil {
 		missing = append(missing, "revenue")
 	}
-	if company.ProfitUsd == nil {
-		missing = append(missing, "profit")
-	}
 
 	sources, err := h.db.GetSourcesWithCapabilities(r.Context())
 	if err != nil {
@@ -193,11 +191,10 @@ func (h *Handlers) handlePatchCompanyFinancials(w http.ResponseWriter, r *http.R
 		return
 	}
 	var body struct {
-		EmployeeCount       *int32  `json:"employee_count"`
-		RevenueUsd          *int64  `json:"revenue_usd"`
-		RevenueOrigAmount   *int64  `json:"revenue_orig_amount"`
-		RevenueOrigCurrency *string `json:"revenue_orig_currency"`
-		ProfitUsd           *int64  `json:"profit_usd"`
+		Year          *int32 `json:"year"`
+		EmployeeCount *int32 `json:"employee_count"`
+		RevenueUsd    *int64 `json:"revenue_usd"`
+		ProfitUsd     *int64 `json:"profit_usd"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -208,20 +205,33 @@ func (h *Handlers) handlePatchCompanyFinancials(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	company, err := h.db.UpdateCompanyEnrichment(r.Context(), db.UpdateCompanyEnrichmentParams{
-		ID:                  id,
-		EmployeeCount:       body.EmployeeCount,
-		RevenueUsd:          body.RevenueUsd,
-		RevenueOrigAmount:   body.RevenueOrigAmount,
-		RevenueOrigCurrency: body.RevenueOrigCurrency,
-		ProfitUsd:           body.ProfitUsd,
+	year := int32(time.Now().Year())
+	if body.Year != nil {
+		year = *body.Year
+	}
+	sourceName := "manual"
+
+	rec, err := h.db.CreateCompanyFinancial(r.Context(), db.CreateCompanyFinancialParams{
+		CompanyID:     id,
+		Year:          year,
+		SourceName:    sourceName,
+		EmployeeCount: body.EmployeeCount,
+		RevenueUsd:    body.RevenueUsd,
+		ProfitUsd:     body.ProfitUsd,
 	})
 	if err != nil {
-		slog.Error("patch company financials", "error", err)
+		slog.Error("create company financial", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, company)
+	if err := h.db.ApproveCompanyFinancial(r.Context(), db.ApproveCompanyFinancialParams{
+		ID: rec.ID,
+	}); err != nil {
+		slog.Error("approve company financial", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, rec)
 }
 
 func (h *Handlers) handlePatchCompany(w http.ResponseWriter, r *http.Request) {

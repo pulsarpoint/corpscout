@@ -13,7 +13,6 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
-	"github.com/pulsarpoint/corpscout/scheduler/internal/llm"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/s3client"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
@@ -35,8 +34,7 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	sourceProcessWorker := workers.NewSourceProcessWorker(q, pool)
 	domainCrawlWorker := workers.NewDomainCrawlWorker(q, crawler, s3)
 	domainImportWorker := workers.NewDomainImportWorker(q, s3)
-	llmClient := llm.NewClient(cfg.LLMBaseURL, cfg.LLMModel)
-	financialEnrichWorker := workers.NewFinancialEnrichWorker(q, llmClient)
+	financialEnrichWorker := workers.NewFinancialEnrichWorker(q)
 
 	w := river.NewWorkers()
 	river.AddWorker(w, sourcePullWorker)

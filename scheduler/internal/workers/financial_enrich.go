@@ -13,17 +13,15 @@ import (
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/fxrates"
-	"github.com/pulsarpoint/corpscout/scheduler/internal/llm"
 )
 
 type FinancialEnrichWorker struct {
 	river.WorkerDefaults[EnrichCompanyFinancialsArgs]
-	db  db.Querier
-	llm *llm.Client
+	db db.Querier
 }
 
-func NewFinancialEnrichWorker(q db.Querier, l *llm.Client) *FinancialEnrichWorker {
-	return &FinancialEnrichWorker{db: q, llm: l}
+func NewFinancialEnrichWorker(q db.Querier) *FinancialEnrichWorker {
+	return &FinancialEnrichWorker{db: q}
 }
 
 func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichCompanyFinancialsArgs]) error {
@@ -51,46 +49,30 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 		return nil
 	}
 
-	revenueLabel := llm.MaybeTranslate(ctx, w.llm, "Driftsinntekter")
-	profitLabel := llm.MaybeTranslate(ctx, w.llm, "Ordinært resultat")
-
 	revenueOrig := int64(acc.Revenue * 100)
 	profitOrig := int64(acc.Profit * 100)
 	revenueUSD, _ := rates.ToUSD(revenueOrig, "NOK")
 	profitUSD, _ := rates.ToUSD(profitOrig, "NOK")
 
 	year := int32(acc.Year)
-	revEstimate, _ := json.Marshal(map[string]any{
-		"value":    revenueOrig,
-		"currency": "NOK",
-		"year":     year,
-		"source":   args.SourceName,
-		"label":    revenueLabel,
-	})
-	profEstimate, _ := json.Marshal(map[string]any{
-		"value":    profitOrig,
-		"currency": "NOK",
-		"year":     year,
-		"source":   args.SourceName,
-		"label":    profitLabel,
-	})
-
-	origCurrency := "NOK"
-	_, err = w.db.UpdateCompanyEnrichment(ctx, db.UpdateCompanyEnrichmentParams{
-		ID:                  companyID,
-		RevenueEstimate:     revEstimate,
-		ProfitEstimate:      profEstimate,
-		RevenueUsd:          &revenueUSD,
-		RevenueOrigAmount:   &revenueOrig,
-		RevenueOrigCurrency: &origCurrency,
-		ProfitUsd:           &profitUSD,
+	currency := "NOK"
+	_, err = w.db.CreateCompanyFinancial(ctx, db.CreateCompanyFinancialParams{
+		CompanyID:       companyID,
+		Year:            year,
+		SourceName:      args.SourceName,
+		RevenueAmount:   &revenueOrig,
+		RevenueCurrency: &currency,
+		RevenueUsd:      &revenueUSD,
+		ProfitAmount:    &profitOrig,
+		ProfitUsd:       &profitUSD,
 	})
 	if err != nil {
-		return fmt.Errorf("update company enrichment: %w", err)
+		return fmt.Errorf("create company financial: %w", err)
 	}
-	slog.Info("company financial enrichment complete",
+	slog.Info("company financial suggestion created",
 		"company_id", args.CompanyID,
 		"org_number", args.OrgNumber,
+		"year", year,
 		"revenue_usd_cents", revenueUSD,
 	)
 	return nil
