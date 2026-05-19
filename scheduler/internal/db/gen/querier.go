@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	ApproveCompanyFinancial(ctx context.Context, arg ApproveCompanyFinancialParams) error
+	BulkUpdateCompanyFinancialStatus(ctx context.Context, arg BulkUpdateCompanyFinancialStatusParams) error
 	ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendingBrregRawInputsParams) ([]BrregCompanyRawInput, error)
 	ClaimPendingCompaniesHouseRawInputs(ctx context.Context, arg ClaimPendingCompaniesHouseRawInputsParams) ([]CompaniesHouseCompanyRawInput, error)
 	ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendingGLEIFRawInputsParams) ([]GleifCompanyRawInput, error)
@@ -20,7 +22,9 @@ type Querier interface {
 	CountOrganizations(ctx context.Context, q_ *string) (int64, error)
 	CountPendingCPELinkSuggestions(ctx context.Context) (int64, error)
 	CountPendingCVELinkSuggestions(ctx context.Context) (int64, error)
+	CountPendingCompanyFinancials(ctx context.Context) (int32, error)
 	CountPendingCompanySuggestions(ctx context.Context) (int64, error)
+	CreateCompanyFinancial(ctx context.Context, arg CreateCompanyFinancialParams) (CompanyFinancial, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
@@ -31,6 +35,7 @@ type Querier interface {
 	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
 	GetCompanyContactSuggestionByID(ctx context.Context, id uuid.UUID) (CompanyContactSuggestion, error)
 	GetCompanyEmails(ctx context.Context, companyID uuid.UUID) ([]CompanyEmail, error)
+	GetCompanyFinancial(ctx context.Context, id uuid.UUID) (CompanyFinancial, error)
 	GetCompanyIndustries(ctx context.Context, companyID uuid.UUID) ([]CompanyIndustry, error)
 	GetCompanyLocations(ctx context.Context, companyID uuid.UUID) ([]CompanyLocation, error)
 	GetCompanyMarkets(ctx context.Context, companyID uuid.UUID) ([]CompanyMarket, error)
@@ -87,6 +92,7 @@ type Querier interface {
 	ListAllPendingCompanySuggestionIDs(ctx context.Context) ([]uuid.UUID, error)
 	ListCVEEntityLinksByCVEID(ctx context.Context, cveID string) ([]CveEntityLink, error)
 	ListCompanies(ctx context.Context, arg ListCompaniesParams) ([]Company, error)
+	ListCompanyFinancials(ctx context.Context, companyID uuid.UUID) ([]CompanyFinancial, error)
 	ListCompanyRelationships(ctx context.Context, subjectCompanyID uuid.UUID) ([]CompanyRelationship, error)
 	ListCountries(ctx context.Context) ([]Country, error)
 	ListDomainCrawlJobPages(ctx context.Context, jobID uuid.UUID) ([]DomainCrawlJobPage, error)
@@ -98,6 +104,8 @@ type Querier interface {
 	ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error)
 	ListPendingCPELinkSuggestions(ctx context.Context, arg ListPendingCPELinkSuggestionsParams) ([]CpeEntityLinkSuggestion, error)
 	ListPendingCVELinkSuggestions(ctx context.Context, arg ListPendingCVELinkSuggestionsParams) ([]CveEntityLinkSuggestion, error)
+	ListPendingCompanyFinancialIDs(ctx context.Context) ([]uuid.UUID, error)
+	ListPendingCompanyFinancials(ctx context.Context, arg ListPendingCompanyFinancialsParams) ([]ListPendingCompanyFinancialsRow, error)
 	ListPendingCompanySuggestions(ctx context.Context, arg ListPendingCompanySuggestionsParams) ([]CompanySuggestion, error)
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
 	ListReviewCandidateIDs(ctx context.Context, arg ListReviewCandidateIDsParams) ([]uuid.UUID, error)
@@ -108,6 +116,7 @@ type Querier interface {
 	MarkCompaniesHouseRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkGLEIFRawInputFailed(ctx context.Context, arg MarkGLEIFRawInputFailedParams) error
 	MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	RejectCompanyFinancial(ctx context.Context, arg RejectCompanyFinancialParams) error
 	RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)

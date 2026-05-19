@@ -33,7 +33,7 @@ func (q *Queries) CountCompanies(ctx context.Context, arg CountCompaniesParams) 
 }
 
 const getCompany = `-- name: GetCompany :one
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd FROM companies WHERE id = $1
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error) {
@@ -63,18 +63,14 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
 
 const getCompanyByExactName = `-- name: GetCompanyByExactName :one
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd FROM companies WHERE lower(name) = lower($1) LIMIT 1
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd FROM companies WHERE lower(name) = lower($1) LIMIT 1
 `
 
 func (q *Queries) GetCompanyByExactName(ctx context.Context, lower string) (Company, error) {
@@ -104,18 +100,14 @@ func (q *Queries) GetCompanyByExactName(ctx context.Context, lower string) (Comp
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
 
 const getCompanyByLEI = `-- name: GetCompanyByLEI :one
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd FROM companies WHERE lei = $1
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd FROM companies WHERE lei = $1
 `
 
 func (q *Queries) GetCompanyByLEI(ctx context.Context, lei *string) (Company, error) {
@@ -145,18 +137,14 @@ func (q *Queries) GetCompanyByLEI(ctx context.Context, lei *string) (Company, er
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
 
 const getCompanyByRegistrationAndCountry = `-- name: GetCompanyByRegistrationAndCountry :one
-SELECT c.id, c.lei, c.name, c.country_id, c.registration_number, c.status, c.primary_source_id, c.created_at, c.updated_at, c.short_name, c.short_description, c.description, c.website, c.founded_year, c.employee_estimate, c.revenue_estimate, c.ownership, c.parent_lei, c.ultimate_parent_lei, c.canonical_slug, c.display_name, c.resolution_status, c.evidence, c.profit_estimate, c.employee_count, c.revenue_usd, c.revenue_orig_amount, c.revenue_orig_currency, c.profit_usd
+SELECT c.id, c.lei, c.name, c.country_id, c.registration_number, c.status, c.primary_source_id, c.created_at, c.updated_at, c.short_name, c.short_description, c.description, c.website, c.founded_year, c.employee_estimate, c.revenue_estimate, c.ownership, c.parent_lei, c.ultimate_parent_lei, c.canonical_slug, c.display_name, c.resolution_status, c.evidence, c.employee_count, c.revenue_usd
 FROM companies c
 JOIN countries co ON co.id = c.country_id
 WHERE c.registration_number = $1
@@ -195,18 +183,14 @@ func (q *Queries) GetCompanyByRegistrationAndCountry(ctx context.Context, arg Ge
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
 
 const getCompanyBySlug = `-- name: GetCompanyBySlug :one
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd FROM companies WHERE canonical_slug = $1
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd FROM companies WHERE canonical_slug = $1
 `
 
 func (q *Queries) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error) {
@@ -236,12 +220,8 @@ func (q *Queries) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (C
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
@@ -249,7 +229,7 @@ func (q *Queries) GetCompanyBySlug(ctx context.Context, canonicalSlug string) (C
 const insertCompany = `-- name: InsertCompany :one
 INSERT INTO companies (canonical_slug, name, country_id, status)
 VALUES ($1, $2, $3, coalesce($4, 'active'))
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd
 `
 
 type InsertCompanyParams struct {
@@ -291,18 +271,14 @@ func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (C
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
-		&i.ProfitEstimate,
 		&i.EmployeeCount,
 		&i.RevenueUsd,
-		&i.RevenueOrigAmount,
-		&i.RevenueOrigCurrency,
-		&i.ProfitUsd,
 	)
 	return i, err
 }
 
 const listCompanies = `-- name: ListCompanies :many
-SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd FROM companies c
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd FROM companies c
 WHERE ($1::text IS NULL OR status = $1)
   AND ($2::uuid IS NULL OR country_id = $2)
   AND ($3::text IS NULL OR name ILIKE '%' || $3 || '%')
@@ -357,12 +333,8 @@ func (q *Queries) ListCompanies(ctx context.Context, arg ListCompaniesParams) ([
 			&i.DisplayName,
 			&i.ResolutionStatus,
 			&i.Evidence,
-			&i.ProfitEstimate,
 			&i.EmployeeCount,
 			&i.RevenueUsd,
-			&i.RevenueOrigAmount,
-			&i.RevenueOrigCurrency,
-			&i.ProfitUsd,
 		); err != nil {
 			return nil, err
 		}
