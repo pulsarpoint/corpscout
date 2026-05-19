@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { CrawlDomainDialog } from "~/components/app/CrawlDomainDialog";
-import { signalColor, confidenceColor, formatDate } from "~/lib/utils";
+import { signalColor, confidenceColor, formatDate, timeAgo } from "~/lib/utils";
 
 const PAGE_SIZE = 50;
 
@@ -95,6 +95,27 @@ export default function DomainsPage() {
         ),
       },
       {
+        accessorKey: "crawled",
+        header: "Crawled",
+        enableSorting: true,
+        cell: ({ row }) =>
+          row.original.crawled ? (
+            <Badge variant="outline" className="text-green-600 border-green-600">✓</Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        accessorKey: "last_crawled_at",
+        header: "Last Crawl",
+        enableSorting: true,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.last_crawled_at ? timeAgo(row.original.last_crawled_at) : "—"}
+          </span>
+        ),
+      },
+      {
         accessorKey: "first_seen_at",
         header: "First Seen",
         enableSorting: true,
@@ -133,6 +154,7 @@ export default function DomainsPage() {
   const signal = searchParams.get("signal") ?? "";
   const minConf = searchParams.get("min_confidence") ?? "";
   const orphan = searchParams.get("orphan") === "1";
+  const crawledFilter = searchParams.get("crawled") ?? "";
   const sortKey = searchParams.get("sort") ?? "first_seen_at";
   const sortDir = (searchParams.get("dir") ?? "desc") as "asc" | "desc";
   const q = searchParams.get("q") ?? "";
@@ -160,6 +182,7 @@ export default function DomainsPage() {
       if (signal) params["primary_signal"] = `eq.${signal}`;
       if (minConf) params["max_confidence"] = `gte.${minConf}`;
       if (orphan) params["company_count"] = "eq.0";
+      if (crawledFilter) params["crawled"] = `eq.${crawledFilter}`;
       if (q) params["domain"] = `ilike.*${q}*`;
 
       const res = await pgrest<VDomain>("v_domains", params);
@@ -168,7 +191,7 @@ export default function DomainsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, signal, minConf, orphan, sortKey, sortDir, q]);
+  }, [page, signal, minConf, orphan, crawledFilter, sortKey, sortDir, q]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -219,6 +242,15 @@ export default function DomainsPage() {
           <option value="65">≥ 65</option>
           <option value="75">≥ 75</option>
           <option value="90">≥ 90</option>
+        </select>
+        <select
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          value={crawledFilter}
+          onChange={(e) => setParam({ crawled: e.target.value })}
+        >
+          <option value="">All crawl status</option>
+          <option value="true">Crawled</option>
+          <option value="false">Not crawled</option>
         </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
           <input
