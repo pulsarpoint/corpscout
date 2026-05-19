@@ -3,15 +3,19 @@ import { Link, useParams } from "react-router";
 import {
   ChevronLeft, ExternalLink, MapPin, Phone, Mail,
   Briefcase, Globe, Building2, Users, DollarSign,
-  Calendar, Hash, ShieldCheck, FileText, Tag,
+  Calendar, Hash, ShieldCheck, FileText, Tag, Sparkles,
 } from "lucide-react";
+import { toast } from "sonner";
 import { pgrest } from "~/lib/pgrest";
+import { api } from "~/lib/api";
 import type {
   VCompany, VCompanySource, VCompanyLocation, VCompanyPhone,
   VCompanyEmail, VCompanyIndustry, VCompanyMarket, VCompanyService,
+  EnrichmentSourcesResponse,
 } from "~/types/api";
 import { signalColor, confidenceColor, formatDate } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -114,6 +118,8 @@ export default function CompanyDetailPage() {
   const [services,   setServices]   = useState<VCompanyService[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string>();
+  const [enrichSources, setEnrichSources] = useState<EnrichmentSourcesResponse | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -140,6 +146,10 @@ export default function CompanyDetailPage() {
         setIndustries(ind.data);
         setMarkets(mkt.data);
         setServices(svc.data);
+        // Load enrichment sources in parallel (best-effort)
+        api.getCompanyEnrichmentSources(id)
+          .then(setEnrichSources)
+          .catch(() => {});
       })
       .catch(() => setError("Failed to load company."))
       .finally(() => setLoading(false));
@@ -168,7 +178,7 @@ export default function CompanyDetailPage() {
 
   const hasContact    = phones.length > 0 || emails.length > 0;
   const hasBusiness   = industries.length > 0 || markets.length > 0 || services.length > 0;
-  const hasEstimates  = !!(empEst.label || empEst.count || revEst.label);
+  const hasEstimates  = !!(empEst.label || empEst.count || revEst.label || company.employee_count != null || company.revenue_usd != null);
   const hasOwnership  = !!(own.type || own.listed != null || own.exchange);
 
   return (
@@ -264,11 +274,27 @@ export default function CompanyDetailPage() {
                     </dd>
                   </div>
                 )}
-                {revEst.label && (
+                {(revEst.label || company.revenue_usd != null) && (
                   <div className="flex items-center gap-2">
                     <DollarSign className="size-3.5 text-muted-foreground shrink-0" />
                     <dt className="text-xs text-muted-foreground w-24 shrink-0">Revenue</dt>
-                    <dd className="text-sm font-medium">{revEst.label}</dd>
+                    <dd className="text-sm font-medium">
+                      {company.revenue_usd != null
+                        ? `$${(company.revenue_usd / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD`
+                            + (company.revenue_orig_currency && company.revenue_orig_currency !== "USD"
+                              ? ` (${company.revenue_orig_currency})`
+                              : "")
+                        : revEst.label ?? "—"}
+                    </dd>
+                  </div>
+                )}
+                {company.profit_usd != null && (
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="size-3.5 text-muted-foreground shrink-0" />
+                    <dt className="text-xs text-muted-foreground w-24 shrink-0">Profit</dt>
+                    <dd className={`text-sm font-medium ${company.profit_usd < 0 ? "text-red-600" : ""}`}>
+                      {`$${(company.profit_usd / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD`}
+                    </dd>
                   </div>
                 )}
               </dl>
@@ -305,6 +331,45 @@ export default function CompanyDetailPage() {
             </Section>
           )}
         </div>
+      )}
+
+      {/* ── Enrichment Sources ─────────────────────────────────────────────── */}
+      {enrichSources && enrichSources.sources.length > 0 && (
+        <Section icon={<Sparkles className="size-4" />} title="Available Enrichment Sources">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Missing: {enrichSources.missing_fields.join(", ")}
+            </p>
+            {enrichSources.sources.map((src) => (
+              <div key={src.name} className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">{src.display_name ?? src.name}</p>
+                  <p className="text-xs text-muted-foreground">Can provide: {src.can_provide.join(", ")}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0"
+                  disabled={enrichLoading}
+                  onClick={async () => {
+                    setEnrichLoading(true);
+                    try {
+                      await api.enrichCompanyFromSource(id!, src.name);
+                      toast.success(`Enrichment job queued from ${src.display_name ?? src.name}`);
+                      setEnrichSources(null);
+                    } catch {
+                      toast.error("Failed to queue enrichment job.");
+                    } finally {
+                      setEnrichLoading(false);
+                    }
+                  }}
+                >
+                  Enrich
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Section>
       )}
 
       {/* ── Business profile ───────────────────────────────────────────────── */}
