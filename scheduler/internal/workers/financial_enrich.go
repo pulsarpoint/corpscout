@@ -43,16 +43,21 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 
 	acc := accounts[0] // most recent
 
-	rates, err := fxrates.Load(ctx)
-	if err != nil {
-		slog.Warn("fxrates load failed", "error", err)
-		return nil
-	}
-
 	revenueOrig := int64(acc.Revenue * 100)
 	profitOrig := int64(acc.Profit * 100)
-	revenueUSD, _ := rates.ToUSD(revenueOrig, "NOK")
-	profitUSD, _ := rates.ToUSD(profitOrig, "NOK")
+
+	var revenueUSDPtr, profitUSDPtr *int64
+	rates, err := fxrates.Load(ctx)
+	if err != nil {
+		slog.Warn("fxrates load failed — storing without USD conversion", "error", err)
+	} else {
+		if rev, err := rates.ToUSD(revenueOrig, "NOK"); err == nil {
+			revenueUSDPtr = &rev
+		}
+		if prf, err := rates.ToUSD(profitOrig, "NOK"); err == nil {
+			profitUSDPtr = &prf
+		}
+	}
 
 	year := int32(acc.Year)
 	currency := "NOK"
@@ -62,9 +67,9 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 		SourceName:      args.SourceName,
 		RevenueAmount:   &revenueOrig,
 		RevenueCurrency: &currency,
-		RevenueUsd:      &revenueUSD,
+		RevenueUsd:      revenueUSDPtr,
 		ProfitAmount:    &profitOrig,
-		ProfitUsd:       &profitUSD,
+		ProfitUsd:       profitUSDPtr,
 	})
 	if err != nil {
 		return fmt.Errorf("create company financial: %w", err)
@@ -73,7 +78,7 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 		"company_id", args.CompanyID,
 		"org_number", args.OrgNumber,
 		"year", year,
-		"revenue_usd_cents", revenueUSD,
+		"revenue_orig_cents", revenueOrig,
 	)
 	return nil
 }
@@ -88,14 +93,14 @@ type brregRegnskapDTO struct {
 	Regnskapsperiode struct {
 		TilDato string `json:"tilDato"`
 	} `json:"regnskapsperiode"`
-	Resultatregnskapsresultat struct {
+	ResultatregnskapResultat struct {
 		Driftsresultat struct {
 			Driftsinntekter struct {
 				SumDriftsinntekter *float64 `json:"sumDriftsinntekter"`
 			} `json:"driftsinntekter"`
 		} `json:"driftsresultat"`
-		OrdAertResultatForSkattekostnad *float64 `json:"ordinaertResultatForSkattekostnad"`
-	} `json:"resultatregnskapsresultat"`
+		OrdinaertResultatFoerSkattekostnad *float64 `json:"ordinaertResultatFoerSkattekostnad"`
+	} `json:"resultatregnskapResultat"`
 }
 
 func fetchBrregAccounts(ctx context.Context, orgNumber string) ([]brregAccount, error) {
@@ -130,10 +135,10 @@ func fetchBrregAccounts(ctx context.Context, orgNumber string) ([]brregAccount, 
 			fmt.Sscanf(d.Regnskapsperiode.TilDato[:4], "%d", &year)
 		}
 		var revenue, profit float64
-		if v := d.Resultatregnskapsresultat.Driftsresultat.Driftsinntekter.SumDriftsinntekter; v != nil {
+		if v := d.ResultatregnskapResultat.Driftsresultat.Driftsinntekter.SumDriftsinntekter; v != nil {
 			revenue = *v
 		}
-		if v := d.Resultatregnskapsresultat.OrdAertResultatForSkattekostnad; v != nil {
+		if v := d.ResultatregnskapResultat.OrdinaertResultatFoerSkattekostnad; v != nil {
 			profit = *v
 		}
 		accounts = append(accounts, brregAccount{Year: year, Revenue: revenue, Profit: profit})
