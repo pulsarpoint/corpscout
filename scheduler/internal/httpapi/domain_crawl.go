@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -12,6 +14,49 @@ import (
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
+
+// crawlJobJSON is a JSON-safe DTO for ListDomainCrawlJobsRow.
+// NullRiverJobState and pgtype.Timestamptz are flattened to *string / *time.Time.
+type crawlJobJSON struct {
+	ID               uuid.UUID         `json:"id"`
+	DomainID         uuid.UUID         `json:"domain_id"`
+	RiverJobID       *int64            `json:"river_job_id"`
+	Mode             string            `json:"mode"`
+	MaxPages         int32             `json:"max_pages"`
+	S3Prefix         *string           `json:"s3_prefix"`
+	FaviconS3Key     *string           `json:"favicon_s3_key"`
+	FaviconUrl       *string           `json:"favicon_url"`
+	CreatedAt        time.Time         `json:"created_at"`
+	RiverState       *string           `json:"river_state"`
+	RiverFinalizedAt *time.Time        `json:"river_finalized_at"`
+	RiverErrors      []json.RawMessage `json:"river_errors"`
+}
+
+func toCrawlJobJSON(row db.ListDomainCrawlJobsRow) crawlJobJSON {
+	var riverState *string
+	if row.RiverState.Valid {
+		s := string(row.RiverState.RiverJobState)
+		riverState = &s
+	}
+	var riverFinalizedAt *time.Time
+	if row.RiverFinalizedAt.Valid {
+		riverFinalizedAt = &row.RiverFinalizedAt.Time
+	}
+	return crawlJobJSON{
+		ID:               row.ID,
+		DomainID:         row.DomainID,
+		RiverJobID:       row.RiverJobID,
+		Mode:             row.Mode,
+		MaxPages:         row.MaxPages,
+		S3Prefix:         row.S3Prefix,
+		FaviconS3Key:     row.FaviconS3Key,
+		FaviconUrl:       row.FaviconUrl,
+		CreatedAt:        row.CreatedAt,
+		RiverState:       riverState,
+		RiverFinalizedAt: riverFinalizedAt,
+		RiverErrors:      row.RiverErrors,
+	}
+}
 
 type triggerCrawlRequest struct {
 	Mode     string `json:"mode"`
@@ -91,10 +136,11 @@ func (h *Handlers) handleListDomainCrawlJobs(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to list crawl jobs")
 		return
 	}
-	if jobs == nil {
-		jobs = []db.ListDomainCrawlJobsRow{}
+	resp := make([]crawlJobJSON, len(jobs))
+	for i, j := range jobs {
+		resp[i] = toCrawlJobJSON(j)
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handlers) handleGetDomainCrawlJob(w http.ResponseWriter, r *http.Request) {
