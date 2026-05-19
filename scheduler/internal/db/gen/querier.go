@@ -25,6 +25,7 @@ type Querier interface {
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCompanyByExactName(ctx context.Context, lower string) (Company, error)
 	GetCompanyByLEI(ctx context.Context, lei *string) (Company, error)
 	GetCompanyByRegistrationAndCountry(ctx context.Context, arg GetCompanyByRegistrationAndCountryParams) (Company, error)
 	GetCompanyBySlug(ctx context.Context, canonicalSlug string) (Company, error)
@@ -41,9 +42,10 @@ type Querier interface {
 	GetCountryByID(ctx context.Context, id uuid.UUID) (Country, error)
 	GetCountryByISO2(ctx context.Context, isoAlpha2 string) (Country, error)
 	GetCountryIDByISO2(ctx context.Context, isoAlpha2 string) (uuid.UUID, error)
-	GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error)
+	GetDomainByID(ctx context.Context, id uuid.UUID) (GetDomainByIDRow, error)
 	GetDomainCrawlJob(ctx context.Context, arg GetDomainCrawlJobParams) (DomainCrawlJob, error)
 	GetDomainCrawlJobPage(ctx context.Context, arg GetDomainCrawlJobPageParams) (DomainCrawlJobPage, error)
+	GetImportBatch(ctx context.Context, id uuid.UUID) (DomainImportBatch, error)
 	GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (OpenSourceProject, error)
 	GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (OpenSourceProject, error)
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
@@ -70,6 +72,7 @@ type Querier interface {
 	InsertCompanySuggestion(ctx context.Context, arg InsertCompanySuggestionParams) (CompanySuggestion, error)
 	InsertDomainCrawlJob(ctx context.Context, arg InsertDomainCrawlJobParams) (DomainCrawlJob, error)
 	InsertDomainCrawlJobPage(ctx context.Context, arg InsertDomainCrawlJobPageParams) error
+	InsertImportBatch(ctx context.Context, arg InsertImportBatchParams) (DomainImportBatch, error)
 	// database/queries/open_source_projects.sql
 	InsertOpenSourceProject(ctx context.Context, arg InsertOpenSourceProjectParams) (OpenSourceProject, error)
 	InsertOpenSourceProjectSuggestion(ctx context.Context, arg InsertOpenSourceProjectSuggestionParams) (OpenSourceProjectSuggestion, error)
@@ -88,6 +91,7 @@ type Querier interface {
 	ListDomainCrawlJobs(ctx context.Context, domainID uuid.UUID) ([]ListDomainCrawlJobsRow, error)
 	ListDomains(ctx context.Context, arg ListDomainsParams) ([]ListDomainsRow, error)
 	ListDomainsForCompany(ctx context.Context, companyID uuid.UUID) ([]ListDomainsForCompanyRow, error)
+	ListImportBatches(ctx context.Context, limit int32) ([]DomainImportBatch, error)
 	ListOpenSourceProjects(ctx context.Context, arg ListOpenSourceProjectsParams) ([]OpenSourceProject, error)
 	ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error)
 	ListPendingCPELinkSuggestions(ctx context.Context, arg ListPendingCPELinkSuggestionsParams) ([]CpeEntityLinkSuggestion, error)
@@ -126,6 +130,9 @@ type Querier interface {
 	UpdateCompanySuggestionApproved(ctx context.Context, arg UpdateCompanySuggestionApprovedParams) error
 	UpdateCompanySuggestionRejected(ctx context.Context, arg UpdateCompanySuggestionRejectedParams) error
 	UpdateCompanyWebsite(ctx context.Context, arg UpdateCompanyWebsiteParams) error
+	UpdateImportBatchCompleted(ctx context.Context, arg UpdateImportBatchCompletedParams) error
+	UpdateImportBatchRiverJob(ctx context.Context, arg UpdateImportBatchRiverJobParams) error
+	UpdateImportBatchStarted(ctx context.Context, arg UpdateImportBatchStartedParams) error
 	UpdateOpenSourceProjectStatus(ctx context.Context, arg UpdateOpenSourceProjectStatusParams) error
 	UpdateOrganizationStatus(ctx context.Context, arg UpdateOrganizationStatusParams) error
 	UpdateSourceConfig(ctx context.Context, arg UpdateSourceConfigParams) error
@@ -154,6 +161,7 @@ type Querier interface {
 	// ── services ──────────────────────────────────────────────────────────────────
 	UpsertCompanyService(ctx context.Context, arg UpsertCompanyServiceParams) (CompanyService, error)
 	UpsertDomain(ctx context.Context, domain string) (Domain, error)
+	UpsertDomainWithSource(ctx context.Context, arg UpsertDomainWithSourceParams) (Domain, error)
 	// GLEIF
 	UpsertGLEIFCompanyRawInput(ctx context.Context, arg UpsertGLEIFCompanyRawInputParams) (GleifCompanyRawInput, error)
 }

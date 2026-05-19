@@ -67,6 +67,41 @@ func (q *Queries) GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 	return i, err
 }
 
+const getCompanyByExactName = `-- name: GetCompanyByExactName :one
+SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence FROM companies WHERE lower(name) = lower($1) LIMIT 1
+`
+
+func (q *Queries) GetCompanyByExactName(ctx context.Context, lower string) (Company, error) {
+	row := q.db.QueryRow(ctx, getCompanyByExactName, lower)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+	)
+	return i, err
+}
+
 const getCompanyByLEI = `-- name: GetCompanyByLEI :one
 SELECT id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence FROM companies WHERE lei = $1
 `

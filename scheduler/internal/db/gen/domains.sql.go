@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countDomains = `-- name: CountDomains :one
@@ -49,9 +50,16 @@ FROM domains
 WHERE id = $1
 `
 
-func (q *Queries) GetDomainByID(ctx context.Context, id uuid.UUID) (Domain, error) {
+type GetDomainByIDRow struct {
+	ID             uuid.UUID          `json:"id"`
+	Domain         string             `json:"domain"`
+	FirstSeenAt    time.Time          `json:"first_seen_at"`
+	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
+}
+
+func (q *Queries) GetDomainByID(ctx context.Context, id uuid.UUID) (GetDomainByIDRow, error) {
 	row := q.db.QueryRow(ctx, getDomainByID, id)
-	var i Domain
+	var i GetDomainByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Domain,
@@ -273,7 +281,7 @@ const upsertDomain = `-- name: UpsertDomain :one
 INSERT INTO domains (domain)
 VALUES ($1)
 ON CONFLICT (domain) DO UPDATE SET last_verified_at = now()
-RETURNING id, domain, first_seen_at, last_verified_at
+RETURNING id, domain, first_seen_at, last_verified_at, import_source
 `
 
 func (q *Queries) UpsertDomain(ctx context.Context, domain string) (Domain, error) {
@@ -284,6 +292,32 @@ func (q *Queries) UpsertDomain(ctx context.Context, domain string) (Domain, erro
 		&i.Domain,
 		&i.FirstSeenAt,
 		&i.LastVerifiedAt,
+		&i.ImportSource,
+	)
+	return i, err
+}
+
+const upsertDomainWithSource = `-- name: UpsertDomainWithSource :one
+INSERT INTO domains (domain, import_source)
+VALUES ($1, $2)
+ON CONFLICT (domain) DO UPDATE SET last_verified_at = now()
+RETURNING id, domain, first_seen_at, last_verified_at, import_source
+`
+
+type UpsertDomainWithSourceParams struct {
+	Domain       string `json:"domain"`
+	ImportSource string `json:"import_source"`
+}
+
+func (q *Queries) UpsertDomainWithSource(ctx context.Context, arg UpsertDomainWithSourceParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, upsertDomainWithSource, arg.Domain, arg.ImportSource)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.FirstSeenAt,
+		&i.LastVerifiedAt,
+		&i.ImportSource,
 	)
 	return i, err
 }

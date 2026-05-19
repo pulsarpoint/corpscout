@@ -500,6 +500,7 @@ type Domain struct {
 	Domain         string             `json:"domain"`
 	FirstSeenAt    time.Time          `json:"first_seen_at"`
 	LastVerifiedAt pgtype.Timestamptz `json:"last_verified_at"`
+	ImportSource   string             `json:"import_source"`
 }
 
 type DomainCrawlJob struct {
@@ -546,6 +547,21 @@ type DomainDiscoveryRawInput struct {
 	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type DomainImportBatch struct {
+	ID           uuid.UUID          `json:"id"`
+	Filename     string             `json:"filename"`
+	CsvS3Key     string             `json:"csv_s3_key"`
+	Status       string             `json:"status"`
+	RowsTotal    int32              `json:"rows_total"`
+	RowsImported int32              `json:"rows_imported"`
+	RowsSkipped  int32              `json:"rows_skipped"`
+	RowsFailed   int32              `json:"rows_failed"`
+	ErrorMessage *string            `json:"error_message"`
+	RiverJobID   *int64             `json:"river_job_id"`
+	CreatedAt    time.Time          `json:"created_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
 }
 
 type GleifCompanyRawInput struct {
@@ -845,6 +861,7 @@ type VCompanySource struct {
 type VDomain struct {
 	ID                 uuid.UUID          `json:"id"`
 	Domain             string             `json:"domain"`
+	ImportSource       string             `json:"import_source"`
 	FirstSeenAt        time.Time          `json:"first_seen_at"`
 	LastVerifiedAt     pgtype.Timestamptz `json:"last_verified_at"`
 	CompanyCount       int32              `json:"company_count"`
@@ -852,6 +869,8 @@ type VDomain struct {
 	PrimaryCompanyName string             `json:"primary_company_name"`
 	PrimaryCompanyID   uuid.UUID          `json:"primary_company_id"`
 	PrimarySignal      string             `json:"primary_signal"`
+	LastCrawledAt      interface{}        `json:"last_crawled_at"`
+	Crawled            bool               `json:"crawled"`
 }
 
 type VResolvedEntity struct {
