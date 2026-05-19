@@ -3,6 +3,7 @@ import { api } from "~/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { DomainCandidatesTab } from "~/components/app/review/DomainCandidatesTab";
 import { CompanySuggestionsTab } from "~/components/app/review/CompanySuggestionsTab";
+import { FinancialSuggestionsTab } from "~/components/app/review/FinancialSuggestionsTab";
 
 export default function ReviewPage() {
   const [pendingDomains, setPendingDomains] = useState<number | null>(null);
@@ -28,12 +29,18 @@ export default function ReviewPage() {
             New Companies
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">0</span>
           </TabsTrigger>
+          <TabsTrigger value="financial_suggestions" className="gap-2">
+            Financial Suggestions
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="domain_candidates">
           <DomainCandidatesTab />
         </TabsContent>
         <TabsContent value="company_suggestions">
           <CompanySuggestionsTab />
+        </TabsContent>
+        <TabsContent value="financial_suggestions">
+          <FinancialSuggestionsTab />
         </TabsContent>
       </Tabs>
     </div>
