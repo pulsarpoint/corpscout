@@ -639,5 +639,23 @@ func (s *stubQuerier) UpsertDomainWithSource(ctx context.Context, arg db.UpsertD
 	return ret.Get(0).(db.Domain), ret.Error(1)
 }
 
+// Financial enrichment / capabilities stubs (Task 9)
+func (s *stubQuerier) GetSourcesWithCapabilities(ctx context.Context) ([]db.DataSource, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) UpdateSourceCapabilities(ctx context.Context, arg db.UpdateSourceCapabilitiesParams) error {
+	return nil
+}
+
+// Suggestion list stubs
+func (s *stubQuerier) ListAllPendingCompanySuggestionIDs(ctx context.Context) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) ListReviewCandidateIDs(ctx context.Context, arg db.ListReviewCandidateIDsParams) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)
