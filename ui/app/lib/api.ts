@@ -17,6 +17,7 @@ import type {
   DomainCrawlPage,
   TriggerCrawlRequest,
   TriggerCrawlResponse,
+  DomainImportBatch,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -242,4 +243,19 @@ export function getDomainCrawlPageContent(
 
 export function getDomainFaviconUrl(domainId: string, jobId: string): string {
   return `/api/v1/domains/${domainId}/crawl-jobs/${jobId}/favicon`;
+}
+
+export async function uploadDomainsCSV(file: File): Promise<DomainImportBatch> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE}/domains/import`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw await responseError(res);
+  return res.json() as Promise<DomainImportBatch>;
+}
+
+export function getImportBatches(limit = 10): Promise<DomainImportBatch[]> {
+  return get<DomainImportBatch[]>(`/domains/import-batches?limit=${limit}`);
 }
