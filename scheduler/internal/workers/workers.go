@@ -15,3 +15,11 @@ type SourceProcessArgs struct {
 }
 
 func (SourceProcessArgs) Kind() string { return "source_process" }
+
+// DomainImportArgs are the arguments for a CSV domain import River job.
+type DomainImportArgs struct {
+	BatchID  string `json:"batch_id"`
+	CsvS3Key string `json:"csv_s3_key"`
+}
+
+func (DomainImportArgs) Kind() string { return "domain_import" }
