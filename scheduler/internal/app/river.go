@@ -13,6 +13,7 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/llm"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/s3client"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
@@ -34,19 +35,23 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	sourceProcessWorker := workers.NewSourceProcessWorker(q, pool)
 	domainCrawlWorker := workers.NewDomainCrawlWorker(q, crawler, s3)
 	domainImportWorker := workers.NewDomainImportWorker(q, s3)
+	llmClient := llm.NewClient(cfg.LLMBaseURL, cfg.LLMModel)
+	financialEnrichWorker := workers.NewFinancialEnrichWorker(q, llmClient)
 
 	w := river.NewWorkers()
 	river.AddWorker(w, sourcePullWorker)
 	river.AddWorker(w, sourceProcessWorker)
 	river.AddWorker(w, domainCrawlWorker)
 	river.AddWorker(w, domainImportWorker)
+	river.AddWorker(w, financialEnrichWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
-			"source_pull":    {MaxWorkers: cfg.CrawlConcurrency},
-			"source_process": {MaxWorkers: cfg.DomainConcurrency},
-			"domain_crawl":   {MaxWorkers: 3},
-			"domain_import":  {MaxWorkers: 2},
+			"source_pull":       {MaxWorkers: cfg.CrawlConcurrency},
+			"source_process":    {MaxWorkers: cfg.DomainConcurrency},
+			"domain_crawl":      {MaxWorkers: 3},
+			"domain_import":     {MaxWorkers: 2},
+			"enrich_financials": {MaxWorkers: 2},
 		},
 		Workers: w,
 	}
