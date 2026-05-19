@@ -657,5 +657,9 @@ func (s *stubQuerier) ListReviewCandidateIDs(ctx context.Context, arg db.ListRev
 	return nil, nil
 }
 
+func (s *stubQuerier) UpdateCompanyInfo(ctx context.Context, arg db.UpdateCompanyInfoParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)

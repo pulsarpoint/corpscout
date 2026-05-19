@@ -44,6 +44,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/companies/{id}", h.handleGetCompany)
 		r.Get("/companies/{id}/enrichment-sources", h.handleGetCompanyEnrichmentSources)
 		r.Post("/companies/{id}/enrich-from-source", h.handleEnrichCompanyFromSource)
+		r.Patch("/companies/{id}", h.handlePatchCompany)
 		r.Patch("/companies/{id}/financials", h.handlePatchCompanyFinancials)
 		r.Get("/domains", h.handleListDomains)
 		r.Post("/domains/import", h.handleImportDomains)
