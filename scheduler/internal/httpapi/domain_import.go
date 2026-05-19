@@ -73,10 +73,7 @@ func (h *Handlers) handleImportDomains(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("set river job id on import batch", "error", err)
 	}
 
-	writeJSON(w, http.StatusAccepted, map[string]any{
-		"batch_id":     batch.ID,
-		"river_job_id": riverJob.Job.ID,
-	})
+	writeJSON(w, http.StatusAccepted, batch)
 }
 
 func (h *Handlers) handleListImportBatches(w http.ResponseWriter, r *http.Request) {
