@@ -43,6 +43,8 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/companies", h.handleListCompanies)
 		r.Get("/companies/{id}", h.handleGetCompany)
 		r.Get("/domains", h.handleListDomains)
+		r.Post("/domains/import", h.handleImportDomains)
+		r.Get("/domains/import-batches", h.handleListImportBatches)
 		r.Get("/domains/{id}", h.handleGetDomain)
 		r.Post("/domains/{id}/crawl", h.handleTriggerDomainCrawl)
 		r.Get("/domains/{id}/crawl-jobs", h.handleListDomainCrawlJobs)
