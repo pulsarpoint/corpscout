@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { CrawlDomainDialog } from "~/components/app/CrawlDomainDialog";
+import { UploadDomainsDialog } from "~/components/app/UploadDomainsDialog";
 import { signalColor, confidenceColor, formatDate, timeAgo } from "~/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -30,6 +31,7 @@ export default function DomainsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCrawlOpen, setBulkCrawlOpen] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const signal = searchParams.get("signal") ?? "";
@@ -264,7 +266,12 @@ export default function DomainsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Domains</h1>
-        <span className="text-sm text-muted-foreground">{total.toLocaleString()} total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">{total.toLocaleString()} total</span>
+          <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+            Upload CSV
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -369,6 +376,11 @@ export default function DomainsPage() {
         open={bulkCrawlOpen}
         onOpenChange={setBulkCrawlOpen}
         onSuccess={() => setSelectedIds(new Set())}
+      />
+      <UploadDomainsDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onSuccess={() => fetchData()}
       />
     </div>
   );
