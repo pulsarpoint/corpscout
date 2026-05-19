@@ -31,6 +31,11 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 		return fmt.Errorf("parse company id: %w", err)
 	}
 
+	if args.SourceName != "brreg" {
+		slog.Error("unsupported financial enrichment source", "source", args.SourceName, "job_id", job.ID)
+		return fmt.Errorf("financial enrichment source %q is not implemented", args.SourceName)
+	}
+
 	accounts, err := fetchBrregAccounts(ctx, args.OrgNumber)
 	if err != nil {
 		slog.Error("brreg regnskap fetch failed", "org", args.OrgNumber, "job_id", job.ID, "error", err)
