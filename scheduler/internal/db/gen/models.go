@@ -262,6 +262,7 @@ type CompanyLocation struct {
 	RemovedAt    pgtype.Timestamptz `json:"removed_at"`
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
+	CountryID    pgtype.UUID        `json:"country_id"`
 }
 
 type CompanyLocationSuggestion struct {

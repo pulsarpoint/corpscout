@@ -4,16 +4,17 @@
 INSERT INTO company_locations (
     company_id, location_type, label,
     address_line1, address_line2, city, region, postal_code,
-    country, country_code, latitude, longitude,
+    country, country_code, country_id, latitude, longitude,
     source, confidence, evidence
 )
 VALUES (
     $1, $2, $3,
     $4, $5, $6, $7, $8,
-    $9, $10, $11, $12,
+    $9, $10, (SELECT id FROM countries WHERE iso_alpha2 = $10), $11, $12,
     $13, $14, $15
 )
-ON CONFLICT (company_id, location_type) WHERE removed_at IS NULL AND location_type = 'headquarters'
+ON CONFLICT (company_id, location_type, source)
+    WHERE removed_at IS NULL AND location_type IN ('headquarters', 'registered_address')
 DO UPDATE SET
     label         = EXCLUDED.label,
     address_line1 = EXCLUDED.address_line1,
@@ -23,9 +24,9 @@ DO UPDATE SET
     postal_code   = EXCLUDED.postal_code,
     country       = EXCLUDED.country,
     country_code  = EXCLUDED.country_code,
+    country_id    = EXCLUDED.country_id,
     latitude      = EXCLUDED.latitude,
     longitude     = EXCLUDED.longitude,
-    source        = EXCLUDED.source,
     confidence    = EXCLUDED.confidence,
     evidence      = EXCLUDED.evidence,
     removed_at    = NULL,
