@@ -18,6 +18,7 @@ import type {
   TriggerCrawlRequest,
   TriggerCrawlResponse,
   DomainImportBatch,
+  EnrichmentSourcesResponse,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -228,6 +229,23 @@ export const api = {
     post<{ cancelled: number }>("/jobs/cancel-bulk", { filter }),
 
   getCountries: () => get<Country[]>("/countries"),
+
+  getCompanyEnrichmentSources: (id: string) =>
+    get<EnrichmentSourcesResponse>(`/companies/${id}/enrichment-sources`),
+
+  enrichCompanyFromSource: (id: string, source: string) =>
+    post<{ job_id: number }>(`/companies/${id}/enrich-from-source`, { source }),
+
+  patchCompanyFinancials: (
+    id: string,
+    body: {
+      employee_count?: number;
+      revenue_usd?: number;
+      revenue_orig_amount?: number;
+      revenue_orig_currency?: string;
+      profit_usd?: number;
+    },
+  ) => patch<unknown>(`/companies/${id}/financials`, body),
 };
 
 export function triggerDomainCrawl(domainId: string, req: TriggerCrawlRequest): Promise<TriggerCrawlResponse> {

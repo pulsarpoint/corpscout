@@ -138,6 +138,8 @@ export interface DataSource {
   last_source_modified_at: string | null;
   last_error: string | null;
   consecutive_failures: number;
+  country_id: string | null;
+  capabilities: string[];
   created_at: string;
   updated_at: string;
 }
@@ -249,6 +251,16 @@ export interface Country {
   iso_alpha2: string;
 }
 
+export interface Estimate {
+  value?: number;
+  currency?: string;
+  year?: number;
+  source?: string;
+  label?: string;
+  min?: number | null;
+  max?: number | null;
+}
+
 // PostgREST view types
 
 export interface VCompany {
@@ -262,8 +274,14 @@ export interface VCompany {
   short_description: string | null;
   description: string | null;
   founded_year: number | null;
-  employee_estimate: Record<string, unknown>;
-  revenue_estimate: Record<string, unknown>;
+  employee_estimate: Estimate;
+  revenue_estimate: Estimate;
+  profit_estimate: Estimate | null;
+  employee_count: number | null;
+  revenue_usd: number | null;
+  revenue_orig_amount: number | null;
+  revenue_orig_currency: string | null;
+  profit_usd: number | null;
   ownership: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -435,4 +453,15 @@ export interface TriggerCrawlRequest {
 export interface TriggerCrawlResponse {
   job_id: string;
   river_job_id: number;
+}
+
+export interface EnrichmentSource {
+  name: string;
+  display_name: string | null;
+  can_provide: string[];
+}
+
+export interface EnrichmentSourcesResponse {
+  missing_fields: string[];
+  sources: EnrichmentSource[];
 }
