@@ -79,3 +79,5 @@ SELECT
 FROM domains d
 LEFT JOIN company_domains cd ON cd.domain_id = d.id
 GROUP BY d.id, d.domain, d.import_source, d.first_seen_at, d.last_verified_at;
+
+GRANT SELECT ON v_domains TO corpscout_anon;
