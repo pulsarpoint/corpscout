@@ -243,31 +243,42 @@ func (q *Queries) GetCompanyServices(ctx context.Context, companyID uuid.UUID) (
 }
 
 const updateCompanyEnrichment = `-- name: UpdateCompanyEnrichment :one
-
 UPDATE companies SET
-    short_name        = COALESCE($1::text,        short_name),
-    short_description = COALESCE($2::text, short_description),
-    description       = COALESCE($3::text,       description),
-    website           = COALESCE($4::text,           website),
-    founded_year      = COALESCE($5::int,       founded_year),
-    employee_estimate = COALESCE($6::jsonb, employee_estimate),
-    revenue_estimate  = COALESCE($7::jsonb,  revenue_estimate),
-    ownership         = COALESCE($8::jsonb,         ownership),
-    updated_at        = now()
-WHERE id = $9::uuid
-RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence
+    short_name          = COALESCE($1::text,          short_name),
+    short_description   = COALESCE($2::text,   short_description),
+    description         = COALESCE($3::text,         description),
+    website             = COALESCE($4::text,             website),
+    founded_year        = COALESCE($5::int,         founded_year),
+    employee_estimate   = COALESCE($6::jsonb,  employee_estimate),
+    revenue_estimate    = COALESCE($7::jsonb,   revenue_estimate),
+    profit_estimate     = COALESCE($8::jsonb,    profit_estimate),
+    ownership           = COALESCE($9::jsonb,          ownership),
+    employee_count      = COALESCE($10::int,       employee_count),
+    revenue_usd         = COALESCE($11::bigint,       revenue_usd),
+    revenue_orig_amount = COALESCE($12::bigint, revenue_orig_amount),
+    revenue_orig_currency = COALESCE($13::text, revenue_orig_currency),
+    profit_usd          = COALESCE($14::bigint,        profit_usd),
+    updated_at          = now()
+WHERE id = $15::uuid
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, profit_estimate, employee_count, revenue_usd, revenue_orig_amount, revenue_orig_currency, profit_usd
 `
 
 type UpdateCompanyEnrichmentParams struct {
-	ShortName        *string   `json:"short_name"`
-	ShortDescription *string   `json:"short_description"`
-	Description      *string   `json:"description"`
-	Website          *string   `json:"website"`
-	FoundedYear      *int32    `json:"founded_year"`
-	EmployeeEstimate []byte    `json:"employee_estimate"`
-	RevenueEstimate  []byte    `json:"revenue_estimate"`
-	Ownership        []byte    `json:"ownership"`
-	ID               uuid.UUID `json:"id"`
+	ShortName           *string   `json:"short_name"`
+	ShortDescription    *string   `json:"short_description"`
+	Description         *string   `json:"description"`
+	Website             *string   `json:"website"`
+	FoundedYear         *int32    `json:"founded_year"`
+	EmployeeEstimate    []byte    `json:"employee_estimate"`
+	RevenueEstimate     []byte    `json:"revenue_estimate"`
+	ProfitEstimate      []byte    `json:"profit_estimate"`
+	Ownership           []byte    `json:"ownership"`
+	EmployeeCount       *int32    `json:"employee_count"`
+	RevenueUsd          *int64    `json:"revenue_usd"`
+	RevenueOrigAmount   *int64    `json:"revenue_orig_amount"`
+	RevenueOrigCurrency *string   `json:"revenue_orig_currency"`
+	ProfitUsd           *int64    `json:"profit_usd"`
+	ID                  uuid.UUID `json:"id"`
 }
 
 // ── enrichment update ─────────────────────────────────────────────────────────
@@ -280,7 +291,13 @@ func (q *Queries) UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompany
 		arg.FoundedYear,
 		arg.EmployeeEstimate,
 		arg.RevenueEstimate,
+		arg.ProfitEstimate,
 		arg.Ownership,
+		arg.EmployeeCount,
+		arg.RevenueUsd,
+		arg.RevenueOrigAmount,
+		arg.RevenueOrigCurrency,
+		arg.ProfitUsd,
 		arg.ID,
 	)
 	var i Company
@@ -308,6 +325,12 @@ func (q *Queries) UpdateCompanyEnrichment(ctx context.Context, arg UpdateCompany
 		&i.DisplayName,
 		&i.ResolutionStatus,
 		&i.Evidence,
+		&i.ProfitEstimate,
+		&i.EmployeeCount,
+		&i.RevenueUsd,
+		&i.RevenueOrigAmount,
+		&i.RevenueOrigCurrency,
+		&i.ProfitUsd,
 	)
 	return i, err
 }

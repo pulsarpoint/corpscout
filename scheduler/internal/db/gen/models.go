@@ -134,29 +134,35 @@ type CompaniesHouseCompanyRawInput struct {
 }
 
 type Company struct {
-	ID                 uuid.UUID       `json:"id"`
-	Lei                *string         `json:"lei"`
-	Name               string          `json:"name"`
-	CountryID          uuid.UUID       `json:"country_id"`
-	RegistrationNumber *string         `json:"registration_number"`
-	Status             string          `json:"status"`
-	PrimarySourceID    pgtype.UUID     `json:"primary_source_id"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
-	ShortName          *string         `json:"short_name"`
-	ShortDescription   *string         `json:"short_description"`
-	Description        *string         `json:"description"`
-	Website            *string         `json:"website"`
-	FoundedYear        *int32          `json:"founded_year"`
-	EmployeeEstimate   json.RawMessage `json:"employee_estimate"`
-	RevenueEstimate    json.RawMessage `json:"revenue_estimate"`
-	Ownership          json.RawMessage `json:"ownership"`
-	ParentLei          *string         `json:"parent_lei"`
-	UltimateParentLei  *string         `json:"ultimate_parent_lei"`
-	CanonicalSlug      string          `json:"canonical_slug"`
-	DisplayName        *string         `json:"display_name"`
-	ResolutionStatus   string          `json:"resolution_status"`
-	Evidence           json.RawMessage `json:"evidence"`
+	ID                  uuid.UUID       `json:"id"`
+	Lei                 *string         `json:"lei"`
+	Name                string          `json:"name"`
+	CountryID           uuid.UUID       `json:"country_id"`
+	RegistrationNumber  *string         `json:"registration_number"`
+	Status              string          `json:"status"`
+	PrimarySourceID     pgtype.UUID     `json:"primary_source_id"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	ShortName           *string         `json:"short_name"`
+	ShortDescription    *string         `json:"short_description"`
+	Description         *string         `json:"description"`
+	Website             *string         `json:"website"`
+	FoundedYear         *int32          `json:"founded_year"`
+	EmployeeEstimate    json.RawMessage `json:"employee_estimate"`
+	RevenueEstimate     json.RawMessage `json:"revenue_estimate"`
+	Ownership           json.RawMessage `json:"ownership"`
+	ParentLei           *string         `json:"parent_lei"`
+	UltimateParentLei   *string         `json:"ultimate_parent_lei"`
+	CanonicalSlug       string          `json:"canonical_slug"`
+	DisplayName         *string         `json:"display_name"`
+	ResolutionStatus    string          `json:"resolution_status"`
+	Evidence            json.RawMessage `json:"evidence"`
+	ProfitEstimate      []byte          `json:"profit_estimate"`
+	EmployeeCount       *int32          `json:"employee_count"`
+	RevenueUsd          *int64          `json:"revenue_usd"`
+	RevenueOrigAmount   *int64          `json:"revenue_orig_amount"`
+	RevenueOrigCurrency *string         `json:"revenue_orig_currency"`
+	ProfitUsd           *int64          `json:"profit_usd"`
 }
 
 type CompanyAlias struct {
@@ -493,6 +499,8 @@ type DataSource struct {
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
 	ScheduleEnabled      bool               `json:"schedule_enabled"`
+	CountryID            pgtype.UUID        `json:"country_id"`
+	Capabilities         []string           `json:"capabilities"`
 }
 
 type Domain struct {
@@ -737,7 +745,13 @@ type VCompany struct {
 	FoundedYear              *int32          `json:"founded_year"`
 	EmployeeEstimate         json.RawMessage `json:"employee_estimate"`
 	RevenueEstimate          json.RawMessage `json:"revenue_estimate"`
+	ProfitEstimate           []byte          `json:"profit_estimate"`
 	Ownership                json.RawMessage `json:"ownership"`
+	EmployeeCount            *int32          `json:"employee_count"`
+	RevenueUsd               *int64          `json:"revenue_usd"`
+	RevenueOrigAmount        *int64          `json:"revenue_orig_amount"`
+	RevenueOrigCurrency      *string         `json:"revenue_orig_currency"`
+	ProfitUsd                *int64          `json:"profit_usd"`
 	CreatedAt                time.Time       `json:"created_at"`
 	UpdatedAt                time.Time       `json:"updated_at"`
 	CountryID                uuid.UUID       `json:"country_id"`

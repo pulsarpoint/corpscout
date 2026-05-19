@@ -51,6 +51,7 @@ type Querier interface {
 	GetOrganizationByID(ctx context.Context, id uuid.UUID) (Organization, error)
 	GetOrganizationBySlug(ctx context.Context, canonicalSlug string) (Organization, error)
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
+	GetSourcesWithCapabilities(ctx context.Context) ([]DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
 	IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -137,6 +138,7 @@ type Querier interface {
 	UpdateImportBatchStarted(ctx context.Context, arg UpdateImportBatchStartedParams) error
 	UpdateOpenSourceProjectStatus(ctx context.Context, arg UpdateOpenSourceProjectStatusParams) error
 	UpdateOrganizationStatus(ctx context.Context, arg UpdateOrganizationStatusParams) error
+	UpdateSourceCapabilities(ctx context.Context, arg UpdateSourceCapabilitiesParams) error
 	UpdateSourceConfig(ctx context.Context, arg UpdateSourceConfigParams) error
 	UpdateSourceEnabled(ctx context.Context, arg UpdateSourceEnabledParams) error
 	UpdateSourcePullFailed(ctx context.Context, arg UpdateSourcePullFailedParams) error

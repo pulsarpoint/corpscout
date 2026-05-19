@@ -13,7 +13,7 @@ import (
 )
 
 const getSourceByName = `-- name: GetSourceByName :one
-SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled FROM data_sources WHERE name = $1
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled, country_id, capabilities FROM data_sources WHERE name = $1
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource, error) {
@@ -43,12 +43,66 @@ func (q *Queries) GetSourceByName(ctx context.Context, name string) (DataSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ScheduleEnabled,
+		&i.CountryID,
+		&i.Capabilities,
 	)
 	return i, err
 }
 
+const getSourcesWithCapabilities = `-- name: GetSourcesWithCapabilities :many
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled, country_id, capabilities FROM data_sources
+WHERE array_length(capabilities, 1) > 0
+ORDER BY name
+`
+
+func (q *Queries) GetSourcesWithCapabilities(ctx context.Context) ([]DataSource, error) {
+	rows, err := q.db.Query(ctx, getSourcesWithCapabilities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DataSource
+	for rows.Next() {
+		var i DataSource
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.SourceGroup,
+			&i.InputTableName,
+			&i.PullTaskType,
+			&i.ProcessorTaskType,
+			&i.Enabled,
+			&i.ScheduleKind,
+			&i.ScheduleExpression,
+			&i.Config,
+			&i.LastStartedAt,
+			&i.LastSuccessAt,
+			&i.LastFailedAt,
+			&i.LastSourceMarkerType,
+			&i.LastSourceMarker,
+			&i.LastSourceModifiedAt,
+			&i.LastError,
+			&i.ConsecutiveFailures,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ScheduleEnabled,
+			&i.CountryID,
+			&i.Capabilities,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSources = `-- name: ListSources :many
-SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled FROM data_sources ORDER BY name
+SELECT id, name, display_name, description, source_group, input_table_name, pull_task_type, processor_task_type, enabled, schedule_kind, schedule_expression, config, last_started_at, last_success_at, last_failed_at, last_source_marker_type, last_source_marker, last_source_modified_at, last_error, consecutive_failures, created_at, updated_at, schedule_enabled, country_id, capabilities FROM data_sources ORDER BY name
 `
 
 func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
@@ -84,6 +138,8 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ScheduleEnabled,
+			&i.CountryID,
+			&i.Capabilities,
 		); err != nil {
 			return nil, err
 		}
@@ -93,6 +149,20 @@ func (q *Queries) ListSources(ctx context.Context) ([]DataSource, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateSourceCapabilities = `-- name: UpdateSourceCapabilities :exec
+UPDATE data_sources SET capabilities = $2, updated_at = now() WHERE name = $1
+`
+
+type UpdateSourceCapabilitiesParams struct {
+	Name         string   `json:"name"`
+	Capabilities []string `json:"capabilities"`
+}
+
+func (q *Queries) UpdateSourceCapabilities(ctx context.Context, arg UpdateSourceCapabilitiesParams) error {
+	_, err := q.db.Exec(ctx, updateSourceCapabilities, arg.Name, arg.Capabilities)
+	return err
 }
 
 const updateSourceConfig = `-- name: UpdateSourceConfig :exec
