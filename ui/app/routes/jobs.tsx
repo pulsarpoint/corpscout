@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import {
-  ChevronDown, ChevronUp, RefreshCw,
+  ChevronDown, ChevronUp, RefreshCw, ExternalLink,
   CheckCircle2, XCircle, Clock, Loader2, Ban, AlertTriangle,
 } from "lucide-react";
 import { api } from "~/lib/api";
-import type { Job, JobError, JobStat } from "~/types/api";
+import type { Job, JobError, JobStat, TemporalExecution, TemporalExecutionsResponse } from "~/types/api";
 import { timeAgo, formatDate } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "~/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 
 // ── State helpers ────────────────────────────────────────────────────────────
 
@@ -166,6 +167,113 @@ function ExpandedJob({ job, onCancel }: { job: Job; onCancel: (id: number) => Pr
   );
 }
 
+// ── Temporal components ───────────────────────────────────────────────────────
+
+function TemporalStatusBadge({ status }: { status: TemporalExecution["status"] }) {
+  const map: Record<TemporalExecution["status"], { label: string; className: string }> = {
+    completed: { label: "Completed", className: "bg-green-100 text-green-800 border-green-200" },
+    running:   { label: "Running",   className: "bg-blue-100 text-blue-800 border-blue-200" },
+    failed:    { label: "Failed",    className: "bg-red-100 text-red-800 border-red-200" },
+    starting:  { label: "Starting",  className: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+  };
+  const { label, className } = map[status] ?? { label: status, className: "" };
+  return <Badge variant="outline" className={className}>{label}</Badge>;
+}
+
+function TemporalTasksTab() {
+  const [data, setData] = useState<TemporalExecutionsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  const load = useCallback(async (p: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.getTemporalExecutions({ page: p, limit: 50 });
+      setData(res);
+      setPage(p);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(1); }, [load]);
+
+  if (loading && !data) return <div className="p-6 text-muted-foreground text-sm">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600 text-sm">{error}</div>;
+  if (!data) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm text-muted-foreground">{data.items.length} execution(s)</p>
+        <Button variant="ghost" size="sm" onClick={() => void load(page)}>
+          <RefreshCw className="size-4 mr-1" /> Refresh
+        </Button>
+      </div>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Workflow</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Country</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Progress</TableHead>
+              <TableHead>Started</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.items.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  No Temporal executions yet
+                </TableCell>
+              </TableRow>
+            )}
+            {data.items.map((ex) => (
+              <TableRow key={ex.id}>
+                <TableCell className="font-mono text-xs">{ex.workflow_type}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">{ex.source_name}</Badge>
+                </TableCell>
+                <TableCell className="text-sm">{ex.country ?? "—"}</TableCell>
+                <TableCell><TemporalStatusBadge status={ex.status} /></TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {ex.status === "completed" && ex.records_written != null
+                    ? `${ex.records_written} records, ${ex.pages_fetched ?? 0} pages`
+                    : ex.status === "failed" && ex.error_message
+                    ? <span className="text-red-600">{ex.error_message}</span>
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {timeAgo(ex.started_at)}
+                </TableCell>
+                <TableCell>
+                  {ex.temporal_ui_url && (
+                    <a
+                      href={ex.temporal_ui_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="size-3" /> Details
+                    </a>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 const RIVER_STATES = ["available", "running", "completed", "retryable", "scheduled", "discarded", "cancelled"] as const;
@@ -307,199 +415,212 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total" value={summary.total} color="" />
-        <StatCard label="Running" value={summary.running} color="text-blue-600" />
-        <StatCard label="Queued" value={summary.queued} color="text-amber-600" />
-        <StatCard label="Failed / Retrying" value={summary.failed} color={summary.failed > 0 ? "text-red-600" : ""} />
-      </div>
+      <Tabs defaultValue="river">
+        <TabsList>
+          <TabsTrigger value="river">River Jobs</TabsTrigger>
+          <TabsTrigger value="temporal">Temporal Tasks</TabsTrigger>
+        </TabsList>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          value={kind ?? ""}
-          onChange={(e) => setParam("kind", e.target.value)}
-        >
-          <option value="">All types</option>
-          <option value="source_crawl">Source Crawl</option>
-          <option value="domain_resolve">Domain Resolve</option>
-          <option value="gleif_enrich">GLEIF Enrich</option>
-          <option value="enrich_company_financials">Financial Enrich</option>
-        </select>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          value={status ?? ""}
-          onChange={(e) => setParam("status", e.target.value)}
-        >
-          <option value="">All states</option>
-          {RIVER_STATES.map((s) => (
-            <option key={s} value={s}>{STATE_LABELS[s] ?? s}</option>
-          ))}
-        </select>
-      </div>
+        <TabsContent value="river" className="space-y-5 mt-4">
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Total" value={summary.total} color="" />
+            <StatCard label="Running" value={summary.running} color="text-blue-600" />
+            <StatCard label="Queued" value={summary.queued} color="text-amber-600" />
+            <StatCard label="Failed / Retrying" value={summary.failed} color={summary.failed > 0 ? "text-red-600" : ""} />
+          </div>
 
-      {/* Bulk action bar */}
-      {someSelected && (
-        <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2">
-          <span className="text-sm font-medium">{selected.size} selected</span>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={bulkWorking}
-            onClick={cancelSelected}
-          >
-            {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
-            Cancel selected
-          </Button>
-          {cancellableFilterTotal > selected.size && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={bulkWorking}
-              onClick={cancelAllMatching}
-              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              value={kind ?? ""}
+              onChange={(e) => setParam("kind", e.target.value)}
             >
-              {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
-              Cancel all {cancellableFilterTotal.toLocaleString()} matching
-            </Button>
+              <option value="">All types</option>
+              <option value="source_crawl">Source Crawl</option>
+              <option value="domain_resolve">Domain Resolve</option>
+              <option value="gleif_enrich">GLEIF Enrich</option>
+              <option value="enrich_company_financials">Financial Enrich</option>
+            </select>
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              value={status ?? ""}
+              onChange={(e) => setParam("status", e.target.value)}
+            >
+              <option value="">All states</option>
+              {RIVER_STATES.map((s) => (
+                <option key={s} value={s}>{STATE_LABELS[s] ?? s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Bulk action bar */}
+          {someSelected && (
+            <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2">
+              <span className="text-sm font-medium">{selected.size} selected</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={bulkWorking}
+                onClick={cancelSelected}
+              >
+                {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+                Cancel selected
+              </Button>
+              {cancellableFilterTotal > selected.size && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={bulkWorking}
+                  onClick={cancelAllMatching}
+                  className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                >
+                  {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+                  Cancel all {cancellableFilterTotal.toLocaleString()} matching
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                Clear selection
+              </Button>
+              {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
+            </div>
           )}
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            Clear selection
-          </Button>
-          {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
-        </div>
-      )}
 
-      {/* "Cancel all matching" shortcut when nothing is selected but there are cancellable jobs */}
-      {!someSelected && cancellableFilterTotal > 0 && (
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={bulkWorking}
-            onClick={cancelAllMatching}
-            className="border-destructive/50 text-destructive hover:bg-destructive/10"
-          >
-            {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
-            Cancel all {cancellableFilterTotal.toLocaleString()} matching
-          </Button>
-          {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
-        </div>
-      )}
+          {/* "Cancel all matching" shortcut when nothing is selected but there are cancellable jobs */}
+          {!someSelected && cancellableFilterTotal > 0 && (
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkWorking}
+                onClick={cancelAllMatching}
+                className="border-destructive/50 text-destructive hover:bg-destructive/10"
+              >
+                {bulkWorking ? <Loader2 className="size-3 animate-spin mr-1" /> : <Ban className="size-3 mr-1" />}
+                Cancel all {cancellableFilterTotal.toLocaleString()} matching
+              </Button>
+              {bulkResult && <span className="text-sm text-muted-foreground">{bulkResult}</span>}
+            </div>
+          )}
 
-      {loading ? (
-        <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-      ) : error ? (
-        <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-      ) : jobs.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">No jobs match the current filters.</p>
-      ) : (
-        <>
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      className="rounded border-input size-4 cursor-pointer accent-primary"
-                      checked={allCancellableSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected && !allCancellableSelected;
-                      }}
-                      onChange={toggleSelectAll}
-                      title="Select all cancellable jobs on this page"
-                    />
-                  </TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Attempts</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Error</TableHead>
-                  <TableHead className="w-8"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {jobs.map((j) => (
-                  <>
-                    <TableRow
-                      key={j.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${selected.has(j.id) ? "bg-muted/40" : ""}`}
-                      onClick={() => setExpandedId(expandedId === j.id ? null : j.id)}
-                    >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        {CANCELLABLE_STATES.has(j.state) ? (
-                          <input
-                            type="checkbox"
-                            className="rounded border-input size-4 cursor-pointer accent-primary"
-                            checked={selected.has(j.id)}
-                            onChange={() => toggleJob(j.id)}
-                          />
-                        ) : (
-                          <span className="block size-4" />
-                        )}
-                      </TableCell>
-                      <TableCell><KindBadge kind={j.kind} /></TableCell>
-                      <TableCell className="text-sm max-w-[200px] truncate">
-                        {j.kind === "source_crawl" && j.subject ? (
-                          <Link
-                            to={`/sources/${j.subject}`}
-                            className="hover:underline text-foreground font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {j.subject}
-                          </Link>
-                        ) : (j.kind === "domain_resolve" || j.kind === "enrich_company_financials") && j.subject ? (
-                          <Link
-                            to={`/companies/${j.args?.company_id}`}
-                            className="hover:underline text-foreground font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {j.subject}
-                          </Link>
-                        ) : (
-                          <span className="text-muted-foreground">{j.subject ?? "—"}</span>
-                        )}
-                      </TableCell>
-                      <TableCell><StateBadge state={j.state} /></TableCell>
-                      <TableCell className="text-sm">
-                        {j.attempt > 1
-                          ? <span className="text-amber-600 font-medium">{j.attempt}/{j.max_attempts}</span>
-                          : <span className="text-muted-foreground">{j.attempt}/{j.max_attempts}</span>}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{timeAgo(j.created_at)}</TableCell>
-                      <TableCell className="text-xs text-red-600 max-w-[250px] truncate font-mono">
-                        {j.last_error ?? ""}
-                      </TableCell>
-                      <TableCell>
-                        {expandedId === j.id
-                          ? <ChevronUp className="size-4 text-muted-foreground" />
-                          : <ChevronDown className="size-4 text-muted-foreground" />}
-                      </TableCell>
+          {loading ? (
+            <div className="space-y-2">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : error ? (
+            <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
+          ) : jobs.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">No jobs match the current filters.</p>
+          ) : (
+            <>
+              <div className="rounded-md border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          className="rounded border-input size-4 cursor-pointer accent-primary"
+                          checked={allCancellableSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someSelected && !allCancellableSelected;
+                          }}
+                          onChange={toggleSelectAll}
+                          title="Select all cancellable jobs on this page"
+                        />
+                      </TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>State</TableHead>
+                      <TableHead>Attempts</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Error</TableHead>
+                      <TableHead className="w-8"></TableHead>
                     </TableRow>
-                    {expandedId === j.id && (
-                      <TableRow key={`${j.id}-detail`}>
-                        <TableCell colSpan={8} className="p-0">
-                          <ExpandedJob job={j} onCancel={cancelJob} />
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {jobs.map((j) => (
+                      <>
+                        <TableRow
+                          key={j.id}
+                          className={`cursor-pointer hover:bg-muted/50 ${selected.has(j.id) ? "bg-muted/40" : ""}`}
+                          onClick={() => setExpandedId(expandedId === j.id ? null : j.id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {CANCELLABLE_STATES.has(j.state) ? (
+                              <input
+                                type="checkbox"
+                                className="rounded border-input size-4 cursor-pointer accent-primary"
+                                checked={selected.has(j.id)}
+                                onChange={() => toggleJob(j.id)}
+                              />
+                            ) : (
+                              <span className="block size-4" />
+                            )}
+                          </TableCell>
+                          <TableCell><KindBadge kind={j.kind} /></TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate">
+                            {j.kind === "source_crawl" && j.subject ? (
+                              <Link
+                                to={`/sources/${j.subject}`}
+                                className="hover:underline text-foreground font-medium"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {j.subject}
+                              </Link>
+                            ) : (j.kind === "domain_resolve" || j.kind === "enrich_company_financials") && j.subject ? (
+                              <Link
+                                to={`/companies/${j.args?.company_id}`}
+                                className="hover:underline text-foreground font-medium"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {j.subject}
+                              </Link>
+                            ) : (
+                              <span className="text-muted-foreground">{j.subject ?? "—"}</span>
+                            )}
+                          </TableCell>
+                          <TableCell><StateBadge state={j.state} /></TableCell>
+                          <TableCell className="text-sm">
+                            {j.attempt > 1
+                              ? <span className="text-amber-600 font-medium">{j.attempt}/{j.max_attempts}</span>
+                              : <span className="text-muted-foreground">{j.attempt}/{j.max_attempts}</span>}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{timeAgo(j.created_at)}</TableCell>
+                          <TableCell className="text-xs text-red-600 max-w-[250px] truncate font-mono">
+                            {j.last_error ?? ""}
+                          </TableCell>
+                          <TableCell>
+                            {expandedId === j.id
+                              ? <ChevronUp className="size-4 text-muted-foreground" />
+                              : <ChevronDown className="size-4 text-muted-foreground" />}
+                          </TableCell>
+                        </TableRow>
+                        {expandedId === j.id && (
+                          <TableRow key={`${j.id}-detail`}>
+                            <TableCell colSpan={8} className="p-0">
+                              <ExpandedJob job={j} onCancel={cancelJob} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-          <div className="flex items-center justify-between">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Previous</Button>
-            <span className="text-sm text-muted-foreground">Page {page}</span>
-            <Button variant="outline" size="sm" disabled={jobs.length < 50} onClick={() => setParam("page", String(page + 1))}>Next</Button>
-          </div>
-        </>
-      )}
+              <div className="flex items-center justify-between">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>Previous</Button>
+                <span className="text-sm text-muted-foreground">Page {page}</span>
+                <Button variant="outline" size="sm" disabled={jobs.length < 50} onClick={() => setParam("page", String(page + 1))}>Next</Button>
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="temporal" className="mt-4">
+          <TemporalTasksTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import type {
   CompanyFinancial,
   CompanyFinancialPending,
   VCompany,
+  TemporalExecutionsResponse,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -267,6 +268,14 @@ export const api = {
       founded_year?: number;
     },
   ) => patch<VCompany>(`/companies/${id}`, body),
+
+  getTemporalExecutions: (params: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return get<TemporalExecutionsResponse>(`/temporal-executions${q ? `?${q}` : ""}`);
+  },
 };
 
 export function triggerDomainCrawl(domainId: string, req: TriggerCrawlRequest): Promise<TriggerCrawlResponse> {

@@ -483,3 +483,26 @@ export interface CompanyFinancial {
 export interface CompanyFinancialPending extends CompanyFinancial {
   company_name: string;
 }
+
+export interface TemporalExecution {
+  id: string;
+  workflow_id?: string;
+  workflow_run_id?: string;
+  workflow_type: string;
+  source_name: string;
+  country?: string;
+  status: "starting" | "running" | "completed" | "failed";
+  records_written?: number;
+  pages_fetched?: number;
+  error_message?: string;
+  river_job_id?: number;
+  started_at: string;
+  completed_at?: string;
+  temporal_ui_url?: string;
+}
+
+export interface TemporalExecutionsResponse {
+  items: TemporalExecution[];
+  page: number;
+  limit: number;
+}
