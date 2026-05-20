@@ -12,7 +12,14 @@ import (
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
 
-// DataTaskWorker starts a Temporal PullCompanies workflow and records its ID.
+// sourceWorkflowType maps a source name to its Temporal workflow type.
+// Add new sources here as they are implemented.
+var sourceWorkflowType = map[string]string{
+	"companies_house": "PullCompaniesHouse",
+	"brreg":           "PullBrreg",
+}
+
+// DataTaskWorker starts a source-specific Temporal workflow and records its ID.
 // The River job exits immediately — Temporal runs the pipeline independently.
 type DataTaskWorker struct {
 	river.WorkerDefaults[DataTaskArgs]
@@ -27,11 +34,16 @@ func NewDataTaskWorker(q db.Querier, tc client.Client) *DataTaskWorker {
 func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs]) error {
 	args := job.Args
 
+	wfType, ok := sourceWorkflowType[args.Source]
+	if !ok {
+		return fmt.Errorf("no workflow registered for source %q", args.Source)
+	}
+
 	// 1. Insert a tracking row (status = starting).
 	country := args.Country
 	riverJobID := job.ID
 	exec, err := w.db.CreateTemporalExecution(ctx, db.CreateTemporalExecutionParams{
-		WorkflowType: "PullCompanies",
+		WorkflowType: wfType,
 		SourceName:   args.Source,
 		Country:      &country,
 		InputIds:     args.IDs,
@@ -41,16 +53,15 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 		return errors.Wrap(err, "create temporal execution record")
 	}
 
-	// 2. Start the Temporal workflow.
+	// 2. Start the Temporal workflow. Input fields are compatible across all sources.
 	workflowID := fmt.Sprintf("pull-%s-%s-%d", args.Source, args.Country, job.ID)
 	we, err := w.temporal.ExecuteWorkflow(ctx,
 		client.StartWorkflowOptions{
 			ID:        workflowID,
 			TaskQueue: "corpscout-pipelines",
 		},
-		"PullCompanies",
+		wfType,
 		map[string]any{
-			"source":           args.Source,
 			"country":          args.Country,
 			"ids":              args.IDs,
 			"corpscout_run_id": exec.ID.String(),
