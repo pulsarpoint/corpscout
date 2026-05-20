@@ -16,6 +16,8 @@ type Config struct {
 	S3Bucket               string
 	LLMBaseURL             string
 	LLMModel               string
+	TemporalHost           string
+	TemporalUIURL          string
 }
 
 func Load() Config {
@@ -33,6 +35,8 @@ func Load() Config {
 		S3Bucket:               getEnv("CORPSCOUT_S3_BUCKET", "crawls"),
 		LLMBaseURL:             getEnv("CORPSCOUT_LLM_BASE_URL", "http://100.77.62.33:8080"),
 		LLMModel:               getEnv("CORPSCOUT_LLM_MODEL", "qwen3:6b"),
+		TemporalHost:           getEnv("CORPSCOUT_TEMPORAL_HOST", "localhost:7233"),
+		TemporalUIURL:          getEnv("CORPSCOUT_TEMPORAL_UI_URL", "http://localhost:8089"),
 	}
 }
 

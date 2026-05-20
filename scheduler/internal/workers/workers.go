@@ -32,3 +32,13 @@ type EnrichCompanyFinancialsArgs struct {
 }
 
 func (EnrichCompanyFinancialsArgs) Kind() string { return "enrich_company_financials" }
+
+// DataTaskArgs triggers a Temporal PullCompanies workflow for a given source.
+// IDs nil means bulk pull; populated means individual lookup by native ID.
+type DataTaskArgs struct {
+	Source  string   `json:"source"`
+	Country string   `json:"country"`
+	IDs     []string `json:"ids,omitempty"`
+}
+
+func (DataTaskArgs) Kind() string { return "data_task" }
