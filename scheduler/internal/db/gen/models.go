@@ -163,6 +163,20 @@ type Company struct {
 	RevenueUsd         *int64          `json:"revenue_usd"`
 }
 
+type CompanyAddress struct {
+	ID           uuid.UUID `json:"id"`
+	NativeID     string    `json:"native_id"`
+	Source       string    `json:"source"`
+	AddressLine1 *string   `json:"address_line_1"`
+	AddressLine2 *string   `json:"address_line_2"`
+	Locality     *string   `json:"locality"`
+	PostalCode   *string   `json:"postal_code"`
+	Country      *string   `json:"country"`
+	Region       *string   `json:"region"`
+	FirstSeenAt  time.Time `json:"first_seen_at"`
+	LastSeenAt   time.Time `json:"last_seen_at"`
+}
+
 type CompanyAlias struct {
 	ID        uuid.UUID   `json:"id"`
 	CompanyID uuid.UUID   `json:"company_id"`

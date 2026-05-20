@@ -30,6 +30,7 @@ type Querier interface {
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
+	GetCompanyAddressesByNativeID(ctx context.Context, nativeID string) ([]CompanyAddress, error)
 	GetCompanyByExactName(ctx context.Context, lower string) (Company, error)
 	GetCompanyByLEI(ctx context.Context, lei *string) (Company, error)
 	GetCompanyByRegistrationAndCountry(ctx context.Context, arg GetCompanyByRegistrationAndCountryParams) (Company, error)
@@ -165,6 +166,7 @@ type Querier interface {
 	UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInputParams) (BrregCompanyRawInput, error)
 	// Companies House
 	UpsertCompaniesHouseRawInput(ctx context.Context, arg UpsertCompaniesHouseRawInputParams) (CompaniesHouseCompanyRawInput, error)
+	UpsertCompanyAddress(ctx context.Context, arg UpsertCompanyAddressParams) error
 	UpsertCompanyDomain(ctx context.Context, arg UpsertCompanyDomainParams) (CompanyDomain, error)
 	// ── emails ────────────────────────────────────────────────────────────────────
 	UpsertCompanyEmail(ctx context.Context, arg UpsertCompanyEmailParams) (CompanyEmail, error)
