@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
+	"go.temporal.io/sdk/client"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
@@ -23,10 +24,11 @@ import (
 )
 
 type Server struct {
-	cfg   config.Config
-	pool  *pgxpool.Pool
-	river *river.Client[pgx.Tx]
-	http  *http.Server
+	cfg      config.Config
+	pool     *pgxpool.Pool
+	river    *river.Client[pgx.Tx]
+	temporal client.Client
+	http     *http.Server
 }
 
 func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
@@ -53,7 +55,15 @@ func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
 		slog.Warn("startup: could not interrupt stale pull runs", "error", err)
 	}
 
-	riverClient, err := setupRiver(ctx, pool, cfg, queries, crawler, s3)
+	temporalClient, err := client.Dial(client.Options{
+		HostPort:  cfg.TemporalHost,
+		Namespace: "corpscout",
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "connect to temporal")
+	}
+
+	riverClient, err := setupRiver(ctx, pool, cfg, queries, crawler, s3, temporalClient)
 	if err != nil {
 		return nil, errors.Wrap(err, "setup river")
 	}
@@ -65,15 +75,16 @@ func NewServer(ctx context.Context, cfg config.Config) (*Server, error) {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Get("/health", httpapi.HandleHealth)
-	httpapi.NewHandlers(queries, riverClient, pool, crawler, s3, cfg.PostgRESTURL).RegisterRoutes(r)
+	httpapi.NewHandlers(queries, riverClient, pool, crawler, s3, cfg.PostgRESTURL, temporalClient, cfg.TemporalUIURL).RegisterRoutes(r)
 
 	go scheduleSources(ctx, queries, riverClient)
 
 	return &Server{
-		cfg:   cfg,
-		pool:  pool,
-		river: riverClient,
-		http:  &http.Server{Addr: cfg.ListenAddr, Handler: r},
+		cfg:      cfg,
+		pool:     pool,
+		river:    riverClient,
+		temporal: temporalClient,
+		http:     &http.Server{Addr: cfg.ListenAddr, Handler: r},
 	}, nil
 }
 
@@ -88,6 +99,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.river.Stop(ctx); err != nil {
 		return errors.Wrap(err, "river stop")
 	}
+	s.temporal.Close()
 	s.pool.Close()
 	return nil
 }

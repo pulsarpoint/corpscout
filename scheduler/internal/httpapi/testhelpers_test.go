@@ -522,7 +522,7 @@ func (s *stubQuerier) UpdateCompanyWebsite(ctx context.Context, arg db.UpdateCom
 
 // newTestHandlers creates a Handlers instance with the given stub, nil river client and nil pool.
 func newTestHandlers(q db.Querier) *httpapi.Handlers {
-	return httpapi.NewHandlers(q, nil, nil, nil, nil, "")
+	return httpapi.NewHandlers(q, nil, nil, nil, nil, "", nil, "")
 }
 
 var errNotFound = errors.New("not found")
@@ -695,6 +695,23 @@ func (s *stubQuerier) ListPendingCompanyFinancialIDs(ctx context.Context) ([]uui
 
 func (s *stubQuerier) ListPendingCompanyFinancials(ctx context.Context, arg db.ListPendingCompanyFinancialsParams) ([]db.ListPendingCompanyFinancialsRow, error) {
 	return nil, nil
+}
+
+// Temporal execution stubs
+func (s *stubQuerier) CreateTemporalExecution(ctx context.Context, arg db.CreateTemporalExecutionParams) (db.TemporalExecution, error) {
+	return db.TemporalExecution{}, nil
+}
+func (s *stubQuerier) GetTemporalExecution(ctx context.Context, id uuid.UUID) (db.TemporalExecution, error) {
+	return db.TemporalExecution{}, nil
+}
+func (s *stubQuerier) ListTemporalExecutions(ctx context.Context, arg db.ListTemporalExecutionsParams) ([]db.TemporalExecution, error) {
+	return nil, nil
+}
+func (s *stubQuerier) UpdateTemporalExecutionFailed(ctx context.Context, arg db.UpdateTemporalExecutionFailedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpdateTemporalExecutionStarted(ctx context.Context, arg db.UpdateTemporalExecutionStartedParams) error {
+	return nil
 }
 
 // ensure stubQuerier satisfies the interface at compile time

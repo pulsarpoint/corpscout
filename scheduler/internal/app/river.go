@@ -9,6 +9,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
+	"go.temporal.io/sdk/client"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/config"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
@@ -17,7 +18,7 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
-func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db.Querier, crawler *crawlerclient.Client, s3 *s3client.Client) (*river.Client[pgx.Tx], error) {
+func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db.Querier, crawler *crawlerclient.Client, s3 *s3client.Client, tc client.Client) (*river.Client[pgx.Tx], error) {
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
 	if err != nil {
 		return nil, err
@@ -35,6 +36,7 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	domainCrawlWorker := workers.NewDomainCrawlWorker(q, crawler, s3)
 	domainImportWorker := workers.NewDomainImportWorker(q, s3)
 	financialEnrichWorker := workers.NewFinancialEnrichWorker(q)
+	dataTaskWorker := workers.NewDataTaskWorker(q, tc)
 
 	w := river.NewWorkers()
 	river.AddWorker(w, sourcePullWorker)
@@ -42,6 +44,7 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	river.AddWorker(w, domainCrawlWorker)
 	river.AddWorker(w, domainImportWorker)
 	river.AddWorker(w, financialEnrichWorker)
+	river.AddWorker(w, dataTaskWorker)
 
 	riverCfg := &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -50,6 +53,7 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 			"domain_crawl":      {MaxWorkers: 3},
 			"domain_import":     {MaxWorkers: 2},
 			"enrich_financials": {MaxWorkers: 2},
+			"data_task":         {MaxWorkers: 5},
 		},
 		Workers: w,
 	}

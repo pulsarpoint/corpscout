@@ -10,6 +10,7 @@ import (
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"go.temporal.io/sdk/client"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
@@ -18,17 +19,19 @@ import (
 
 // Handlers holds shared dependencies for all REST API handlers.
 type Handlers struct {
-	db           db.Querier
-	rv           *river.Client[pgx.Tx]
-	pool         *pgxpool.Pool
-	crawler      *crawlerclient.Client
-	s3           *s3client.Client
-	postgrestURL string
+	db            db.Querier
+	rv            *river.Client[pgx.Tx]
+	pool          *pgxpool.Pool
+	crawler       *crawlerclient.Client
+	s3            *s3client.Client
+	postgrestURL  string
+	temporal      client.Client
+	temporalUIURL string
 }
 
-// NewHandlers constructs Handlers. pool, rv, crawler and s3 may be nil in tests.
-func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string) *Handlers {
-	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, s3: s3, postgrestURL: postgrestURL}
+// NewHandlers constructs Handlers. pool, rv, crawler, s3 and temporal may be nil in tests.
+func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string, tc client.Client, temporalUIURL string) *Handlers {
+	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, s3: s3, postgrestURL: postgrestURL, temporal: tc, temporalUIURL: temporalUIURL}
 }
 
 // RegisterRoutes mounts all /api/v1 routes on the router.
@@ -71,6 +74,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Post("/jobs/cancel-bulk", h.handleCancelBulk)
 		r.Get("/jobs/{id}", h.handleGetJob)
 		r.Post("/jobs/{id}/cancel", h.handleCancelJob)
+		r.Get("/temporal-executions", h.handleListTemporalExecutions)
 		r.Get("/pull-runs", h.handleListPullRuns)
 		r.Post("/resolve", h.handleResolve)
 		r.Get("/organizations", h.handleListOrganizations)
