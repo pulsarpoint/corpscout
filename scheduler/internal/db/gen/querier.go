@@ -26,6 +26,7 @@ type Querier interface {
 	CountPendingCompanySuggestions(ctx context.Context) (int64, error)
 	CreateCompanyFinancial(ctx context.Context, arg CreateCompanyFinancialParams) (CompanyFinancial, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
+	CreateTemporalExecution(ctx context.Context, arg CreateTemporalExecutionParams) (TemporalExecution, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
@@ -58,6 +59,7 @@ type Querier interface {
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetSourcesWithCapabilities(ctx context.Context) ([]DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
+	GetTemporalExecution(ctx context.Context, id uuid.UUID) (TemporalExecution, error)
 	IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -110,6 +112,7 @@ type Querier interface {
 	ListPullRuns(ctx context.Context, arg ListPullRunsParams) ([]ListPullRunsRow, error)
 	ListReviewCandidateIDs(ctx context.Context, arg ListReviewCandidateIDsParams) ([]uuid.UUID, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
+	ListTemporalExecutions(ctx context.Context, arg ListTemporalExecutionsParams) ([]TemporalExecution, error)
 	MarkBrregRawInputFailed(ctx context.Context, arg MarkBrregRawInputFailedParams) error
 	MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkCompaniesHouseRawInputFailed(ctx context.Context, arg MarkCompaniesHouseRawInputFailedParams) error
@@ -156,6 +159,8 @@ type Querier interface {
 	UpdateSourcePullSucceeded(ctx context.Context, arg UpdateSourcePullSucceededParams) error
 	UpdateSourceSchedule(ctx context.Context, arg UpdateSourceScheduleParams) error
 	UpdateSourceScheduleEnabled(ctx context.Context, arg UpdateSourceScheduleEnabledParams) error
+	UpdateTemporalExecutionFailed(ctx context.Context, arg UpdateTemporalExecutionFailedParams) error
+	UpdateTemporalExecutionStarted(ctx context.Context, arg UpdateTemporalExecutionStartedParams) error
 	// Brreg
 	UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInputParams) (BrregCompanyRawInput, error)
 	// Companies House

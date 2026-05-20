@@ -107,6 +107,7 @@ type BrregCompanyRawInput struct {
 	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+	RunID                *string            `json:"run_id"`
 }
 
 type CompaniesHouseCompanyRawInput struct {
@@ -131,6 +132,7 @@ type CompaniesHouseCompanyRawInput struct {
 	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+	RunID                *string            `json:"run_id"`
 }
 
 type Company struct {
@@ -609,6 +611,7 @@ type GleifCompanyRawInput struct {
 	ProcessedAt             pgtype.Timestamptz `json:"processed_at"`
 	CreatedAt               time.Time          `json:"created_at"`
 	UpdatedAt               time.Time          `json:"updated_at"`
+	RunID                   *string            `json:"run_id"`
 }
 
 type OpenSourceProject struct {
@@ -744,6 +747,23 @@ type SuggestionSourceLink struct {
 	Confidence       *float32    `json:"confidence"`
 	EvidenceExcerpt  *string     `json:"evidence_excerpt"`
 	CreatedAt        time.Time   `json:"created_at"`
+}
+
+type TemporalExecution struct {
+	ID             uuid.UUID          `json:"id"`
+	WorkflowID     *string            `json:"workflow_id"`
+	WorkflowRunID  *string            `json:"workflow_run_id"`
+	WorkflowType   string             `json:"workflow_type"`
+	SourceName     string             `json:"source_name"`
+	Country        *string            `json:"country"`
+	InputIds       []string           `json:"input_ids"`
+	Status         string             `json:"status"`
+	RecordsWritten *int32             `json:"records_written"`
+	PagesFetched   *int32             `json:"pages_fetched"`
+	ErrorMessage   *string            `json:"error_message"`
+	RiverJobID     *int64             `json:"river_job_id"`
+	StartedAt      time.Time          `json:"started_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
 }
 
 type VCompany struct {

@@ -28,7 +28,7 @@ WHERE id IN (
     LIMIT $3
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type ClaimPendingBrregRawInputsParams struct {
@@ -68,6 +68,7 @@ func (q *Queries) ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendi
 			&i.ProcessedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RunID,
 		); err != nil {
 			return nil, err
 		}
@@ -94,7 +95,7 @@ WHERE id IN (
     LIMIT $3
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type ClaimPendingCompaniesHouseRawInputsParams struct {
@@ -134,6 +135,7 @@ func (q *Queries) ClaimPendingCompaniesHouseRawInputs(ctx context.Context, arg C
 			&i.ProcessedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RunID,
 		); err != nil {
 			return nil, err
 		}
@@ -160,7 +162,7 @@ WHERE id IN (
     LIMIT $3
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type ClaimPendingGLEIFRawInputsParams struct {
@@ -201,6 +203,7 @@ func (q *Queries) ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendi
 			&i.ProcessedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RunID,
 		); err != nil {
 			return nil, err
 		}
@@ -471,7 +474,7 @@ INSERT INTO brreg_company_raw_inputs (
 )
 VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (organization_number, payload_hash) DO UPDATE SET last_seen_at = now()
-RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type UpsertBrregRawInputParams struct {
@@ -520,6 +523,7 @@ func (q *Queries) UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInp
 		&i.ProcessedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RunID,
 	)
 	return i, err
 }
@@ -532,7 +536,7 @@ INSERT INTO companies_house_company_raw_inputs (
 )
 VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (company_number, payload_hash) DO UPDATE SET last_seen_at = now()
-RETURNING id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type UpsertCompaniesHouseRawInputParams struct {
@@ -581,6 +585,7 @@ func (q *Queries) UpsertCompaniesHouseRawInput(ctx context.Context, arg UpsertCo
 		&i.ProcessedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RunID,
 	)
 	return i, err
 }
@@ -594,7 +599,7 @@ INSERT INTO gleif_company_raw_inputs (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (lei, payload_hash) DO UPDATE SET last_seen_at = now()
-RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at
+RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
 `
 
 type UpsertGLEIFCompanyRawInputParams struct {
@@ -650,6 +655,7 @@ func (q *Queries) UpsertGLEIFCompanyRawInput(ctx context.Context, arg UpsertGLEI
 		&i.ProcessedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RunID,
 	)
 	return i, err
 }
