@@ -1,39 +1,40 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: corpscout
-      POSTGRES_USER: corpscout
-      POSTGRES_PASSWORD: corpscout
-    ports:
-      - "5435:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U corpscout -d corpscout"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: corpscout
+  #     POSTGRES_USER: corpscout
+  #     POSTGRES_PASSWORD: corpscout
+  #   ports:
+  #     - "5435:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U corpscout -d corpscout"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
 
   migrate:
     image: migrate/migrate:v4.17.0
-    depends_on:
-      postgres:
-        condition: service_healthy
+    extra_hosts:
+      - "companycollect:100.85.212.113"
     volumes:
       - ./database/migrations:/migrations
     command:
       - "-path=/migrations"
-      - "-database=postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable"
+      - "-database=postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable"
       - "up"
 
   postgrest:
     image: postgrest/postgrest:v12.2.3
+    extra_hosts:
+      - "companycollect:100.85.212.113"
     depends_on:
       migrate:
         condition: service_completed_successfully
     environment:
-      PGRST_DB_URI: postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable
+      PGRST_DB_URI: postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable
       PGRST_DB_SCHEMA: public
       PGRST_DB_ANON_ROLE: corpscout_anon
       PGRST_DB_POOL: "5"
@@ -54,13 +55,15 @@ services:
 
   scheduler:
     build: ./scheduler
+    extra_hosts:
+      - "companycollect:100.85.212.113"
     depends_on:
       migrate:
         condition: service_completed_successfully
       postgrest:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://corpscout:corpscout@postgres:5432/corpscout?sslmode=disable
+      DATABASE_URL: postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable
       CORPSCOUT_CRAWLER_URL: http://crawler:8000
       CORPSCOUT_DOMAIN_CONCURRENCY: "3"
       CORPSCOUT_POSTGREST_URL: http://postgrest:3000
@@ -92,5 +95,3 @@ services:
       - "8094:80"
     restart: unless-stopped
 
-volumes:
-  postgres_data:
