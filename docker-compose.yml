@@ -23,7 +23,7 @@ services:
       - ./database/migrations:/migrations
     command:
       - "-path=/migrations"
-      - "-database=postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable"
+      - "-database=postgres://corpscout:password123@companycollect:5432/corpscout?sslmode=disable"
       - "up"
 
   postgrest:
@@ -34,7 +34,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      PGRST_DB_URI: postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable
+      PGRST_DB_URI: postgres://corpscout:password123@companycollect:5432/corpscout?sslmode=disable
       PGRST_DB_SCHEMA: public
       PGRST_DB_ANON_ROLE: corpscout_anon
       PGRST_DB_POOL: "5"
@@ -63,7 +63,7 @@ services:
       postgrest:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://corpscout:corpscout@companycollect:5432/corpscout?sslmode=disable
+      DATABASE_URL: postgres://corpscout:password123@companycollect:5432/corpscout?sslmode=disable
       CORPSCOUT_CRAWLER_URL: http://crawler:8000
       CORPSCOUT_DOMAIN_CONCURRENCY: "3"
       CORPSCOUT_POSTGREST_URL: http://postgrest:3000
