@@ -198,6 +198,7 @@ export interface DataSource {
   consecutive_failures: number;
   country_id: string | null;
   capabilities: string[];
+  requires_translation: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -46,7 +46,7 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
   const [translationStats, setTranslationStats] = useState<BrregTranslationStats>();
   const [translating, setTranslating] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const isBrreg = source.name === "brreg";
+  const isBrreg = source.requires_translation;
   const selectedIds = useMemo(
     () => Object.entries(rowSelection).filter(([, selected]) => selected).map(([id]) => id),
     [rowSelection],
