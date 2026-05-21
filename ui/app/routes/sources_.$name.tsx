@@ -1,23 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, NavLink, Outlet, useParams } from "react-router";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "~/lib/api";
 import type { DataSource } from "~/types/api";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { SourceHeader } from "~/components/app/source-detail/SourceHeader";
-import { ScheduleTab } from "~/components/app/source-detail/ScheduleTab";
-import { ConfigTab } from "~/components/app/source-detail/ConfigTab";
-import { LogsTab } from "~/components/app/source-detail/LogsTab";
-import { RawInputsTab } from "~/components/app/source-detail/RawInputsTab";
-import { PipelineTab } from "~/components/app/source-detail/PipelineTab";
 import { hasRawInputs, hasPipeline } from "~/components/app/source-detail/sourceDetailUtils";
+import { cn } from "~/lib/utils";
 
 type SourcePatch = Parameters<typeof api.patchSource>[1];
 
-export default function SourceDetailPage() {
+export interface SourceDetailContext {
+  source: DataSource;
+  saving: boolean;
+  triggering: boolean;
+  processing: boolean;
+  onPatch: (patch: SourcePatch) => Promise<void>;
+  onTrigger: () => Promise<void>;
+  onProcess: () => Promise<void>;
+}
+
+export default function SourceDetailLayout() {
   const { name } = useParams<{ name: string }>();
   const latestNameRef = useRef<string | undefined>(undefined);
   const [source, setSource] = useState<DataSource>();
@@ -29,10 +34,8 @@ export default function SourceDetailPage() {
 
   useEffect(() => {
     if (!name) return;
-
     latestNameRef.current = name;
     let ignore = false;
-
     setSource(undefined);
     setLoading(true);
     setError(undefined);
@@ -40,32 +43,20 @@ export default function SourceDetailPage() {
     setTriggering(false);
     setProcessing(false);
     api.getSource(name)
-      .then((loadedSource) => {
-        if (!ignore) setSource(loadedSource);
-      })
-      .catch(() => {
-        if (!ignore) setError("Source not found.");
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false);
-      });
-
-    return () => {
-      ignore = true;
-    };
+      .then((loadedSource) => { if (!ignore) setSource(loadedSource); })
+      .catch(() => { if (!ignore) setError("Source not found."); })
+      .finally(() => { if (!ignore) setLoading(false); });
+    return () => { ignore = true; };
   }, [name]);
 
   async function refreshSource(sourceName: string) {
     const refreshed = await api.getSource(sourceName);
-    if (latestNameRef.current === sourceName) {
-      setSource(refreshed);
-    }
+    if (latestNameRef.current === sourceName) setSource(refreshed);
   }
 
   async function handlePatch(patch: SourcePatch) {
     const sourceName = source?.name;
     if (!sourceName) return;
-
     setSaving(true);
     try {
       await api.patchSource(sourceName, patch);
@@ -81,7 +72,6 @@ export default function SourceDetailPage() {
   async function handleTrigger() {
     const sourceName = source?.name;
     if (!sourceName) return;
-
     setTriggering(true);
     try {
       await api.triggerSource(sourceName);
@@ -96,7 +86,6 @@ export default function SourceDetailPage() {
   async function handleProcess() {
     const sourceName = source?.name;
     if (!sourceName) return;
-
     setProcessing(true);
     try {
       await api.processSource(sourceName);
@@ -117,6 +106,16 @@ export default function SourceDetailPage() {
     );
   }
 
+  const tabs = [
+    { label: "Schedule", to: `/sources/${source.name}/schedule` },
+    { label: "Config", to: `/sources/${source.name}/config` },
+    { label: "Logs", to: `/sources/${source.name}/logs` },
+    ...(hasRawInputs(source) ? [{ label: "Raw Inputs", to: `/sources/${source.name}/raw_input` }] : []),
+    ...(hasPipeline(source) ? [{ label: "Pipeline", to: `/sources/${source.name}/pipeline` }] : []),
+  ];
+
+  const context: SourceDetailContext = { source, saving, triggering, processing, onPatch: handlePatch, onTrigger: handleTrigger, onProcess: handleProcess };
+
   return (
     <div className="space-y-6">
       <Link
@@ -129,43 +128,26 @@ export default function SourceDetailPage() {
 
       <SourceHeader source={source} />
 
-      <Tabs key={source.name} defaultValue="schedule" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="schedule">Schedule</TabsTrigger>
-          <TabsTrigger value="config">Config</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          {hasRawInputs(source) && <TabsTrigger value="raw-inputs">Raw Inputs</TabsTrigger>}
-          {hasPipeline(source) && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}
-        </TabsList>
+      <nav className="flex gap-1 border-b">
+        {tabs.map((tab) => (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            className={({ isActive }) =>
+              cn(
+                "relative px-4 py-2 text-sm font-medium transition-colors hover:text-foreground",
+                isActive
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground",
+              )
+            }
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
 
-        <TabsContent value="schedule">
-          <ScheduleTab
-            source={source}
-            saving={saving}
-            triggering={triggering}
-            processing={processing}
-            onPatch={handlePatch}
-            onTrigger={handleTrigger}
-            onProcess={handleProcess}
-          />
-        </TabsContent>
-        <TabsContent value="config">
-          <ConfigTab source={source} saving={saving} onPatch={handlePatch} />
-        </TabsContent>
-        <TabsContent value="logs">
-          <LogsTab sourceName={source.name} />
-        </TabsContent>
-        {hasRawInputs(source) && (
-          <TabsContent value="raw-inputs">
-            <RawInputsTab source={source} />
-          </TabsContent>
-        )}
-        {hasPipeline(source) && (
-          <TabsContent value="pipeline">
-            <PipelineTab source={source} />
-          </TabsContent>
-        )}
-      </Tabs>
+      <Outlet context={context} />
     </div>
   );
 }
