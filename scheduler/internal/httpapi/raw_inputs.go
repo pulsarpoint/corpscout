@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-chi/chi/v5"
@@ -15,6 +18,134 @@ import (
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
+
+type rawInputRow struct {
+	ID        string    `json:"id"`
+	Source    string    `json:"source"`
+	Name      string    `json:"name"`
+	NativeID  string    `json:"native_id"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// handleListRawInputs returns a unified paginated view of all raw_inputs tables.
+// Query params: source, status, q (name search), sort (name|source|created_at|status), dir (asc|desc), page, limit.
+func (h *Handlers) handleListRawInputs(w http.ResponseWriter, r *http.Request) {
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "database pool not available")
+		return
+	}
+
+	page := queryInt(r, "page", 1)
+	pageSize := min(queryInt(r, "limit", 50), 200)
+	offset := (page - 1) * pageSize
+	srcFilter := r.URL.Query().Get("source")
+	statusFilter := r.URL.Query().Get("status")
+	nameQ := r.URL.Query().Get("q")
+	sortBy := r.URL.Query().Get("sort")
+	sortDir := r.URL.Query().Get("dir")
+
+	if sortDir != "asc" {
+		sortDir = "desc"
+	}
+	validSort := map[string]bool{"name": true, "source": true, "created_at": true, "status": true}
+	if !validSort[sortBy] {
+		sortBy = "created_at"
+	}
+
+	// Build shared positional args and WHERE expressions.
+	var args []any
+	var commonWhere []string
+
+	if statusFilter != "" {
+		args = append(args, statusFilter)
+		commonWhere = append(commonWhere, fmt.Sprintf("processing_status = $%d", len(args)))
+	}
+
+	var chNameExpr, brregNameExpr string
+	if nameQ != "" {
+		args = append(args, "%"+nameQ+"%")
+		ref := fmt.Sprintf("$%d", len(args))
+		chNameExpr = fmt.Sprintf("company_name ILIKE %s", ref)
+		brregNameExpr = fmt.Sprintf("organization_name ILIKE %s", ref)
+	}
+
+	buildWhere := func(extra string) string {
+		parts := append([]string{}, commonWhere...)
+		if extra != "" {
+			parts = append(parts, extra)
+		}
+		if len(parts) == 0 {
+			return ""
+		}
+		return "WHERE " + strings.Join(parts, " AND ")
+	}
+
+	chSub := fmt.Sprintf(
+		`SELECT id::text, 'companies_house' AS source, company_name AS name, company_number AS native_id, processing_status AS status, created_at FROM companies_house_company_raw_inputs %s`,
+		buildWhere(chNameExpr),
+	)
+	brregSub := fmt.Sprintf(
+		`SELECT id::text, 'brreg' AS source, organization_name AS name, organization_number AS native_id, processing_status AS status, created_at FROM brreg_company_raw_inputs %s`,
+		buildWhere(brregNameExpr),
+	)
+
+	var subs []string
+	switch srcFilter {
+	case "companies_house":
+		subs = []string{chSub}
+	case "brreg":
+		subs = []string{brregSub}
+	default:
+		subs = []string{chSub, brregSub}
+	}
+	union := strings.Join(subs, " UNION ALL ")
+
+	// Count.
+	var total int64
+	if err := h.pool.QueryRow(r.Context(), fmt.Sprintf("SELECT COUNT(*) FROM (%s) t", union), args...).Scan(&total); err != nil {
+		slog.Error("list raw inputs count", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Paginated, sorted rows.
+	dataArgs := append(args, pageSize, offset)
+	dataSQL := fmt.Sprintf(
+		"SELECT id, source, name, native_id, status, created_at FROM (%s) t ORDER BY %s %s LIMIT $%d OFFSET $%d",
+		union, sortBy, sortDir, len(args)+1, len(args)+2,
+	)
+	rows, err := h.pool.Query(r.Context(), dataSQL, dataArgs...)
+	if err != nil {
+		slog.Error("list raw inputs", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer rows.Close()
+
+	items := []rawInputRow{}
+	for rows.Next() {
+		var row rawInputRow
+		if err := rows.Scan(&row.ID, &row.Source, &row.Name, &row.NativeID, &row.Status, &row.CreatedAt); err != nil {
+			slog.Error("scan raw input row", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		items = append(items, row)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Error("raw input rows iter", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"total": total,
+		"page":  page,
+		"limit": pageSize,
+	})
+}
 
 type rawInputSupport struct {
 	canProcess bool

@@ -291,12 +291,30 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}
-	if source.PullTaskType != "source_pull" {
-		writeError(w, http.StatusUnprocessableEntity, "pull task type not supported for manual trigger")
-		return
-	}
 	if h.rv == nil {
 		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
+		return
+	}
+
+	// Sources with a Temporal pipeline are dispatched as DataTask River jobs.
+	if _, country := workers.TemporalWorkflowForSource(name); country != "" {
+		if _, err := h.rv.Insert(r.Context(), workers.DataTaskArgs{
+			Source:  name,
+			Country: country,
+		}, &river.InsertOpts{
+			Queue: "data_task",
+		}); err != nil {
+			slog.Error("trigger source (temporal)", "name", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})
+		return
+	}
+
+	// Legacy River-based sources.
+	if source.PullTaskType != "source_pull" {
+		writeError(w, http.StatusUnprocessableEntity, "pull task type not supported for manual trigger")
 		return
 	}
 	if _, err := h.rv.Insert(r.Context(), workers.SourcePullArgs{
@@ -306,7 +324,7 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		Queue: "source_pull",
 		UniqueOpts: river.UniqueOpts{
 			ByArgs:  true,
-			ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
+			ByState: []rivertype.JobState{rivertype.JobStatePending, rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
 		},
 	}); err != nil {
 		slog.Error("trigger source", "name", name, "error", err)

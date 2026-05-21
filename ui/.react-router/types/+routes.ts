@@ -44,6 +44,15 @@ type Pages = {
   "/review": {
     params: {};
   };
+  "/review/financials": {
+    params: {};
+  };
+  "/review/companies": {
+    params: {};
+  };
+  "/review/domains": {
+    params: {};
+  };
   "/jobs": {
     params: {};
   };
@@ -52,7 +61,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/companies/:id" | "/sources/:name" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/jobs";
+    page: "/" | "/companies/:id" | "/sources/:name" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/review/financials" | "/review/companies" | "/review/domains" | "/jobs";
   };
   "routes/companies_.$id.tsx": {
     id: "routes/companies_.$id";
@@ -88,6 +97,22 @@ type RouteFiles = {
   };
   "routes/review.tsx": {
     id: "routes/review";
+    page: "/review" | "/review/financials" | "/review/companies" | "/review/domains";
+  };
+  "routes/review.financials.tsx": {
+    id: "routes/review.financials";
+    page: "/review/financials";
+  };
+  "routes/review.companies.tsx": {
+    id: "routes/review.companies";
+    page: "/review/companies";
+  };
+  "routes/review.domains.tsx": {
+    id: "routes/review.domains";
+    page: "/review/domains";
+  };
+  "routes/review._index.tsx": {
+    id: "routes/review._index";
     page: "/review";
   };
   "routes/jobs.tsx": {
@@ -107,5 +132,9 @@ type RouteModules = {
   "routes/sources": typeof import("./app/routes/sources.tsx");
   "routes/_index": typeof import("./app/routes/_index.tsx");
   "routes/review": typeof import("./app/routes/review.tsx");
+  "routes/review.financials": typeof import("./app/routes/review.financials.tsx");
+  "routes/review.companies": typeof import("./app/routes/review.companies.tsx");
+  "routes/review.domains": typeof import("./app/routes/review.domains.tsx");
+  "routes/review._index": typeof import("./app/routes/review._index.tsx");
   "routes/jobs": typeof import("./app/routes/jobs.tsx");
 };

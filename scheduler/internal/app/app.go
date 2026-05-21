@@ -146,7 +146,7 @@ func scheduleOnce(ctx context.Context, q db.Querier, rc *river.Client[pgx.Tx]) {
 			Queue: "source_pull",
 			UniqueOpts: river.UniqueOpts{
 				ByArgs:  true,
-				ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
+				ByState: []rivertype.JobState{rivertype.JobStatePending, rivertype.JobStateAvailable, rivertype.JobStateRunning, rivertype.JobStateScheduled},
 			},
 		}); err != nil {
 			slog.Error("schedule sources: insert job", "source", src.Name, "error", err)

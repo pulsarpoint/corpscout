@@ -23,7 +23,11 @@ SELECT
   (SELECT COALESCE(SUM(raw_rows_inserted), 0) FROM source_pull_runs
    WHERE finished_at >= now() - interval '24 hours')::bigint AS records_upserted_24h,
   (SELECT COALESCE(SUM(raw_rows_inserted), 0) FROM source_pull_runs
-   WHERE finished_at >= now() - interval '7 days')::bigint   AS records_upserted_7d
+   WHERE finished_at >= now() - interval '7 days')::bigint   AS records_upserted_7d,
+  (
+    (SELECT COUNT(*) FROM companies_house_company_raw_inputs WHERE processing_status = 'pending') +
+    (SELECT COUNT(*) FROM brreg_company_raw_inputs           WHERE processing_status = 'pending')
+  )::bigint AS pending_raw_inputs
 `
 
 type GetStatsRow struct {
@@ -36,6 +40,7 @@ type GetStatsRow struct {
 	PullRunsFailedToday    int64 `json:"pull_runs_failed_today"`
 	RecordsUpserted24h     int64 `json:"records_upserted_24h"`
 	RecordsUpserted7d      int64 `json:"records_upserted_7d"`
+	PendingRawInputs       int64 `json:"pending_raw_inputs"`
 }
 
 func (q *Queries) GetStats(ctx context.Context) (GetStatsRow, error) {
@@ -51,6 +56,7 @@ func (q *Queries) GetStats(ctx context.Context) (GetStatsRow, error) {
 		&i.PullRunsFailedToday,
 		&i.RecordsUpserted24h,
 		&i.RecordsUpserted7d,
+		&i.PendingRawInputs,
 	)
 	return i, err
 }

@@ -71,6 +71,8 @@ services:
       CORPSCOUT_S3_ACCESS_KEY: corpscout
       CORPSCOUT_S3_SECRET_KEY: corpscout123
       CORPSCOUT_S3_BUCKET: crawls
+      CORPSCOUT_TEMPORAL_HOST: companycollect:7233
+      CORPSCOUT_TEMPORAL_UI_URL: http://100.85.212.113:8089
     ports:
       - "8092:8090"
     restart: unless-stopped

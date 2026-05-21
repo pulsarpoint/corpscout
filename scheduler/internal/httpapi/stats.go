@@ -17,6 +17,7 @@ func (h *Handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		"total_domains":             stats.TotalDomains,
 		"active_domains":            stats.ActiveDomains,
 		"pending_review":            stats.PendingReview,
+		"pending_raw_inputs":        stats.PendingRawInputs,
 		"enabled_sources":           stats.EnabledSources,
 		"pull_runs_completed_today": stats.PullRunsCompletedToday,
 		"pull_runs_failed_today":    stats.PullRunsFailedToday,

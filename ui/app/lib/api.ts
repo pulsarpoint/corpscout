@@ -23,6 +23,7 @@ import type {
   CompanyFinancialPending,
   VCompany,
   TemporalExecutionsResponse,
+  RawInputListResponse,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -122,6 +123,26 @@ export const api = {
     if (filters?.min_confidence != null) qs.set("min_confidence", String(filters.min_confidence));
     if (filters?.q) qs.set("q", filters.q);
     return get<{ ids: string[] }>(`/review/ids${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
+  getRawInputs: (params: {
+    page?: number;
+    limit?: number;
+    source?: string;
+    status?: string;
+    q?: string;
+    sort?: string;
+    dir?: "asc" | "desc";
+  } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.source) qs.set("source", params.source);
+    if (params.status) qs.set("status", params.status);
+    if (params.q) qs.set("q", params.q);
+    if (params.sort) qs.set("sort", params.sort);
+    if (params.dir) qs.set("dir", params.dir);
+    return get<RawInputListResponse>(`/raw-inputs?${qs.toString()}`);
   },
 
   getCompanySuggestions: (page = 1, limit = 50) =>

@@ -3,11 +3,28 @@ export interface StatsResponse {
   total_domains: number;
   active_domains: number;
   pending_review: number;
+  pending_raw_inputs: number;
   enabled_sources: number;
   pull_runs_completed_today: number;
   pull_runs_failed_today: number;
   records_upserted_24h: number;
   records_upserted_7d: number;
+}
+
+export interface RawInput {
+  id: string;
+  source: string;
+  name: string;
+  native_id: string;
+  status: string;
+  created_at: string;
+}
+
+export interface RawInputListResponse {
+  items: RawInput[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export type Signal = "registry_website" | "wikidata" | "certsh" | "whois" | "search" | "manual_upload";

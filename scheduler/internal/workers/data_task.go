@@ -19,6 +19,18 @@ var sourceWorkflowType = map[string]string{
 	"brreg":           "PullBrreg",
 }
 
+// sourceDefaultCountry maps a source name to its default ISO-3166 country code.
+var sourceDefaultCountry = map[string]string{
+	"companies_house": "GB",
+	"brreg":           "NO",
+}
+
+// TemporalWorkflowForSource returns the workflow type and default country for a
+// source that has a Temporal pipeline, or ("", "") if none is registered.
+func TemporalWorkflowForSource(source string) (workflowType, country string) {
+	return sourceWorkflowType[source], sourceDefaultCountry[source]
+}
+
 // DataTaskWorker starts a source-specific Temporal workflow and records its ID.
 // The River job exits immediately — Temporal runs the pipeline independently.
 type DataTaskWorker struct {
