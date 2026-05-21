@@ -96,7 +96,7 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 	}
 
 	// 3. Start the Temporal workflow. Pass saved cursor for incremental pull.
-	workflowID := fmt.Sprintf("pull-%s-%s-%d", args.Source, country, job.ID)
+	workflowID := temporalWorkflowID(args.Source, country, job.ID)
 	we, err := w.temporal.ExecuteWorkflow(ctx,
 		client.StartWorkflowOptions{
 			ID:        workflowID,
@@ -142,4 +142,11 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 		"country", country,
 	)
 	return nil // River job done — Temporal handles the rest.
+}
+
+func temporalWorkflowID(source, country string, jobID int64) string {
+	if country == "" {
+		return fmt.Sprintf("pull-%s-%d", source, jobID)
+	}
+	return fmt.Sprintf("pull-%s-%s-%d", source, country, jobID)
 }
