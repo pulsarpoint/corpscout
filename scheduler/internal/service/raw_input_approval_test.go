@@ -23,24 +23,34 @@ func sourceRows(sourceID uuid.UUID, name, inputTable string) *pgxmock.Rows {
 		"config", "last_started_at", "last_success_at", "last_failed_at",
 		"last_source_marker_type", "last_source_marker", "last_source_modified_at",
 		"last_error", "consecutive_failures", "created_at", "updated_at",
-		"schedule_enabled", "country_id", "capabilities",
+		"schedule_enabled", "country_id", "capabilities", "requires_translation",
 	}).AddRow(
 		sourceID, name, (*string)(nil), (*string)(nil), "registry", inputTable,
 		"source_pull", (*string)(nil), true, "interval", (*string)(nil),
 		[]byte("{}"), pgtype.Timestamptz{}, pgtype.Timestamptz{}, pgtype.Timestamptz{},
 		(*string)(nil), (*string)(nil), pgtype.Timestamptz{},
 		(*string)(nil), int32(0), time.Time{}, time.Time{},
-		true, pgtype.UUID{}, []string{"company_name"},
+		true, pgtype.UUID{}, []string{"company_name"}, false,
 	)
 }
 
 func chApprovalRows(rowID, runID uuid.UUID, companyNumber string, companyName string) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{
 		"id", "source_pull_run_id", "source_native_id", "company_number", "company_name",
-		"company_status", "company_type", "country_iso2", "raw_payload", "processing_status",
+		"company_status", "company_type", "country_iso2",
+		"source_updated_at", "raw_payload", "payload_hash",
+		"first_seen_at", "last_seen_at",
+		"processing_status", "processing_attempts", "processing_error",
+		"processing_lease_by", "processing_lease_until", "processed_at",
+		"created_at", "updated_at", "run_id",
 	}).AddRow(
 		rowID, pgUUID(runID), companyNumber, companyNumber, &companyName,
-		ptrString("active"), ptrString("ltd"), ptrString("GB"), []byte(`{"company_number":"`+companyNumber+`"}`), "pending",
+		ptrString("active"), ptrString("ltd"), ptrString("GB"),
+		pgtype.Timestamptz{}, []byte(`{"company_number":"`+companyNumber+`"}`), "hash1",
+		time.Time{}, time.Time{},
+		"pending", int32(0), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, pgtype.Timestamptz{},
+		time.Time{}, time.Time{}, (*string)(nil),
 	)
 }
 
@@ -48,11 +58,29 @@ func brregApprovalRows(rowID uuid.UUID, orgNumber, orgName, translationStatus st
 	return pgxmock.NewRows([]string{
 		"id", "source_pull_run_id", "source_native_id", "organization_number",
 		"organization_name", "registration_status", "website", "country_iso2",
-		"raw_payload", "raw_payload_en", "translation_status", "processing_status",
+		"source_updated_at", "raw_payload", "payload_hash",
+		"first_seen_at", "last_seen_at",
+		"processing_status", "processing_attempts", "processing_error",
+		"processing_lease_by", "processing_lease_until", "processed_at",
+		"created_at", "updated_at", "run_id",
+		"raw_payload_en", "translation_status",
+		"translation_attempts", "translation_error", "translation_model",
+		"translation_prompt_version", "translated_at",
+		"translation_lease_by", "translation_lease_until",
+		"translation_fx_source", "translation_fx_rate_date",
 	}).AddRow(
 		rowID, pgtype.UUID{}, orgNumber, orgNumber,
 		&orgName, ptrString("registered"), (*string)(nil), ptrString("NO"),
-		[]byte(`{"organisasjonsnummer":"`+orgNumber+`"}`), rawPayloadEn, translationStatus, "pending",
+		pgtype.Timestamptz{}, []byte(`{"organisasjonsnummer":"`+orgNumber+`"}`), "hash1",
+		time.Time{}, time.Time{},
+		"pending", int32(0), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, pgtype.Timestamptz{},
+		time.Time{}, time.Time{}, (*string)(nil),
+		rawPayloadEn, translationStatus,
+		int32(0), (*string)(nil), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{},
+		(*string)(nil), pgtype.Timestamptz{},
+		(*string)(nil), pgtype.Date{},
 	)
 }
 

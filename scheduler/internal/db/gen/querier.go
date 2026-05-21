@@ -28,7 +28,9 @@ type Querier interface {
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	CreateTemporalExecution(ctx context.Context, arg CreateTemporalExecutionParams) (TemporalExecution, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
+	GetBrregRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (BrregCompanyRawInput, error)
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
+	GetCompaniesHouseRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (CompaniesHouseCompanyRawInput, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 	GetCompanyAddressesByNativeID(ctx context.Context, nativeID string) ([]CompanyAddress, error)
 	GetCompanyByExactName(ctx context.Context, lower string) (Company, error)
@@ -52,6 +54,7 @@ type Querier interface {
 	GetDomainByID(ctx context.Context, id uuid.UUID) (GetDomainByIDRow, error)
 	GetDomainCrawlJob(ctx context.Context, arg GetDomainCrawlJobParams) (DomainCrawlJob, error)
 	GetDomainCrawlJobPage(ctx context.Context, arg GetDomainCrawlJobPageParams) (DomainCrawlJobPage, error)
+	GetGLEIFRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (GleifCompanyRawInput, error)
 	GetImportBatch(ctx context.Context, id uuid.UUID) (DomainImportBatch, error)
 	GetOpenSourceProjectByID(ctx context.Context, id uuid.UUID) (OpenSourceProject, error)
 	GetOpenSourceProjectBySlug(ctx context.Context, canonicalSlug string) (OpenSourceProject, error)
@@ -75,6 +78,7 @@ type Querier interface {
 	InsertCompanyContactSuggestion(ctx context.Context, arg InsertCompanyContactSuggestionParams) (CompanyContactSuggestion, error)
 	// Company section suggestions
 	InsertCompanyDomainSuggestion(ctx context.Context, arg InsertCompanyDomainSuggestionParams) (CompanyDomainSuggestion, error)
+	InsertCompanyFromRawInput(ctx context.Context, arg InsertCompanyFromRawInputParams) (Company, error)
 	InsertCompanyLocationSuggestion(ctx context.Context, arg InsertCompanyLocationSuggestionParams) (CompanyLocationSuggestion, error)
 	InsertCompanyRelationshipSuggestion(ctx context.Context, arg InsertCompanyRelationshipSuggestionParams) (CompanyRelationshipSuggestion, error)
 	InsertCompanyStatusSuggestion(ctx context.Context, arg InsertCompanyStatusSuggestionParams) (CompanyStatusSuggestion, error)

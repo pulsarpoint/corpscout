@@ -550,3 +550,22 @@ func TestProcessSource_missingRiver_returns503(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	q.AssertExpectations(t)
 }
+
+func TestGetSource_includes_requires_translation(t *testing.T) {
+	q := &stubQuerier{}
+	q.On("GetSourceByName", mock.Anything, "brreg").Return(db.DataSource{
+		ID:                  uuid.New(),
+		Name:                "brreg",
+		RequiresTranslation: true,
+	}, nil)
+
+	r := routerFor(newTestHandlers(q))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sources/brreg", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, true, body["requires_translation"])
+}

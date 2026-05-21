@@ -229,6 +229,120 @@ func (q *Queries) ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendi
 	return items, nil
 }
 
+const getBrregRawInputForCompanyApproval = `-- name: GetBrregRawInputForCompanyApproval :one
+SELECT id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, raw_payload_en, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date FROM brreg_company_raw_inputs WHERE id = $1
+`
+
+func (q *Queries) GetBrregRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (BrregCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, getBrregRawInputForCompanyApproval, id)
+	var i BrregCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.OrganizationNumber,
+		&i.OrganizationName,
+		&i.RegistrationStatus,
+		&i.Website,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RunID,
+		&i.RawPayloadEn,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
+	)
+	return i, err
+}
+
+const getCompaniesHouseRawInputForCompanyApproval = `-- name: GetCompaniesHouseRawInputForCompanyApproval :one
+SELECT id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id FROM companies_house_company_raw_inputs WHERE id = $1
+`
+
+func (q *Queries) GetCompaniesHouseRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (CompaniesHouseCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, getCompaniesHouseRawInputForCompanyApproval, id)
+	var i CompaniesHouseCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.CompanyNumber,
+		&i.CompanyName,
+		&i.CompanyStatus,
+		&i.CompanyType,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RunID,
+	)
+	return i, err
+}
+
+const getGLEIFRawInputForCompanyApproval = `-- name: GetGLEIFRawInputForCompanyApproval :one
+SELECT id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id FROM gleif_company_raw_inputs WHERE id = $1
+`
+
+func (q *Queries) GetGLEIFRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (GleifCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, getGLEIFRawInputForCompanyApproval, id)
+	var i GleifCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.Lei,
+		&i.LegalName,
+		&i.RegistrationStatus,
+		&i.HeadquartersCountryCode,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RunID,
+	)
+	return i, err
+}
+
 const ignoreAIRawInput = `-- name: IgnoreAIRawInput :one
 UPDATE ai_company_profile_raw_inputs
 SET processing_status = 'ignored',

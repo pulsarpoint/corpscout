@@ -215,3 +215,12 @@ SET processing_status = 'ignored',
     updated_at = now()
 WHERE id = $1 AND processing_status IN ('pending', 'failed')
 RETURNING id;
+
+-- name: GetGLEIFRawInputForCompanyApproval :one
+SELECT * FROM gleif_company_raw_inputs WHERE id = $1;
+
+-- name: GetCompaniesHouseRawInputForCompanyApproval :one
+SELECT * FROM companies_house_company_raw_inputs WHERE id = $1;
+
+-- name: GetBrregRawInputForCompanyApproval :one
+SELECT * FROM brreg_company_raw_inputs WHERE id = $1;

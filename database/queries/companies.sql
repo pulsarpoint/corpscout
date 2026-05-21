@@ -42,3 +42,11 @@ RETURNING *;
 
 -- name: GetCompanyByExactName :one
 SELECT * FROM companies WHERE lower(name) = lower($1) LIMIT 1;
+
+-- name: InsertCompanyFromRawInput :one
+INSERT INTO companies (
+    canonical_slug, name, country_id, registration_number, lei,
+    status, website, primary_source_id, parent_lei, ultimate_parent_lei, evidence
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;

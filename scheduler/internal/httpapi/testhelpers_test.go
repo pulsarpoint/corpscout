@@ -730,5 +730,19 @@ func (s *stubQuerier) UpsertCompanyAddress(ctx context.Context, arg db.UpsertCom
 	return nil
 }
 
+// Raw input approval stubs
+func (s *stubQuerier) GetGLEIFRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.GleifCompanyRawInput, error) {
+	return db.GleifCompanyRawInput{}, nil
+}
+func (s *stubQuerier) GetCompaniesHouseRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.CompaniesHouseCompanyRawInput, error) {
+	return db.CompaniesHouseCompanyRawInput{}, nil
+}
+func (s *stubQuerier) GetBrregRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.BrregCompanyRawInput, error) {
+	return db.BrregCompanyRawInput{}, nil
+}
+func (s *stubQuerier) InsertCompanyFromRawInput(ctx context.Context, arg db.InsertCompanyFromRawInputParams) (db.Company, error) {
+	return db.Company{}, nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)

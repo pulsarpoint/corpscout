@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -245,6 +246,74 @@ func (q *Queries) InsertCompany(ctx context.Context, arg InsertCompanyParams) (C
 		arg.Name,
 		arg.CountryID,
 		arg.Column4,
+	)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.Lei,
+		&i.Name,
+		&i.CountryID,
+		&i.RegistrationNumber,
+		&i.Status,
+		&i.PrimarySourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ShortName,
+		&i.ShortDescription,
+		&i.Description,
+		&i.Website,
+		&i.FoundedYear,
+		&i.EmployeeEstimate,
+		&i.RevenueEstimate,
+		&i.Ownership,
+		&i.ParentLei,
+		&i.UltimateParentLei,
+		&i.CanonicalSlug,
+		&i.DisplayName,
+		&i.ResolutionStatus,
+		&i.Evidence,
+		&i.EmployeeCount,
+		&i.RevenueUsd,
+	)
+	return i, err
+}
+
+const insertCompanyFromRawInput = `-- name: InsertCompanyFromRawInput :one
+INSERT INTO companies (
+    canonical_slug, name, country_id, registration_number, lei,
+    status, website, primary_source_id, parent_lei, ultimate_parent_lei, evidence
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, lei, name, country_id, registration_number, status, primary_source_id, created_at, updated_at, short_name, short_description, description, website, founded_year, employee_estimate, revenue_estimate, ownership, parent_lei, ultimate_parent_lei, canonical_slug, display_name, resolution_status, evidence, employee_count, revenue_usd
+`
+
+type InsertCompanyFromRawInputParams struct {
+	CanonicalSlug      string          `json:"canonical_slug"`
+	Name               string          `json:"name"`
+	CountryID          uuid.UUID       `json:"country_id"`
+	RegistrationNumber *string         `json:"registration_number"`
+	Lei                *string         `json:"lei"`
+	Status             string          `json:"status"`
+	Website            *string         `json:"website"`
+	PrimarySourceID    pgtype.UUID     `json:"primary_source_id"`
+	ParentLei          *string         `json:"parent_lei"`
+	UltimateParentLei  *string         `json:"ultimate_parent_lei"`
+	Evidence           json.RawMessage `json:"evidence"`
+}
+
+func (q *Queries) InsertCompanyFromRawInput(ctx context.Context, arg InsertCompanyFromRawInputParams) (Company, error) {
+	row := q.db.QueryRow(ctx, insertCompanyFromRawInput,
+		arg.CanonicalSlug,
+		arg.Name,
+		arg.CountryID,
+		arg.RegistrationNumber,
+		arg.Lei,
+		arg.Status,
+		arg.Website,
+		arg.PrimarySourceID,
+		arg.ParentLei,
+		arg.UltimateParentLei,
+		arg.Evidence,
 	)
 	var i Company
 	err := row.Scan(

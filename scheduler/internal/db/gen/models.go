@@ -542,6 +542,7 @@ type DataSource struct {
 	ScheduleEnabled      bool               `json:"schedule_enabled"`
 	CountryID            pgtype.UUID        `json:"country_id"`
 	Capabilities         []string           `json:"capabilities"`
+	RequiresTranslation  bool               `json:"requires_translation"`
 }
 
 type Domain struct {
