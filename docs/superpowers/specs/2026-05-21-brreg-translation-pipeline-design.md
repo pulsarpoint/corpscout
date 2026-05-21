@@ -56,29 +56,37 @@ When the operator is ready to process translated rows into company suggestions, 
 
 ```sql
 ALTER TABLE brreg_company_raw_inputs
-  ADD COLUMN raw_payload_en         JSONB,
-  ADD COLUMN translation_status     TEXT NOT NULL DEFAULT 'pending',
-  ADD COLUMN translation_attempts   INT  NOT NULL DEFAULT 0,
-  ADD COLUMN translation_error      TEXT,
-  ADD COLUMN translation_model      TEXT,
-  ADD COLUMN translation_prompt_version TEXT,
-  ADD COLUMN translated_at          TIMESTAMPTZ,
+  ADD COLUMN raw_payload_en              JSONB,
+  ADD COLUMN translation_status          TEXT NOT NULL DEFAULT 'pending',
+  ADD COLUMN translation_attempts        INT  NOT NULL DEFAULT 0,
+  ADD COLUMN translation_error           TEXT,
+  ADD COLUMN translation_model           TEXT,
+  ADD COLUMN translation_prompt_version  TEXT,
+  ADD COLUMN translated_at               TIMESTAMPTZ,
+  ADD COLUMN translation_lease_by        TEXT,
+  ADD COLUMN translation_lease_until     TIMESTAMPTZ,
   ADD CONSTRAINT chk_brreg_translation_status CHECK (
     translation_status IN ('pending', 'translating', 'translated', 'failed', 'skipped')
   );
 
 CREATE INDEX idx_brreg_raw_translation_status
   ON brreg_company_raw_inputs (translation_status, created_at);
+
+CREATE INDEX idx_brreg_raw_translation_lease
+  ON brreg_company_raw_inputs (translation_lease_until)
+  WHERE translation_status = 'translating';
 ```
 
 `translation_status` values:
 - `pending` — newly inserted, not yet translated
-- `translating` — claimed by an active activity (lease)
-- `translated` — `raw_payload_en` is populated via LLM
-- `skipped` — no translatable fields found; `raw_payload_en` was built from structural renames and cache only, no LLM call needed
+- `translating` — claimed by an active activity; `translation_lease_by` and `translation_lease_until` are set
+- `translated` — `raw_payload_en` is populated; covers both LLM-translated rows and cache-only rows (see § Skipped semantics below)
+- `skipped` — record has no translatable fields at all (only structural renames apply); `raw_payload_en` is built without any LLM call or cache lookup
 - `failed` — translation attempted and errored; `translation_error` is set
 
 Both `translated` and `skipped` produce a populated `raw_payload_en` and satisfy the `IS NOT NULL` gate for `ClaimPendingBrregRawInputs`.
+
+**Lease and stale-row recovery:** `translation_lease_by` is the Temporal workflow run ID; `translation_lease_until` is `now() + 10 minutes`. The `TranslateBrregBatch` claim step also reclaims stale leases — rows where `translation_status = 'translating' AND translation_lease_until < now()` are treated as `pending` and included in the next claim. This means a crashed activity can never strand rows longer than 10 minutes.
 
 ### Migration: `translation_cache` table
 
@@ -104,6 +112,8 @@ Using `(category, original_hash, prompt_version, model)` as the key means changi
 ---
 
 ## Field Mapping: `raw_payload` → `raw_payload_en`
+
+`raw_payload_en` is a **curated English-normalized payload**. It maps only the fields listed in this section, using English key names and translated values. Fields not listed are omitted. `raw_payload` remains the **authoritative lossless registry record** and is never modified — all Norwegian data is preserved there regardless of translation status.
 
 ### Structural rename (no translation, no LLM)
 
@@ -216,6 +226,12 @@ type TranslateBrregInput struct {
   Model         string   `json:"model"`             // e.g. "qwen3:6b"
   Accumulated   int      `json:"accumulated"`       // rows translated so far (ContinueAsNew)
 }
+
+type TranslateBrregBatchResult struct {
+  Claimed    int `json:"claimed"`     // rows locked in this batch
+  Translated int `json:"translated"`  // rows where raw_payload_en was written (translated + skipped)
+  Failed     int `json:"failed"`      // rows where translation_status was set to failed
+}
 ```
 
 ### Workflow logic
@@ -225,8 +241,8 @@ TranslateBrregRawInputs(input):
   pagesThisRun = 0
   loop:
     result = TranslateBrregBatch(input.IDs, input.PromptVersion, input.Model, batchSize=50)
-    accumulated += result.Processed
-    if result.Processed == 0: break           // nothing left
+    accumulated += result.Translated
+    if result.Claimed == 0: break             // nothing left to work on
     if input.IDs is non-empty: break          // specific IDs → single pass only
     pagesThisRun++
     if pagesThisRun >= 50:
@@ -234,23 +250,35 @@ TranslateBrregRawInputs(input):
   // done
 ```
 
+Exit condition is `claimed == 0`, not `translated == 0`. If a batch is all failures (`claimed=50, translated=0, failed=50`), the workflow continues because there may be more pending rows; it stops only when the claim query returns nothing. This prevents a batch of bad data from masking remaining work.
+
 No `source_process` enqueue — processing is always triggered manually by the operator. No `MarkExecutionComplete` call — this workflow has no corpscout run ID. The `translation_status` column on each row is the progress record.
 
 ### `TranslateBrregBatch` activity
 
 1. **Claim rows**:
-   - All-pending path: `WHERE translation_status = 'pending'`
-   - Specific-IDs path: `WHERE (translation_status IN ('pending', 'failed')) AND id = ANY($ids)`
-   
-   Use `FOR UPDATE SKIP LOCKED LIMIT 50`. Immediately mark claimed rows `translating` and increment `translation_attempts`.
+   - All-pending path: `WHERE translation_status = 'pending' OR (translation_status = 'translating' AND translation_lease_until < now())`
+   - Specific-IDs path: `WHERE (translation_status IN ('pending', 'failed') OR (translation_status = 'translating' AND translation_lease_until < now())) AND id = ANY($ids)`
+
+   Both paths reclaim stale leases inline. Use `FOR UPDATE SKIP LOCKED LIMIT 50`. Immediately mark claimed rows `translating`, set `translation_lease_by = <workflow_run_id>`, `translation_lease_until = now() + 10 minutes`, and increment `translation_attempts`. Return `Claimed = len(rows)`; exit early with `Claimed = 0` if the query returns nothing.
 
 2. **Extract translatable strings**: for each row, build two collections:
    - `cached_lookups`: map of `{category → []unique_text}` for enum-like fields
    - `llm_required`: map of `{row_id → []unique_text}` for free-text fields
 
-3. **Load cache**: `SELECT category, original_hash, translated_text FROM translation_cache WHERE (category, original_hash) IN (...)` — one query for all unique strings in the batch.
+3. **Load cache**: use the full primary key for all lookups:
+   ```sql
+   SELECT category, original_hash, translated_text
+   FROM translation_cache
+   WHERE source_lang = $source_lang
+     AND target_lang = $target_lang
+     AND prompt_version = $prompt_version
+     AND model = $model
+     AND (category, original_hash) IN (...)
+   ```
+   One query for all unique strings in the batch. Cache hits from a different model or prompt version are not used; they will result in a new LLM call and a new cache row keyed to the current (model, prompt_version) pair.
 
-4. **Identify cache misses** per category. Collect all unique strings not in cache.
+4. **Identify cache misses** per category. Collect all unique strings not in cache for the current (model, prompt_version).
 
 5. **LLM call** (if any misses): send one request per category with cache misses:
    ```json
@@ -270,7 +298,11 @@ No `source_process` enqueue — processing is always triggered manually by the o
 
 8. **Write in one transaction**:
    - Upsert new translations into `translation_cache`
-   - Update each row: set `raw_payload_en`, `translation_status` (`translated` if LLM was called, `skipped` if no LLM was needed), `translation_model`, `translation_prompt_version`, `translation_attempts`, `translated_at`
+   - Update each row: set `raw_payload_en`, `translation_model`, `translation_prompt_version`, `translation_attempts`, `translated_at`, clear `translation_lease_by` and `translation_lease_until`
+   - `translation_status` is set to:
+     - `translated` — if the record had any cached or LLM-translated fields (enum or free-text); this includes cache-only rows where no LLM call was needed
+     - `skipped` — only if the record contained no cached or LLM fields at all (all fields were structural renames); this is rare in practice
+     - `failed` — single-row error path (see error table)
 
 The DB transaction never opens until after all LLM calls complete.
 
@@ -282,15 +314,31 @@ The DB transaction never opens until after all LLM calls complete.
 | LLM omits a specific key | Keep original Norwegian text for that field; mark row `translated` with fallback |
 | LLM call times out | Activity fails → Temporal retries |
 | Single row fails to build `raw_payload_en` | Mark that row `failed` with `translation_error`; continue with rest of batch |
-| All rows in batch fail | Activity returns `processed=0`; workflow continues loop (avoids infinite retry on bad data) |
+| All rows in batch fail | Activity returns `claimed=N, translated=0, failed=N`; workflow continues because `claimed > 0` — it stops only when the next claim returns nothing |
+| Stale lease (activity crashed mid-batch) | Next batch's claim query reclaims rows where `translation_lease_until < now()`; rows are reset to `translating` with a new lease |
 
 ---
 
 ## `MarkExecutionComplete` change
 
-Remove the River `source_process` job insertion from `MarkExecutionComplete` entirely. No source enqueues `source_process` automatically — all company processing is manually triggered by the operator. This simplifies `MarkCompleteParams` (no `SkipSourceProcess` flag needed) and makes the pipeline's behaviour consistent across all sources.
+Remove the River `source_process` job insertion from `MarkExecutionComplete` entirely. No source enqueues `source_process` automatically — all company processing is manually triggered by the operator. This is an intentional, global change: it applies to Companies House and any future source as well as brreg.
 
-The `CLAUDE.md` note about triggering `source_process` manually via a DB insert remains valid as the operator-facing manual path.
+`MarkCompleteParams` requires no `SkipSourceProcess` flag — the behaviour is uniform.
+
+### Manual process trigger: `POST /api/v1/sources/:name/process`
+
+Since automatic enqueuing is gone, the operator needs a first-class UI action for every source. This endpoint inserts a `source_process` River job for the named source:
+
+Request body: none.
+
+Response:
+```json
+{ "job_id": 12345, "status": "enqueued" }
+```
+
+Returns 409 if a `source_process` job for that source is already `pending` or `running`. Returns 404 if the source name is unknown.
+
+**UI placement:** A **Process** button is added to every source detail page (the existing `sources_.$name.tsx` route), regardless of source type. It is disabled and shows "Processing…" while a job is in flight. For brreg it is also disabled until `translated > 0` — the tooltip reads "Translate rows first" when both `translated == 0` and `pending > 0`.
 
 ---
 
@@ -424,16 +472,25 @@ Expected response:
 
 | Test | What it verifies |
 |---|---|
-| `TestBuildRawPayloadEn_KeyMapping` | All Norwegian keys produce correct English keys; no unknown keys in output |
+| `TestBuildRawPayloadEn_KeyMapping` | All Norwegian keys produce correct English keys; no unknown keys in output; omitted Norwegian-only fields are absent |
 | `TestBuildRawPayloadEn_LegalNameNotTranslated` | `navn` value is copied verbatim |
 | `TestBuildRawPayloadEn_BooleansAndDatesPassThrough` | Booleans, dates, numbers, codes copied as-is |
 | `TestExtractTranslatableStrings` | Only `aktivitet`, `vedtektsfestetFormaal`, etc. collected for LLM; enum fields collected for cache |
-| `TestTranslateBrregBatch_CacheHitSkipsLLM` | When all strings are in cache, no LLM call is made |
-| `TestTranslateBrregBatch_CacheMissSendsToLLM` | Cache miss strings are sent to LLM; results stored in cache |
+| `TestTranslateBrregBatch_CacheHitSkipsLLM` | When all strings are in cache (full key match), no LLM call is made; row marked `translated` not `skipped` |
+| `TestTranslateBrregBatch_CacheKeyMismatch_TreatedAsMiss` | Cache row for same text but different model/prompt_version is not used |
+| `TestTranslateBrregBatch_CacheMissSendsToLLM` | Cache miss strings are sent to LLM; results stored in cache keyed by full (model, prompt_version) |
 | `TestTranslateBrregBatch_LLMInventedKeyDiscarded` | Key in LLM response not in input is silently dropped |
 | `TestTranslateBrregBatch_InvalidLLMJSONFails` | Non-JSON LLM response causes activity error |
-| `TestTranslateBrregBatch_PerTextFallback` | LLM omitting a key keeps original text; row still marked translated |
-| `TestClaimPendingBrregRawInputs_ExcludesNullPayloadEn` | Query returns zero rows when `raw_payload_en IS NULL` |
-| `TestTranslateBrregWorkflow_StopsWhenNoPendingRows` | Workflow exits cleanly when batch returns 0 processed |
+| `TestTranslateBrregBatch_PerTextFallback` | LLM omitting a key keeps original text; row still marked `translated` |
+| `TestTranslateBrregBatch_StructuralOnlyRow_MarkedSkipped` | Row with no enum or free-text fields is marked `skipped` |
+| `TestTranslateBrregBatch_SetsLease` | Claimed rows have `translation_lease_by` and `translation_lease_until` set |
+| `TestTranslateBrregBatch_ReclaimsStaleRows` | Rows with `translating` + expired lease are included in the next claim |
+| `TestTranslateBrregBatch_ClearsLeaseOnSuccess` | Written rows have `translation_lease_by = NULL` and `translation_lease_until = NULL` |
+| `TestTranslateBrregBatch_ReturnsCounts` | Result struct has correct `claimed`, `translated`, `failed` values |
+| `TestClaimPendingBrregRawInputs_ExcludesNullPayloadEn` | Processor query returns zero rows when `raw_payload_en IS NULL` |
+| `TestTranslateBrregWorkflow_StopsWhenClaimedIsZero` | Workflow exits cleanly when batch returns `claimed=0` |
+| `TestTranslateBrregWorkflow_ContinuesWhenAllBatchFailed` | Workflow continues if `claimed > 0` even when `translated=0, failed=N` |
 | `TestTranslateBrregWorkflow_SpecificIDsSinglePass` | IDs-only run does not loop or ContinueAsNew |
 | `TestMarkExecutionComplete_NoRiverJobEnqueued` | `MarkExecutionComplete` completes without inserting any River job |
+| `TestProcessSourceHandler_EnqueuesJob` | `POST /api/v1/sources/:name/process` inserts a `source_process` River job |
+| `TestProcessSourceHandler_409WhenAlreadyRunning` | Returns 409 if a job for that source is already pending or running |
