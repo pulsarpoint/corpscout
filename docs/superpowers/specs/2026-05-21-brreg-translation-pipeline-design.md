@@ -21,7 +21,7 @@ PullBrreg Temporal workflow
 
 `source_process` is never enqueued by the import pipeline for brreg. Processing only happens after the operator explicitly runs translation.
 
-### Translation + processing flow (operator-triggered)
+### Translation flow (operator-triggered)
 
 ```
 Operator (UI)
@@ -39,24 +39,14 @@ Operator (UI)
   → TranslateBrregBatch activity (loops with ContinueAsNew)
          │
          ├─ reads/writes brreg_company_raw_inputs (raw_payload_en, translation_status)
-         ├─ reads/writes translation_cache
-         │
-         ▼
-  Local LLM (OpenAI-compatible, POST /v1/chat/completions)
-  model: qwen3:6b at http://100.77.62.33:8080
-         │
-         ▼ (after each successful batch)
-  EnqueueSourceProcess Go activity
-  → inserts River job: source_process for brreg
-         │
-         ▼
-  BrregProcessor (River worker in scheduler)
-  → claims rows WHERE raw_payload_en IS NOT NULL
+         └─ reads/writes translation_cache
 ```
 
-`source_process` is enqueued by the translation workflow after each successful `TranslateBrregBatch` — not once at the end, but after every batch. This means rows become processable incrementally as translation progresses rather than waiting for the entire backlog to finish.
+Translation ends when all claimed rows have a populated `raw_payload_en`. No `source_process` job is enqueued automatically — the operator triggers company processing manually (see § Processing gate below).
 
-`BrregProcessor` only claims rows where `raw_payload_en IS NOT NULL`. This is the hard gate ensuring Norwegian data never enters the suggestion/approval pipeline.
+### Processing gate (manual, operator-triggered)
+
+When the operator is ready to process translated rows into company suggestions, they trigger `source_process` manually via the UI or directly via the River DB insert. `BrregProcessor` only claims rows where `raw_payload_en IS NOT NULL` — this is the hard gate ensuring Norwegian data never enters the suggestion/approval pipeline.
 
 ---
 
@@ -236,8 +226,6 @@ TranslateBrregRawInputs(input):
   loop:
     result = TranslateBrregBatch(input.IDs, input.PromptVersion, input.Model, batchSize=50)
     accumulated += result.Processed
-    if result.Processed > 0:
-      EnqueueSourceProcess("brreg")           // make this batch's rows available to processor
     if result.Processed == 0: break           // nothing left
     if input.IDs is non-empty: break          // specific IDs → single pass only
     pagesThisRun++
@@ -246,9 +234,7 @@ TranslateBrregRawInputs(input):
   // done
 ```
 
-`EnqueueSourceProcess` is a lightweight Go activity that inserts a `source_process` River job for brreg. It runs after every batch so the processor can start working on translated rows immediately without waiting for the full backlog to complete. River's `UniqueOpts` on the `source_process` job kind mean concurrent enqueues are collapsed — if a job is already pending or running, the duplicate insert is a no-op.
-
-No `MarkExecutionComplete` call — this workflow has no corpscout run ID. The `translation_status` column on each row is the progress record.
+No `source_process` enqueue — processing is always triggered manually by the operator. No `MarkExecutionComplete` call — this workflow has no corpscout run ID. The `translation_status` column on each row is the progress record.
 
 ### `TranslateBrregBatch` activity
 
@@ -302,9 +288,9 @@ The DB transaction never opens until after all LLM calls complete.
 
 ## `MarkExecutionComplete` change
 
-Add a `SkipSourceProcess bool` field to `MarkCompleteParams`. The `PullBrreg` workflow passes `SkipSourceProcess: true`. When set, the activity skips the River `source_process` job insertion entirely.
+Remove the River `source_process` job insertion from `MarkExecutionComplete` entirely. No source enqueues `source_process` automatically — all company processing is manually triggered by the operator. This simplifies `MarkCompleteParams` (no `SkipSourceProcess` flag needed) and makes the pipeline's behaviour consistent across all sources.
 
-All other sources continue to work as before — `SkipSourceProcess` defaults to `false`.
+The `CLAUDE.md` note about triggering `source_process` manually via a DB insert remains valid as the operator-facing manual path.
 
 ---
 
@@ -450,5 +436,4 @@ Expected response:
 | `TestClaimPendingBrregRawInputs_ExcludesNullPayloadEn` | Query returns zero rows when `raw_payload_en IS NULL` |
 | `TestTranslateBrregWorkflow_StopsWhenNoPendingRows` | Workflow exits cleanly when batch returns 0 processed |
 | `TestTranslateBrregWorkflow_SpecificIDsSinglePass` | IDs-only run does not loop or ContinueAsNew |
-| `TestTranslateBrregWorkflow_EnqueuesSourceProcessAfterEachBatch` | `source_process` River job inserted after every batch with processed > 0 |
-| `TestMarkExecutionComplete_SkipSourceProcess` | When `SkipSourceProcess=true`, no River job is inserted |
+| `TestMarkExecutionComplete_NoRiverJobEnqueued` | `MarkExecutionComplete` completes without inserting any River job |
