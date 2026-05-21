@@ -387,6 +387,12 @@ type translateBrregRequest struct {
 	FXRateDate string   `json:"fx_rate_date,omitempty"`
 }
 
+type sourceTranslationConfig struct {
+	source     string
+	tableName  string
+	sourceLang string
+}
+
 type brregTranslationStats struct {
 	Pending        int64 `json:"pending"`
 	Translating    int64 `json:"translating"`
@@ -394,6 +400,19 @@ type brregTranslationStats struct {
 	Failed         int64 `json:"failed"`
 	ReadyToProcess int64 `json:"ready_to_process"`
 	Total          int64 `json:"total"`
+}
+
+var sourceTranslationConfigs = map[string]sourceTranslationConfig{
+	"cvr": {
+		source:     "cvr",
+		tableName:  "cvr_company_raw_inputs",
+		sourceLang: "da",
+	},
+	"ariregister": {
+		source:     "ariregister",
+		tableName:  "ariregister_company_raw_inputs",
+		sourceLang: "et",
+	},
 }
 
 func (h *Handlers) handleTranslateBrreg(w http.ResponseWriter, r *http.Request) {
@@ -441,6 +460,74 @@ func (h *Handlers) handleTranslateBrreg(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		slog.Error("start brreg translation workflow", "workflow_id", workflowID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"workflow_id":     workflowID,
+		"workflow_run_id": run.GetRunID(),
+		"status":          "started",
+	})
+}
+
+func (h *Handlers) handleTranslateCVR(w http.ResponseWriter, r *http.Request) {
+	h.handleTranslateSource(w, r, sourceTranslationConfigs["cvr"])
+}
+
+func (h *Handlers) handleTranslateAriregister(w http.ResponseWriter, r *http.Request) {
+	h.handleTranslateSource(w, r, sourceTranslationConfigs["ariregister"])
+}
+
+func (h *Handlers) handleTranslateSource(w http.ResponseWriter, r *http.Request, cfg sourceTranslationConfig) {
+	var req translateBrregRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.FXRateDate != "" {
+		if _, err := time.Parse("2006-01-02", req.FXRateDate); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid fx_rate_date")
+			return
+		}
+	}
+	if h.temporal == nil {
+		writeError(w, http.StatusServiceUnavailable, "temporal client not available")
+		return
+	}
+
+	workflowID := fmt.Sprintf("translate-%s-all", cfg.source)
+	if len(req.IDs) > 0 {
+		workflowID = fmt.Sprintf("translate-%s-ids-%d", cfg.source, time.Now().Unix())
+	}
+	input := map[string]any{
+		"source":         cfg.source,
+		"table_name":     cfg.tableName,
+		"source_lang":    cfg.sourceLang,
+		"target_lang":    "en",
+		"ids":            req.IDs,
+		"prompt_version": envWithDefault("LLM_PROMPT_VERSION", "v1"),
+		"model":          envWithDefault("LLM_MODEL", "qwen3:6b"),
+		"fx_rate_date":   req.FXRateDate,
+	}
+
+	run, err := h.temporal.ExecuteWorkflow(r.Context(),
+		client.StartWorkflowOptions{
+			ID:        workflowID,
+			TaskQueue: "corpscout-pipelines",
+		},
+		"TranslateSourceRawInputs",
+		input,
+	)
+	if err != nil {
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStarted) {
+			writeError(w, http.StatusConflict, "translation workflow already running")
+			return
+		}
+		slog.Error("start source translation workflow", "source", cfg.source, "workflow_id", workflowID, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -513,6 +600,44 @@ func (h *Handlers) handleBrregTranslationStats(w http.ResponseWriter, r *http.Re
 		&stats.Total,
 	); err != nil {
 		slog.Error("brreg translation stats", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (h *Handlers) handleCVRTranslationStats(w http.ResponseWriter, r *http.Request) {
+	h.handleSourceTranslationStats(w, r, sourceTranslationConfigs["cvr"])
+}
+
+func (h *Handlers) handleAriregisterTranslationStats(w http.ResponseWriter, r *http.Request) {
+	h.handleSourceTranslationStats(w, r, sourceTranslationConfigs["ariregister"])
+}
+
+func (h *Handlers) handleSourceTranslationStats(w http.ResponseWriter, r *http.Request, cfg sourceTranslationConfig) {
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "database pool not available")
+		return
+	}
+	var stats brregTranslationStats
+	if err := h.pool.QueryRow(r.Context(), fmt.Sprintf(`
+		SELECT
+			COUNT(*) FILTER (WHERE translation_status = 'pending') AS pending,
+			COUNT(*) FILTER (WHERE translation_status = 'translating') AS translating,
+			COUNT(*) FILTER (WHERE translation_status = 'translated') AS translated,
+			COUNT(*) FILTER (WHERE translation_status = 'failed') AS failed,
+			COUNT(*) FILTER (WHERE translation_status = 'translated' AND processing_status = 'pending') AS ready_to_process,
+			COUNT(*) AS total
+		FROM %s
+	`, cfg.tableName)).Scan(
+		&stats.Pending,
+		&stats.Translating,
+		&stats.Translated,
+		&stats.Failed,
+		&stats.ReadyToProcess,
+		&stats.Total,
+	); err != nil {
+		slog.Error("source translation stats", "source", cfg.source, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

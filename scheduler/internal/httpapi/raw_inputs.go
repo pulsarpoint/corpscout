@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,21 @@ type rawInputRow struct {
 	Status            string    `json:"status"`
 	TranslationStatus *string   `json:"translation_status,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
+}
+
+type rawInputListSource struct {
+	source       string
+	tableName    string
+	nameColumn   string
+	nativeColumn string
+	translated   bool
+}
+
+var rawInputListSources = []rawInputListSource{
+	{source: "companies_house", tableName: "companies_house_company_raw_inputs", nameColumn: "company_name", nativeColumn: "company_number"},
+	{source: "brreg", tableName: "brreg_company_raw_inputs", nameColumn: "organization_name", nativeColumn: "organization_number", translated: true},
+	{source: "cvr", tableName: "cvr_company_raw_inputs", nameColumn: "company_name", nativeColumn: "cvr_number", translated: true},
+	{source: "ariregister", tableName: "ariregister_company_raw_inputs", nameColumn: "legal_name", nativeColumn: "registry_code", translated: true},
 }
 
 // handleListRawInputs returns a unified paginated view of all raw_inputs tables.
@@ -65,17 +81,15 @@ func (h *Handlers) handleListRawInputs(w http.ResponseWriter, r *http.Request) {
 		commonWhere = append(commonWhere, fmt.Sprintf("processing_status = $%d", len(args)))
 	}
 
-	var chNameExpr, brregNameExpr string
+	var nameExpr string
 	if nameQ != "" {
 		args = append(args, "%"+nameQ+"%")
-		ref := fmt.Sprintf("$%d", len(args))
-		chNameExpr = fmt.Sprintf("company_name ILIKE %s", ref)
-		brregNameExpr = fmt.Sprintf("organization_name ILIKE %s", ref)
+		nameExpr = fmt.Sprintf("$%d", len(args))
 	}
-	var brregTranslationExpr string
+	var translationExpr string
 	if translationStatusFilter != "" {
 		args = append(args, translationStatusFilter)
-		brregTranslationExpr = fmt.Sprintf("translation_status = $%d", len(args))
+		translationExpr = fmt.Sprintf("translation_status = $%d", len(args))
 	}
 
 	buildWhere := func(extra string) string {
@@ -89,37 +103,35 @@ func (h *Handlers) handleListRawInputs(w http.ResponseWriter, r *http.Request) {
 		return "WHERE " + strings.Join(parts, " AND ")
 	}
 
-	chSub := fmt.Sprintf(
-		`SELECT id::text, 'companies_house' AS source, COALESCE(company_name, '') AS name, company_number AS native_id, processing_status AS status, NULL::text AS translation_status, created_at FROM companies_house_company_raw_inputs %s`,
-		buildWhere(chNameExpr),
-	)
-	brregExtra := brregNameExpr
-	if brregTranslationExpr != "" {
-		if brregExtra != "" {
-			brregExtra += " AND " + brregTranslationExpr
-		} else {
-			brregExtra = brregTranslationExpr
-		}
-	}
-	brregSub := fmt.Sprintf(
-		`SELECT id::text, 'brreg' AS source, COALESCE(organization_name, '') AS name, organization_number AS native_id, processing_status AS status, translation_status, created_at FROM brreg_company_raw_inputs %s`,
-		buildWhere(brregExtra),
-	)
-
 	var subs []string
-	switch srcFilter {
-	case "companies_house":
-		if translationStatusFilter == "" {
-			subs = []string{chSub}
+	for _, src := range rawInputListSources {
+		if srcFilter != "" && srcFilter != src.source {
+			continue
 		}
-	case "brreg":
-		subs = []string{brregSub}
-	default:
-		if translationStatusFilter == "" {
-			subs = []string{chSub, brregSub}
-		} else {
-			subs = []string{brregSub}
+		if translationStatusFilter != "" && !src.translated {
+			continue
 		}
+
+		var extra []string
+		if nameExpr != "" {
+			extra = append(extra, fmt.Sprintf("%s ILIKE %s", src.nameColumn, nameExpr))
+		}
+		translationSelect := "NULL::text AS translation_status"
+		if src.translated {
+			translationSelect = "translation_status"
+			if translationExpr != "" {
+				extra = append(extra, translationExpr)
+			}
+		}
+		subs = append(subs, fmt.Sprintf(
+			`SELECT id::text, '%s' AS source, COALESCE(%s, '') AS name, %s AS native_id, processing_status AS status, %s, created_at FROM %s %s`,
+			src.source,
+			src.nameColumn,
+			src.nativeColumn,
+			translationSelect,
+			src.tableName,
+			buildWhere(strings.Join(extra, " AND ")),
+		))
 	}
 	if len(subs) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -157,10 +169,14 @@ func (h *Handlers) handleListRawInputs(w http.ResponseWriter, r *http.Request) {
 	items := []rawInputRow{}
 	for rows.Next() {
 		var row rawInputRow
-		if err := rows.Scan(&row.ID, &row.Source, &row.Name, &row.NativeID, &row.Status, &row.TranslationStatus, &row.CreatedAt); err != nil {
+		var translationStatus sql.NullString
+		if err := rows.Scan(&row.ID, &row.Source, &row.Name, &row.NativeID, &row.Status, &translationStatus, &row.CreatedAt); err != nil {
 			slog.Error("scan raw input row", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
+		}
+		if translationStatus.Valid {
+			row.TranslationStatus = &translationStatus.String
 		}
 		items = append(items, row)
 	}
@@ -214,6 +230,24 @@ func (h *Handlers) rawInputSupport(src db.DataSource) rawInputSupport {
 			},
 			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 				return q.IgnoreBrregRawInput(ctx, id)
+			},
+		}
+	case "cvr_company_raw_inputs":
+		return rawInputSupport{
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryCVRRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreCVRRawInput(ctx, id)
+			},
+		}
+	case "ariregister_company_raw_inputs":
+		return rawInputSupport{
+			retry: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.RetryAriregisterRawInput(ctx, id)
+			},
+			ignore: func(q db.Querier, ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+				return q.IgnoreAriregisterRawInput(ctx, id)
 			},
 		}
 	case "ai_company_profile_raw_inputs":
@@ -439,6 +473,22 @@ func (h *Handlers) handleGetRawInput(w http.ResponseWriter, r *http.Request) {
 		if len(rawPayloadEn) > 0 {
 			row.RawPayloadEn = json.RawMessage(rawPayloadEn)
 		}
+	case "cvr":
+		row, err = h.getTranslatedRawInputDetail(r.Context(), translatedRawInputDetailQuery{
+			source:       "cvr",
+			tableName:    "cvr_company_raw_inputs",
+			nameColumn:   "company_name",
+			nativeColumn: "cvr_number",
+			typeColumn:   "company_type",
+		}, idStr)
+	case "ariregister":
+		row, err = h.getTranslatedRawInputDetail(r.Context(), translatedRawInputDetailQuery{
+			source:       "ariregister",
+			tableName:    "ariregister_company_raw_inputs",
+			nameColumn:   "legal_name",
+			nativeColumn: "registry_code",
+			typeColumn:   "legal_form",
+		}, idStr)
 	default:
 		writeError(w, http.StatusBadRequest, "unknown source")
 		return
@@ -455,4 +505,40 @@ func (h *Handlers) handleGetRawInput(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, row)
+}
+
+type translatedRawInputDetailQuery struct {
+	source       string
+	tableName    string
+	nameColumn   string
+	nativeColumn string
+	typeColumn   string
+}
+
+func (h *Handlers) getTranslatedRawInputDetail(ctx context.Context, cfg translatedRawInputDetailQuery, id string) (rawInputDetail, error) {
+	var row rawInputDetail
+	var rawPayloadEn []byte
+	err := h.pool.QueryRow(ctx, fmt.Sprintf(`
+		SELECT id::text, '%s', %s, %s,
+		       processing_status, COALESCE(%s,''), registration_status, COALESCE(website,''), COALESCE(country_iso2,''),
+		       COALESCE(run_id,''), processing_attempts, COALESCE(processing_error,''),
+		       payload_hash, raw_payload, raw_payload_en,
+		       translation_status, translation_attempts, COALESCE(translation_error,''), COALESCE(translation_model,''),
+		       COALESCE(translation_prompt_version,''), COALESCE(translation_fx_source,''), COALESCE(translation_fx_rate_date::text,''),
+		       translated_at, first_seen_at, last_seen_at, processed_at, created_at, updated_at
+		FROM %s WHERE id = $1
+	`, cfg.source, cfg.nameColumn, cfg.nativeColumn, cfg.typeColumn, cfg.tableName), id).Scan(
+		&row.ID, &row.Source, &row.Name, &row.NativeID,
+		&row.Status, &row.CompanyType, &row.RegistrationStatus, &row.Website, &row.CountryISO2,
+		&row.RunID, &row.ProcessingAttempts, &row.ProcessingError,
+		&row.PayloadHash, &row.RawPayload, &rawPayloadEn,
+		&row.TranslationStatus, &row.TranslationAttempts, &row.TranslationError, &row.TranslationModel,
+		&row.TranslationPromptVersion, &row.TranslationFxSource, &row.TranslationFxRateDate,
+		&row.TranslatedAt,
+		&row.FirstSeenAt, &row.LastSeenAt, &row.ProcessedAt, &row.CreatedAt, &row.UpdatedAt,
+	)
+	if len(rawPayloadEn) > 0 {
+		row.RawPayloadEn = json.RawMessage(rawPayloadEn)
+	}
+	return row, err
 }

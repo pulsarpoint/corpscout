@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	pgx "github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"go.temporal.io/sdk/client"
@@ -25,11 +25,18 @@ type riverInserter interface {
 	JobCancel(context.Context, int64) (*rivertype.JobRow, error)
 }
 
+type dbPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 // Handlers holds shared dependencies for all REST API handlers.
 type Handlers struct {
 	db            db.Querier
 	rv            riverInserter
-	pool          *pgxpool.Pool
+	pool          dbPool
 	crawler       *crawlerclient.Client
 	s3            *s3client.Client
 	postgrestURL  string
@@ -38,7 +45,7 @@ type Handlers struct {
 }
 
 // NewHandlers constructs Handlers. pool, rv, crawler, s3 and temporal may be nil in tests.
-func NewHandlers(q db.Querier, rv riverInserter, pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string, tc client.Client, temporalUIURL string) *Handlers {
+func NewHandlers(q db.Querier, rv riverInserter, pool dbPool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string, tc client.Client, temporalUIURL string) *Handlers {
 	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, s3: s3, postgrestURL: postgrestURL, temporal: tc, temporalUIURL: temporalUIURL}
 }
 
@@ -77,6 +84,10 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Post("/sources/{name}/process", h.handleProcessSource)
 		r.Post("/sources/brreg/translate", h.handleTranslateBrreg)
 		r.Get("/sources/brreg/translation-stats", h.handleBrregTranslationStats)
+		r.Post("/sources/cvr/translate", h.handleTranslateCVR)
+		r.Get("/sources/cvr/translation-stats", h.handleCVRTranslationStats)
+		r.Post("/sources/ariregister/translate", h.handleTranslateAriregister)
+		r.Get("/sources/ariregister/translation-stats", h.handleAriregisterTranslationStats)
 		r.Post("/sources/{name}/probe", h.handleProbeSource)
 		r.Post("/sources/{name}/raw-inputs/{id}/retry", h.handleRetryRawInput)
 		r.Post("/sources/{name}/raw-inputs/{id}/ignore", h.handleIgnoreRawInput)

@@ -11,12 +11,14 @@ import (
 
 	"github.com/google/uuid"
 	pgx "github.com/jackc/pgx/v5"
+	"github.com/pashagolub/pgxmock/v3"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/client"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/httpapi"
@@ -70,6 +72,38 @@ func (r *riverInsertRecorder) InsertTx(context.Context, pgx.Tx, river.JobArgs, *
 
 func (r *riverInsertRecorder) JobCancel(context.Context, int64) (*rivertype.JobRow, error) {
 	return &rivertype.JobRow{}, nil
+}
+
+type temporalExecuteRecorder struct {
+	client.Client
+	options  client.StartWorkflowOptions
+	workflow interface{}
+	args     []interface{}
+}
+
+func (t *temporalExecuteRecorder) ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow interface{}, args ...interface{}) (client.WorkflowRun, error) {
+	t.options = options
+	t.workflow = workflow
+	t.args = args
+	return workflowRunStub{workflowID: options.ID, runID: "run-1"}, nil
+}
+
+type workflowRunStub struct {
+	client.WorkflowRun
+	workflowID string
+	runID      string
+}
+
+func (w workflowRunStub) GetWorkflowID() string {
+	return w.workflowID
+}
+
+func (w workflowRunStub) GetRunID() string {
+	return w.runID
+}
+
+func (w workflowRunStub) Get(context.Context, interface{}) error {
+	return nil
 }
 
 func TestListSources_returns_all(t *testing.T) {
@@ -398,6 +432,40 @@ func TestRetryRawInput_aiCompanyProfile_returnsOKWithoutRiver(t *testing.T) {
 	q.AssertExpectations(t)
 }
 
+func TestRetryRawInput_cvrAndAriregisterReturnOKWithoutRiver(t *testing.T) {
+	tests := []struct {
+		name       string
+		tableName  string
+		methodName string
+	}{
+		{name: "cvr", tableName: "cvr_company_raw_inputs", methodName: "RetryCVRRawInput"},
+		{name: "ariregister", tableName: "ariregister_company_raw_inputs", methodName: "RetryAriregisterRawInput"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &stubQuerier{}
+			id := uuid.New()
+
+			q.On("GetSourceByName", mock.Anything, tt.name).Return(db.DataSource{
+				Name:           tt.name,
+				InputTableName: tt.tableName,
+			}, nil)
+			q.On(tt.methodName, mock.Anything, id).Return(id, nil)
+
+			r := routerForHandlers(q)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+tt.name+"/raw-inputs/"+id.String()+"/retry", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.JSONEq(t, `{"status":"retried"}`, w.Body.String())
+			q.AssertExpectations(t)
+		})
+	}
+}
+
 func TestRetryRawInput_nonRetryableRow_returns422(t *testing.T) {
 	q := &stubQuerier{}
 	id := uuid.New()
@@ -437,6 +505,40 @@ func TestIgnoreRawInput_domainDiscovery_returnsOK(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.JSONEq(t, `{"status":"ignored"}`, w.Body.String())
 	q.AssertExpectations(t)
+}
+
+func TestIgnoreRawInput_cvrAndAriregisterReturnOK(t *testing.T) {
+	tests := []struct {
+		name       string
+		tableName  string
+		methodName string
+	}{
+		{name: "cvr", tableName: "cvr_company_raw_inputs", methodName: "IgnoreCVRRawInput"},
+		{name: "ariregister", tableName: "ariregister_company_raw_inputs", methodName: "IgnoreAriregisterRawInput"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &stubQuerier{}
+			id := uuid.New()
+
+			q.On("GetSourceByName", mock.Anything, tt.name).Return(db.DataSource{
+				Name:           tt.name,
+				InputTableName: tt.tableName,
+			}, nil)
+			q.On(tt.methodName, mock.Anything, id).Return(id, nil)
+
+			r := routerForHandlers(q)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+tt.name+"/raw-inputs/"+id.String()+"/ignore", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.JSONEq(t, `{"status":"ignored"}`, w.Body.String())
+			q.AssertExpectations(t)
+		})
+	}
 }
 
 func TestIgnoreRawInput_nonIgnorableRow_returns422(t *testing.T) {
@@ -580,6 +682,110 @@ func TestTranslateBrreg_invalidFXDate_returns400(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestTranslateSource_missingTemporal_returns503(t *testing.T) {
+	tests := []string{"cvr", "ariregister"}
+	for _, source := range tests {
+		t.Run(source, func(t *testing.T) {
+			q := &stubQuerier{}
+
+			r := routerFor(newTestHandlers(q))
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+source+"/translate", strings.NewReader(`{}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusServiceUnavailable, w.Code)
+		})
+	}
+}
+
+func TestTranslateSource_invalidFXDateReturns400(t *testing.T) {
+	tests := []string{"cvr", "ariregister"}
+	for _, source := range tests {
+		t.Run(source, func(t *testing.T) {
+			q := &stubQuerier{}
+
+			r := routerFor(newTestHandlers(q))
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+source+"/translate", strings.NewReader(`{"fx_rate_date":"not-a-date"}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestTranslateSource_startsGenericWorkflowWithSourceParameters(t *testing.T) {
+	tests := []struct {
+		source    string
+		tableName string
+		lang      string
+	}{
+		{source: "cvr", tableName: "cvr_company_raw_inputs", lang: "da"},
+		{source: "ariregister", tableName: "ariregister_company_raw_inputs", lang: "et"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			tc := &temporalExecuteRecorder{}
+			r := routerFor(httpapi.NewHandlers(&stubQuerier{}, nil, nil, nil, nil, "", tc, ""))
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+tt.source+"/translate", strings.NewReader(`{"ids":["raw-id"],"fx_rate_date":"2026-05-21"}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "TranslateSourceRawInputs", tc.workflow)
+			assert.Equal(t, "corpscout-pipelines", tc.options.TaskQueue)
+			require.Len(t, tc.args, 1)
+			input, ok := tc.args[0].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, tt.source, input["source"])
+			assert.Equal(t, tt.tableName, input["table_name"])
+			assert.Equal(t, tt.lang, input["source_lang"])
+			assert.Equal(t, "en", input["target_lang"])
+			assert.Equal(t, []string{"raw-id"}, input["ids"])
+			assert.Equal(t, "v1", input["prompt_version"])
+			assert.Equal(t, "qwen3:6b", input["model"])
+			assert.Equal(t, "2026-05-21", input["fx_rate_date"])
+		})
+	}
+}
+
+func TestTranslationStats_sourceRoutesUseAllowlistedTables(t *testing.T) {
+	tests := []struct {
+		source    string
+		tableName string
+	}{
+		{source: "cvr", tableName: "cvr_company_raw_inputs"},
+		{source: "ariregister", tableName: "ariregister_company_raw_inputs"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			pool := newSQLContainsMock(t)
+			defer pool.Close()
+
+			pool.ExpectQuery(tt.tableName + ";;translation_status = 'pending';;translation_status = 'translated';;processing_status = 'pending'").
+				WillReturnRows(pgxmock.NewRows([]string{"pending", "translating", "translated", "failed", "ready_to_process", "total"}).
+					AddRow(int64(1), int64(2), int64(3), int64(4), int64(5), int64(15)))
+
+			r := routerFor(httpapi.NewHandlers(&stubQuerier{}, nil, pool, nil, nil, "", nil, ""))
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/sources/"+tt.source+"/translation-stats", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.JSONEq(t, `{"pending":1,"translating":2,"translated":3,"failed":4,"ready_to_process":5,"total":15}`, w.Body.String())
+			require.NoError(t, pool.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestProcessSource_missingRiver_returns503(t *testing.T) {
