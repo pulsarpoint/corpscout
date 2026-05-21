@@ -63,7 +63,7 @@ type riverInsertRecorder struct {
 func (r *riverInsertRecorder) Insert(_ context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 	r.args = args
 	r.opts = opts
-	return &rivertype.JobInsertResult{}, nil
+	return &rivertype.JobInsertResult{Job: &rivertype.JobRow{ID: 42}}, nil
 }
 
 func (r *riverInsertRecorder) InsertTx(context.Context, pgx.Tx, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error) {
@@ -790,7 +790,11 @@ func TestTranslationStats_sourceRoutesUseAllowlistedTables(t *testing.T) {
 
 func TestProcessSource_missingRiver_returns503(t *testing.T) {
 	q := &stubQuerier{}
-	q.On("GetSourceByName", mock.Anything, "brreg").Return(db.DataSource{Name: "brreg"}, nil)
+	processorTaskType := "source_process"
+	q.On("GetSourceByName", mock.Anything, "brreg").Return(db.DataSource{
+		Name:              "brreg",
+		ProcessorTaskType: &processorTaskType,
+	}, nil)
 
 	r := routerFor(newTestHandlers(q))
 
@@ -799,6 +803,51 @@ func TestProcessSource_missingRiver_returns503(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestProcessSource_registrySourcesWithoutProcessorTaskReturn422WithoutRiverInsert(t *testing.T) {
+	for _, source := range []string{"cvr", "ariregister"} {
+		t.Run(source, func(t *testing.T) {
+			q := &stubQuerier{}
+			rv := &riverInsertRecorder{}
+			q.On("GetSourceByName", mock.Anything, source).Return(db.DataSource{Name: source}, nil)
+
+			r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, nil, "", nil, ""))
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/"+source+"/process", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+			require.Contains(t, w.Body.String(), "source processing not supported")
+			require.Nil(t, rv.args)
+			require.Nil(t, rv.opts)
+			q.AssertExpectations(t)
+		})
+	}
+}
+
+func TestProcessSource_withProcessorTaskEnqueuesLegacySourceProcess(t *testing.T) {
+	q := &stubQuerier{}
+	rv := &riverInsertRecorder{}
+	processorTaskType := "source_process"
+	q.On("GetSourceByName", mock.Anything, "brreg").Return(db.DataSource{
+		Name:              "brreg",
+		ProcessorTaskType: &processorTaskType,
+	}, nil)
+
+	r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, nil, "", nil, ""))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/brreg/process", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.JSONEq(t, `{"job_id":42,"status":"enqueued"}`, w.Body.String())
+	require.Equal(t, workers.SourceProcessArgs{SourceName: "brreg"}, rv.args)
+	require.NotNil(t, rv.opts)
+	require.Equal(t, "source_process", rv.opts.Queue)
 	q.AssertExpectations(t)
 }
 

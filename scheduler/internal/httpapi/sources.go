@@ -541,8 +541,13 @@ func (h *Handlers) handleTranslateSource(w http.ResponseWriter, r *http.Request,
 
 func (h *Handlers) handleProcessSource(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
+	source, err := h.db.GetSourceByName(r.Context(), name)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+	if source.ProcessorTaskType == nil || *source.ProcessorTaskType == "" {
+		writeError(w, http.StatusUnprocessableEntity, "source processing not supported")
 		return
 	}
 	if h.rv == nil {

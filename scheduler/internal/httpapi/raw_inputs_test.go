@@ -161,6 +161,71 @@ func TestGetRawInput_includesTranslatedPayloadAndMetadata(t *testing.T) {
 	}
 }
 
+func TestGetRawInput_translatedSourcesCoalesceNullableDetailTextFields(t *testing.T) {
+	tests := []struct {
+		name         string
+		source       string
+		tableName    string
+		nameColumn   string
+		nativeColumn string
+		typeColumn   string
+	}{
+		{
+			name:         "cvr",
+			source:       "cvr",
+			tableName:    "cvr_company_raw_inputs",
+			nameColumn:   "company_name",
+			nativeColumn: "cvr_number",
+			typeColumn:   "company_type",
+		},
+		{
+			name:         "ariregister",
+			source:       "ariregister",
+			tableName:    "ariregister_company_raw_inputs",
+			nameColumn:   "legal_name",
+			nativeColumn: "registry_code",
+			typeColumn:   "legal_form",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := newSQLContainsMock(t)
+			defer pool.Close()
+
+			now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+			pool.ExpectQuery(tt.tableName + ";;COALESCE(" + tt.nameColumn + ",'');;COALESCE(" + tt.nativeColumn + ",'');;COALESCE(processing_status,'');;COALESCE(" + tt.typeColumn + ",'');;COALESCE(registration_status,'');;raw_payload_en;;translation_status").
+				WithArgs("raw-id").
+				WillReturnRows(pgxmock.NewRows([]string{
+					"id", "source", "name", "native_id", "processing_status", "company_type", "registration_status", "website", "country_iso2",
+					"run_id", "processing_attempts", "processing_error", "payload_hash", "raw_payload", "raw_payload_en",
+					"translation_status", "translation_attempts", "translation_error", "translation_model", "translation_prompt_version",
+					"translation_fx_source", "translation_fx_rate_date", "translated_at", "first_seen_at", "last_seen_at", "processed_at", "created_at", "updated_at",
+				}).AddRow(
+					"raw-id", tt.source, "", "", "pending", "", "", "", "",
+					"", 1, "", "hash", []byte(`{"source":"raw"}`), []byte(`{"translated":true}`),
+					"translated", 2, "", "qwen3:6b", "v1", "exchangerate.host", "2026-05-21", now,
+					now, now, nil, now, now,
+				))
+
+			r := routerFor(httpapi.NewHandlers(&stubQuerier{}, nil, pool, nil, nil, "", nil, ""))
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/raw-inputs/"+tt.source+"/raw-id", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, tt.source, body["source"])
+			assert.Equal(t, "", body["name"])
+			assert.Equal(t, "translated", body["translation_status"])
+			assert.Equal(t, "qwen3:6b", body["translation_model"])
+			assert.NotNil(t, body["raw_payload_en"])
+			require.NoError(t, pool.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestGetRawInput_unsupportedSourceReturnsSafeClientError(t *testing.T) {
 	pool := newSQLContainsMock(t)
 	defer pool.Close()

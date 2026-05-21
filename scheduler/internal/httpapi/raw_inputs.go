@@ -519,11 +519,11 @@ func (h *Handlers) getTranslatedRawInputDetail(ctx context.Context, cfg translat
 	var row rawInputDetail
 	var rawPayloadEn []byte
 	err := h.pool.QueryRow(ctx, fmt.Sprintf(`
-		SELECT id::text, '%s', %s, %s,
-		       processing_status, COALESCE(%s,''), registration_status, COALESCE(website,''), COALESCE(country_iso2,''),
+		SELECT id::text, '%s', COALESCE(%s,''), COALESCE(%s,''),
+		       COALESCE(processing_status,''), COALESCE(%s,''), COALESCE(registration_status,''), COALESCE(website,''), COALESCE(country_iso2,''),
 		       COALESCE(run_id,''), processing_attempts, COALESCE(processing_error,''),
-		       payload_hash, raw_payload, raw_payload_en,
-		       translation_status, translation_attempts, COALESCE(translation_error,''), COALESCE(translation_model,''),
+		       COALESCE(payload_hash,''), raw_payload, raw_payload_en,
+		       COALESCE(translation_status,''), translation_attempts, COALESCE(translation_error,''), COALESCE(translation_model,''),
 		       COALESCE(translation_prompt_version,''), COALESCE(translation_fx_source,''), COALESCE(translation_fx_rate_date::text,''),
 		       translated_at, first_seen_at, last_seen_at, processed_at, created_at, updated_at
 		FROM %s WHERE id = $1
