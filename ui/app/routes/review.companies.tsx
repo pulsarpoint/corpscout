@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowUpDown, ArrowUp, ArrowDown, Search, X } from "lucide-react";
 import { api } from "~/lib/api";
-import type { RawInput, RawInputDetail } from "~/types/api";
+import type { RawInput } from "~/types/api";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import {
@@ -20,13 +20,7 @@ import {
 } from "~/components/ui/table";
 import { Badge } from "~/components/ui/badge";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Separator } from "~/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "~/components/ui/sheet";
+import { RawInputDetailSheet } from "~/components/app/RawInputDetailSheet";
 
 const PAGE_SIZE = 50;
 
@@ -67,141 +61,6 @@ function SortIcon({ column, currentSort, currentDir }: { column: string; current
   return currentDir === "asc"
     ? <ArrowUp className="ml-1 inline size-3" />
     : <ArrowDown className="ml-1 inline size-3" />;
-}
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  if (!value && value !== 0) return null;
-  return (
-    <div className="grid grid-cols-[140px_1fr] gap-2 py-1.5">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm break-all">{value}</span>
-    </div>
-  );
-}
-
-function RawInputDetailSheet({
-  open,
-  onClose,
-  source,
-  id,
-}: {
-  open: boolean;
-  onClose: () => void;
-  source: string;
-  id: string;
-}) {
-  const [detail, setDetail] = useState<RawInputDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [jsonExpanded, setJsonExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!open || !id) return;
-    setDetail(null);
-    setJsonExpanded(false);
-    setLoading(true);
-    api.getRawInput(source, id).then(setDetail).finally(() => setLoading(false));
-  }, [open, source, id]);
-
-  const typeLabel = detail?.source === "companies_house"
-    ? detail.company_type
-    : detail?.registration_status;
-
-  return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[480px] sm:max-w-[480px] overflow-y-auto">
-        {loading && (
-          <div className="space-y-3 pt-6">
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-full" />
-          </div>
-        )}
-
-        {detail && (
-          <>
-            <SheetHeader className="pb-4">
-              <SheetTitle className="text-lg leading-snug">{detail.name}</SheetTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="text-xs">
-                  {SOURCE_LABELS[detail.source] ?? detail.source}
-                </Badge>
-                <Badge variant={statusBadgeVariant(detail.status)} className="text-xs">
-                  {detail.status}
-                </Badge>
-                {detail.country_iso2 && (
-                  <span className="text-xs text-muted-foreground">{detail.country_iso2}</span>
-                )}
-              </div>
-            </SheetHeader>
-
-            <Separator className="mb-4" />
-
-            <section className="space-y-0.5 mb-4">
-              <DetailRow label="Native ID" value={
-                <span className="font-mono text-xs">{detail.native_id}</span>
-              } />
-              {typeLabel && <DetailRow label="Type" value={typeLabel} />}
-              {detail.website && <DetailRow label="Website" value={
-                <a href={detail.website} target="_blank" rel="noreferrer"
-                   className="text-primary underline-offset-4 hover:underline">
-                  {detail.website}
-                </a>
-              } />}
-              {detail.run_id && <DetailRow label="Run ID" value={
-                <span className="font-mono text-xs">{detail.run_id}</span>
-              } />}
-            </section>
-
-            <Separator className="mb-4" />
-
-            <section className="space-y-0.5 mb-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Timestamps</p>
-              <DetailRow label="Created" value={`${new Date(detail.created_at).toLocaleString()} (${timeAgo(detail.created_at)})`} />
-              <DetailRow label="First seen" value={`${new Date(detail.first_seen_at).toLocaleString()} (${timeAgo(detail.first_seen_at)})`} />
-              <DetailRow label="Last seen" value={`${new Date(detail.last_seen_at).toLocaleString()} (${timeAgo(detail.last_seen_at)})`} />
-              {detail.processed_at && (
-                <DetailRow label="Processed" value={`${new Date(detail.processed_at).toLocaleString()} (${timeAgo(detail.processed_at)})`} />
-              )}
-            </section>
-
-            <Separator className="mb-4" />
-
-            <section className="space-y-0.5 mb-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Processing</p>
-              <DetailRow label="Attempts" value={detail.processing_attempts} />
-              <DetailRow label="Hash" value={
-                <span className="font-mono text-xs">{detail.payload_hash.slice(0, 16)}…</span>
-              } />
-              {detail.processing_error && (
-                <div className="mt-2 rounded-md bg-destructive/10 px-3 py-2">
-                  <p className="text-xs font-medium text-destructive mb-1">Error</p>
-                  <p className="text-xs text-destructive break-all">{detail.processing_error}</p>
-                </div>
-              )}
-            </section>
-
-            <Separator className="mb-4" />
-
-            <section>
-              <button
-                className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2"
-                onClick={() => setJsonExpanded((v) => !v)}
-              >
-                Raw payload
-                <span className="normal-case font-normal">{jsonExpanded ? "hide" : "show"}</span>
-              </button>
-              {jsonExpanded && (
-                <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-96 whitespace-pre-wrap break-all">
-                  {JSON.stringify(detail.raw_payload, null, 2)}
-                </pre>
-              )}
-            </section>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
 }
 
 export default function ReviewCompaniesPage() {
