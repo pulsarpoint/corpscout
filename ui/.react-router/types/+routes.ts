@@ -24,6 +24,11 @@ type Pages = {
       "name": string;
     };
   };
+  "/sources/:name/raw_input": {
+    params: {
+      "name": string;
+    };
+  };
   "/sources/:name/pipeline": {
     params: {
       "name": string;
@@ -81,7 +86,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/companies/:id" | "/sources/:name" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/review/financials" | "/review/companies" | "/review/domains" | "/jobs";
+    page: "/" | "/companies/:id" | "/sources/:name" | "/sources/:name/raw_input" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/review/financials" | "/review/companies" | "/review/domains" | "/jobs";
   };
   "routes/companies_.$id.tsx": {
     id: "routes/companies_.$id";
@@ -89,7 +94,11 @@ type RouteFiles = {
   };
   "routes/sources_.$name.tsx": {
     id: "routes/sources_.$name";
-    page: "/sources/:name" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs";
+    page: "/sources/:name" | "/sources/:name/raw_input" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs";
+  };
+  "routes/sources_.$name.raw_input.tsx": {
+    id: "routes/sources_.$name.raw_input";
+    page: "/sources/:name/raw_input";
   };
   "routes/sources_.$name.pipeline.tsx": {
     id: "routes/sources_.$name.pipeline";
@@ -165,6 +174,7 @@ type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/companies_.$id": typeof import("./app/routes/companies_.$id.tsx");
   "routes/sources_.$name": typeof import("./app/routes/sources_.$name.tsx");
+  "routes/sources_.$name.raw_input": typeof import("./app/routes/sources_.$name.raw_input.tsx");
   "routes/sources_.$name.pipeline": typeof import("./app/routes/sources_.$name.pipeline.tsx");
   "routes/sources_.$name.schedule": typeof import("./app/routes/sources_.$name.schedule.tsx");
   "routes/sources_.$name._index": typeof import("./app/routes/sources_.$name._index.tsx");
