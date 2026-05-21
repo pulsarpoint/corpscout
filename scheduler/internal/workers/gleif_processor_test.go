@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -25,7 +26,7 @@ func TestGLEIFProcessor_NewCompany_CreatesSuggestion(t *testing.T) {
 
 	rawRow := db.GleifCompanyRawInput{
 		ID:                      rawID,
-		SourcePullRunID:         runID,
+		SourcePullRunID:         pgtype.UUID{Bytes: runID, Valid: true},
 		Lei:                     "TEST123",
 		LegalName:               ptrStr("Test Corp"),
 		HeadquartersCountryCode: ptrStr("GB"),

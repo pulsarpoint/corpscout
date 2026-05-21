@@ -123,7 +123,7 @@ func (w *SourcePullWorker) upsertRecord(ctx context.Context, sourceName string, 
 		parentLEI, _ := rec.RawData["direct_parent_lei"].(string)
 		ultimateLEI, _ := rec.RawData["ultimate_parent_lei"].(string)
 		row, err := w.db.UpsertGLEIFCompanyRawInput(ctx, db.UpsertGLEIFCompanyRawInputParams{
-			SourcePullRunID:         runID,
+			SourcePullRunID:         pgtype.UUID{Bytes: runID, Valid: true},
 			SourceNativeID:          lei,
 			Lei:                     lei,
 			LegalName:               ptrStr(rec.Name),

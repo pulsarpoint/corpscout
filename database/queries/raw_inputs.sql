@@ -116,6 +116,90 @@ UPDATE brreg_company_raw_inputs
 SET processing_status = 'failed', processing_error = $2, updated_at = now()
 WHERE id = $1;
 
+-- CVR
+
+-- name: UpsertCVRRawInput :one
+INSERT INTO cvr_company_raw_inputs (
+    source_pull_run_id, source_native_id, cvr_number, company_name,
+    registration_status, company_type, website, email, phone, country_iso2,
+    source_updated_at, raw_payload, payload_hash, run_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+ON CONFLICT (cvr_number, payload_hash) DO UPDATE SET last_seen_at = now()
+RETURNING *;
+
+-- name: ClaimPendingCVRRawInputs :many
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'processing',
+    processing_attempts = processing_attempts + 1,
+    processing_lease_by = $1,
+    processing_lease_until = now() + ($2 * interval '1 second'),
+    updated_at = now()
+WHERE id IN (
+    SELECT id FROM cvr_company_raw_inputs
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
+    ORDER BY created_at
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: MarkCVRRawInputProcessed :exec
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'processed', processed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: MarkCVRRawInputFailed :exec
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'failed', processing_error = $2, updated_at = now()
+WHERE id = $1;
+
+-- Ariregister
+
+-- name: UpsertAriregisterRawInput :one
+INSERT INTO ariregister_company_raw_inputs (
+    source_pull_run_id, source_native_id, registry_code, legal_name,
+    registration_status, legal_form, vat_number, website, email, phone, country_iso2,
+    source_updated_at, raw_payload, payload_hash, run_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (registry_code, payload_hash) DO UPDATE SET last_seen_at = now()
+RETURNING *;
+
+-- name: ClaimPendingAriregisterRawInputs :many
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'processing',
+    processing_attempts = processing_attempts + 1,
+    processing_lease_by = $1,
+    processing_lease_until = now() + ($2 * interval '1 second'),
+    updated_at = now()
+WHERE id IN (
+    SELECT id FROM ariregister_company_raw_inputs
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
+    ORDER BY created_at
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: MarkAriregisterRawInputProcessed :exec
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'processed', processed_at = now(), updated_at = now()
+WHERE id = $1;
+
+-- name: MarkAriregisterRawInputFailed :exec
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'failed', processing_error = $2, updated_at = now()
+WHERE id = $1;
+
 -- name: RetryGLEIFRawInput :one
 UPDATE gleif_company_raw_inputs
 SET processing_status = 'pending',
@@ -176,6 +260,46 @@ SET processing_status = 'ignored',
 WHERE id = $1 AND processing_status IN ('pending', 'failed')
 RETURNING id;
 
+-- name: RetryCVRRawInput :one
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreCVRRawInput :one
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
+-- name: RetryAriregisterRawInput :one
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id;
+
+-- name: IgnoreAriregisterRawInput :one
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id;
+
 -- name: RetryAIRawInput :one
 UPDATE ai_company_profile_raw_inputs
 SET processing_status = 'pending',
@@ -224,3 +348,9 @@ SELECT * FROM companies_house_company_raw_inputs WHERE id = $1;
 
 -- name: GetBrregRawInputForCompanyApproval :one
 SELECT * FROM brreg_company_raw_inputs WHERE id = $1;
+
+-- name: GetCVRRawInputForCompanyApproval :one
+SELECT * FROM cvr_company_raw_inputs WHERE id = $1;
+
+-- name: GetAriregisterRawInputForCompanyApproval :one
+SELECT * FROM ariregister_company_raw_inputs WHERE id = $1;

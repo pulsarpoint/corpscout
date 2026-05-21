@@ -85,6 +85,46 @@ type AiCompanyProfileRawInput struct {
 	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
+type AriregisterCompanyRawInput struct {
+	ID                       uuid.UUID          `json:"id"`
+	SourcePullRunID          pgtype.UUID        `json:"source_pull_run_id"`
+	SourceNativeID           string             `json:"source_native_id"`
+	RegistryCode             string             `json:"registry_code"`
+	LegalName                *string            `json:"legal_name"`
+	RegistrationStatus       *string            `json:"registration_status"`
+	LegalForm                *string            `json:"legal_form"`
+	VatNumber                *string            `json:"vat_number"`
+	Website                  *string            `json:"website"`
+	Email                    *string            `json:"email"`
+	Phone                    *string            `json:"phone"`
+	CountryIso2              *string            `json:"country_iso2"`
+	SourceUpdatedAt          pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload               json.RawMessage    `json:"raw_payload"`
+	RawPayloadEn             []byte             `json:"raw_payload_en"`
+	PayloadHash              string             `json:"payload_hash"`
+	FirstSeenAt              time.Time          `json:"first_seen_at"`
+	LastSeenAt               time.Time          `json:"last_seen_at"`
+	ProcessingStatus         string             `json:"processing_status"`
+	ProcessingAttempts       int32              `json:"processing_attempts"`
+	ProcessingError          *string            `json:"processing_error"`
+	ProcessingLeaseBy        *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil     pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt              pgtype.Timestamptz `json:"processed_at"`
+	RunID                    *string            `json:"run_id"`
+	TranslationStatus        string             `json:"translation_status"`
+	TranslationAttempts      int32              `json:"translation_attempts"`
+	TranslationError         *string            `json:"translation_error"`
+	TranslationModel         *string            `json:"translation_model"`
+	TranslationPromptVersion *string            `json:"translation_prompt_version"`
+	TranslatedAt             pgtype.Timestamptz `json:"translated_at"`
+	TranslationLeaseBy       *string            `json:"translation_lease_by"`
+	TranslationLeaseUntil    pgtype.Timestamptz `json:"translation_lease_until"`
+	TranslationFxSource      *string            `json:"translation_fx_source"`
+	TranslationFxRateDate    pgtype.Date        `json:"translation_fx_rate_date"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+}
+
 type BrregCompanyRawInput struct {
 	ID                       uuid.UUID          `json:"id"`
 	SourcePullRunID          pgtype.UUID        `json:"source_pull_run_id"`
@@ -516,6 +556,45 @@ type CveEntityLinkSuggestion struct {
 	UpdatedAt                 time.Time          `json:"updated_at"`
 }
 
+type CvrCompanyRawInput struct {
+	ID                       uuid.UUID          `json:"id"`
+	SourcePullRunID          pgtype.UUID        `json:"source_pull_run_id"`
+	SourceNativeID           string             `json:"source_native_id"`
+	CvrNumber                string             `json:"cvr_number"`
+	CompanyName              *string            `json:"company_name"`
+	RegistrationStatus       *string            `json:"registration_status"`
+	CompanyType              *string            `json:"company_type"`
+	Website                  *string            `json:"website"`
+	Email                    *string            `json:"email"`
+	Phone                    *string            `json:"phone"`
+	CountryIso2              *string            `json:"country_iso2"`
+	SourceUpdatedAt          pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload               json.RawMessage    `json:"raw_payload"`
+	RawPayloadEn             []byte             `json:"raw_payload_en"`
+	PayloadHash              string             `json:"payload_hash"`
+	FirstSeenAt              time.Time          `json:"first_seen_at"`
+	LastSeenAt               time.Time          `json:"last_seen_at"`
+	ProcessingStatus         string             `json:"processing_status"`
+	ProcessingAttempts       int32              `json:"processing_attempts"`
+	ProcessingError          *string            `json:"processing_error"`
+	ProcessingLeaseBy        *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil     pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt              pgtype.Timestamptz `json:"processed_at"`
+	RunID                    *string            `json:"run_id"`
+	TranslationStatus        string             `json:"translation_status"`
+	TranslationAttempts      int32              `json:"translation_attempts"`
+	TranslationError         *string            `json:"translation_error"`
+	TranslationModel         *string            `json:"translation_model"`
+	TranslationPromptVersion *string            `json:"translation_prompt_version"`
+	TranslatedAt             pgtype.Timestamptz `json:"translated_at"`
+	TranslationLeaseBy       *string            `json:"translation_lease_by"`
+	TranslationLeaseUntil    pgtype.Timestamptz `json:"translation_lease_until"`
+	TranslationFxSource      *string            `json:"translation_fx_source"`
+	TranslationFxRateDate    pgtype.Date        `json:"translation_fx_rate_date"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+}
+
 type DataSource struct {
 	ID                   uuid.UUID          `json:"id"`
 	Name                 string             `json:"name"`
@@ -616,7 +695,7 @@ type DomainImportBatch struct {
 
 type GleifCompanyRawInput struct {
 	ID                      uuid.UUID          `json:"id"`
-	SourcePullRunID         uuid.UUID          `json:"source_pull_run_id"`
+	SourcePullRunID         pgtype.UUID        `json:"source_pull_run_id"`
 	SourceNativeID          string             `json:"source_native_id"`
 	Lei                     string             `json:"lei"`
 	LegalName               *string            `json:"legal_name"`
@@ -638,6 +717,12 @@ type GleifCompanyRawInput struct {
 	CreatedAt               time.Time          `json:"created_at"`
 	UpdatedAt               time.Time          `json:"updated_at"`
 	RunID                   *string            `json:"run_id"`
+	LegalJurisdiction       *string            `json:"legal_jurisdiction"`
+	LegalFormCode           *string            `json:"legal_form_code"`
+	LegalFormName           *string            `json:"legal_form_name"`
+	RegistrationAuthorityID *string            `json:"registration_authority_id"`
+	EntityCategory          *string            `json:"entity_category"`
+	EntityCreationDate      pgtype.Date        `json:"entity_creation_date"`
 }
 
 type OpenSourceProject struct {

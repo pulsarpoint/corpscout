@@ -122,7 +122,7 @@ func (p *GLEIFProcessor) linkSuggestion(ctx context.Context, src db.DataSource, 
 		SourceID:         src.ID,
 		SourceInputTable: "gleif_company_raw_inputs",
 		SourceInputKey:   row.ID.String(),
-		SourcePullRunID:  pgtype.UUID{Bytes: row.SourcePullRunID, Valid: true},
+		SourcePullRunID:  row.SourcePullRunID,
 	})
 	return errors.Wrap(err, "insert source link")
 }

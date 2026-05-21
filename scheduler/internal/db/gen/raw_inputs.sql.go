@@ -13,6 +13,91 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimPendingAriregisterRawInputs = `-- name: ClaimPendingAriregisterRawInputs :many
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'processing',
+    processing_attempts = processing_attempts + 1,
+    processing_lease_by = $1,
+    processing_lease_until = now() + ($2 * interval '1 second'),
+    updated_at = now()
+WHERE id IN (
+    SELECT id FROM ariregister_company_raw_inputs
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
+    ORDER BY created_at
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, source_pull_run_id, source_native_id, registry_code, legal_name, registration_status, legal_form, vat_number, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
+`
+
+type ClaimPendingAriregisterRawInputsParams struct {
+	ProcessingLeaseBy *string     `json:"processing_lease_by"`
+	Column2           interface{} `json:"column_2"`
+	Limit             int32       `json:"limit"`
+}
+
+func (q *Queries) ClaimPendingAriregisterRawInputs(ctx context.Context, arg ClaimPendingAriregisterRawInputsParams) ([]AriregisterCompanyRawInput, error) {
+	rows, err := q.db.Query(ctx, claimPendingAriregisterRawInputs, arg.ProcessingLeaseBy, arg.Column2, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AriregisterCompanyRawInput
+	for rows.Next() {
+		var i AriregisterCompanyRawInput
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourcePullRunID,
+			&i.SourceNativeID,
+			&i.RegistryCode,
+			&i.LegalName,
+			&i.RegistrationStatus,
+			&i.LegalForm,
+			&i.VatNumber,
+			&i.Website,
+			&i.Email,
+			&i.Phone,
+			&i.CountryIso2,
+			&i.SourceUpdatedAt,
+			&i.RawPayload,
+			&i.RawPayloadEn,
+			&i.PayloadHash,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.ProcessingStatus,
+			&i.ProcessingAttempts,
+			&i.ProcessingError,
+			&i.ProcessingLeaseBy,
+			&i.ProcessingLeaseUntil,
+			&i.ProcessedAt,
+			&i.RunID,
+			&i.TranslationStatus,
+			&i.TranslationAttempts,
+			&i.TranslationError,
+			&i.TranslationModel,
+			&i.TranslationPromptVersion,
+			&i.TranslatedAt,
+			&i.TranslationLeaseBy,
+			&i.TranslationLeaseUntil,
+			&i.TranslationFxSource,
+			&i.TranslationFxRateDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimPendingBrregRawInputs = `-- name: ClaimPendingBrregRawInputs :many
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'processing',
@@ -83,6 +168,90 @@ func (q *Queries) ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendi
 			&i.TranslationLeaseUntil,
 			&i.TranslationFxSource,
 			&i.TranslationFxRateDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimPendingCVRRawInputs = `-- name: ClaimPendingCVRRawInputs :many
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'processing',
+    processing_attempts = processing_attempts + 1,
+    processing_lease_by = $1,
+    processing_lease_until = now() + ($2 * interval '1 second'),
+    updated_at = now()
+WHERE id IN (
+    SELECT id FROM cvr_company_raw_inputs
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
+    ORDER BY created_at
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, source_pull_run_id, source_native_id, cvr_number, company_name, registration_status, company_type, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
+`
+
+type ClaimPendingCVRRawInputsParams struct {
+	ProcessingLeaseBy *string     `json:"processing_lease_by"`
+	Column2           interface{} `json:"column_2"`
+	Limit             int32       `json:"limit"`
+}
+
+func (q *Queries) ClaimPendingCVRRawInputs(ctx context.Context, arg ClaimPendingCVRRawInputsParams) ([]CvrCompanyRawInput, error) {
+	rows, err := q.db.Query(ctx, claimPendingCVRRawInputs, arg.ProcessingLeaseBy, arg.Column2, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CvrCompanyRawInput
+	for rows.Next() {
+		var i CvrCompanyRawInput
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourcePullRunID,
+			&i.SourceNativeID,
+			&i.CvrNumber,
+			&i.CompanyName,
+			&i.RegistrationStatus,
+			&i.CompanyType,
+			&i.Website,
+			&i.Email,
+			&i.Phone,
+			&i.CountryIso2,
+			&i.SourceUpdatedAt,
+			&i.RawPayload,
+			&i.RawPayloadEn,
+			&i.PayloadHash,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.ProcessingStatus,
+			&i.ProcessingAttempts,
+			&i.ProcessingError,
+			&i.ProcessingLeaseBy,
+			&i.ProcessingLeaseUntil,
+			&i.ProcessedAt,
+			&i.RunID,
+			&i.TranslationStatus,
+			&i.TranslationAttempts,
+			&i.TranslationError,
+			&i.TranslationModel,
+			&i.TranslationPromptVersion,
+			&i.TranslatedAt,
+			&i.TranslationLeaseBy,
+			&i.TranslationLeaseUntil,
+			&i.TranslationFxSource,
+			&i.TranslationFxRateDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -176,7 +345,7 @@ WHERE id IN (
     LIMIT $3
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
+RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, legal_jurisdiction, legal_form_code, legal_form_name, registration_authority_id, entity_category, entity_creation_date
 `
 
 type ClaimPendingGLEIFRawInputsParams struct {
@@ -218,6 +387,12 @@ func (q *Queries) ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RunID,
+			&i.LegalJurisdiction,
+			&i.LegalFormCode,
+			&i.LegalFormName,
+			&i.RegistrationAuthorityID,
+			&i.EntityCategory,
+			&i.EntityCreationDate,
 		); err != nil {
 			return nil, err
 		}
@@ -227,6 +402,55 @@ func (q *Queries) ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendi
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAriregisterRawInputForCompanyApproval = `-- name: GetAriregisterRawInputForCompanyApproval :one
+SELECT id, source_pull_run_id, source_native_id, registry_code, legal_name, registration_status, legal_form, vat_number, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at FROM ariregister_company_raw_inputs WHERE id = $1
+`
+
+func (q *Queries) GetAriregisterRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (AriregisterCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, getAriregisterRawInputForCompanyApproval, id)
+	var i AriregisterCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.RegistryCode,
+		&i.LegalName,
+		&i.RegistrationStatus,
+		&i.LegalForm,
+		&i.VatNumber,
+		&i.Website,
+		&i.Email,
+		&i.Phone,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.RawPayloadEn,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.RunID,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getBrregRawInputForCompanyApproval = `-- name: GetBrregRawInputForCompanyApproval :one
@@ -274,6 +498,54 @@ func (q *Queries) GetBrregRawInputForCompanyApproval(ctx context.Context, id uui
 	return i, err
 }
 
+const getCVRRawInputForCompanyApproval = `-- name: GetCVRRawInputForCompanyApproval :one
+SELECT id, source_pull_run_id, source_native_id, cvr_number, company_name, registration_status, company_type, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at FROM cvr_company_raw_inputs WHERE id = $1
+`
+
+func (q *Queries) GetCVRRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (CvrCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, getCVRRawInputForCompanyApproval, id)
+	var i CvrCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.CvrNumber,
+		&i.CompanyName,
+		&i.RegistrationStatus,
+		&i.CompanyType,
+		&i.Website,
+		&i.Email,
+		&i.Phone,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.RawPayloadEn,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.RunID,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCompaniesHouseRawInputForCompanyApproval = `-- name: GetCompaniesHouseRawInputForCompanyApproval :one
 SELECT id, source_pull_run_id, source_native_id, company_number, company_name, company_status, company_type, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id FROM companies_house_company_raw_inputs WHERE id = $1
 `
@@ -309,7 +581,7 @@ func (q *Queries) GetCompaniesHouseRawInputForCompanyApproval(ctx context.Contex
 }
 
 const getGLEIFRawInputForCompanyApproval = `-- name: GetGLEIFRawInputForCompanyApproval :one
-SELECT id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id FROM gleif_company_raw_inputs WHERE id = $1
+SELECT id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, legal_jurisdiction, legal_form_code, legal_form_name, registration_authority_id, entity_category, entity_creation_date FROM gleif_company_raw_inputs WHERE id = $1
 `
 
 func (q *Queries) GetGLEIFRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (GleifCompanyRawInput, error) {
@@ -339,6 +611,12 @@ func (q *Queries) GetGLEIFRawInputForCompanyApproval(ctx context.Context, id uui
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RunID,
+		&i.LegalJurisdiction,
+		&i.LegalFormCode,
+		&i.LegalFormName,
+		&i.RegistrationAuthorityID,
+		&i.EntityCategory,
+		&i.EntityCreationDate,
 	)
 	return i, err
 }
@@ -359,6 +637,22 @@ func (q *Queries) IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID
 	return id, err
 }
 
+const ignoreAriregisterRawInput = `-- name: IgnoreAriregisterRawInput :one
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreAriregisterRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const ignoreBrregRawInput = `-- name: IgnoreBrregRawInput :one
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'ignored',
@@ -371,6 +665,22 @@ RETURNING id
 
 func (q *Queries) IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, ignoreBrregRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const ignoreCVRRawInput = `-- name: IgnoreCVRRawInput :one
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'ignored',
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('pending', 'failed')
+RETURNING id
+`
+
+func (q *Queries) IgnoreCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, ignoreCVRRawInput, id)
 	err := row.Scan(&id)
 	return id, err
 }
@@ -423,6 +733,33 @@ func (q *Queries) IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.U
 	return id, err
 }
 
+const markAriregisterRawInputFailed = `-- name: MarkAriregisterRawInputFailed :exec
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'failed', processing_error = $2, updated_at = now()
+WHERE id = $1
+`
+
+type MarkAriregisterRawInputFailedParams struct {
+	ID              uuid.UUID `json:"id"`
+	ProcessingError *string   `json:"processing_error"`
+}
+
+func (q *Queries) MarkAriregisterRawInputFailed(ctx context.Context, arg MarkAriregisterRawInputFailedParams) error {
+	_, err := q.db.Exec(ctx, markAriregisterRawInputFailed, arg.ID, arg.ProcessingError)
+	return err
+}
+
+const markAriregisterRawInputProcessed = `-- name: MarkAriregisterRawInputProcessed :exec
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'processed', processed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) MarkAriregisterRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markAriregisterRawInputProcessed, id)
+	return err
+}
+
 const markBrregRawInputFailed = `-- name: MarkBrregRawInputFailed :exec
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'failed', processing_error = $2, updated_at = now()
@@ -447,6 +784,33 @@ WHERE id = $1
 
 func (q *Queries) MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markBrregRawInputProcessed, id)
+	return err
+}
+
+const markCVRRawInputFailed = `-- name: MarkCVRRawInputFailed :exec
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'failed', processing_error = $2, updated_at = now()
+WHERE id = $1
+`
+
+type MarkCVRRawInputFailedParams struct {
+	ID              uuid.UUID `json:"id"`
+	ProcessingError *string   `json:"processing_error"`
+}
+
+func (q *Queries) MarkCVRRawInputFailed(ctx context.Context, arg MarkCVRRawInputFailedParams) error {
+	_, err := q.db.Exec(ctx, markCVRRawInputFailed, arg.ID, arg.ProcessingError)
+	return err
+}
+
+const markCVRRawInputProcessed = `-- name: MarkCVRRawInputProcessed :exec
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'processed', processed_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) MarkCVRRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markCVRRawInputProcessed, id)
 	return err
 }
 
@@ -522,6 +886,24 @@ func (q *Queries) RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID,
 	return id, err
 }
 
+const retryAriregisterRawInput = `-- name: RetryAriregisterRawInput :one
+UPDATE ariregister_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryAriregisterRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const retryBrregRawInput = `-- name: RetryBrregRawInput :one
 UPDATE brreg_company_raw_inputs
 SET processing_status = 'pending',
@@ -536,6 +918,24 @@ RETURNING id
 
 func (q *Queries) RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, retryBrregRawInput, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const retryCVRRawInput = `-- name: RetryCVRRawInput :one
+UPDATE cvr_company_raw_inputs
+SET processing_status = 'pending',
+    processing_error = NULL,
+    processing_lease_by = NULL,
+    processing_lease_until = NULL,
+    processed_at = NULL,
+    updated_at = now()
+WHERE id = $1 AND processing_status IN ('failed', 'ignored')
+RETURNING id
+`
+
+func (q *Queries) RetryCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, retryCVRRawInput, id)
 	err := row.Scan(&id)
 	return id, err
 }
@@ -592,6 +992,98 @@ func (q *Queries) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UU
 	row := q.db.QueryRow(ctx, retryGLEIFRawInput, id)
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertAriregisterRawInput = `-- name: UpsertAriregisterRawInput :one
+
+INSERT INTO ariregister_company_raw_inputs (
+    source_pull_run_id, source_native_id, registry_code, legal_name,
+    registration_status, legal_form, vat_number, website, email, phone, country_iso2,
+    source_updated_at, raw_payload, payload_hash, run_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (registry_code, payload_hash) DO UPDATE SET last_seen_at = now()
+RETURNING id, source_pull_run_id, source_native_id, registry_code, legal_name, registration_status, legal_form, vat_number, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
+`
+
+type UpsertAriregisterRawInputParams struct {
+	SourcePullRunID    pgtype.UUID        `json:"source_pull_run_id"`
+	SourceNativeID     string             `json:"source_native_id"`
+	RegistryCode       string             `json:"registry_code"`
+	LegalName          *string            `json:"legal_name"`
+	RegistrationStatus *string            `json:"registration_status"`
+	LegalForm          *string            `json:"legal_form"`
+	VatNumber          *string            `json:"vat_number"`
+	Website            *string            `json:"website"`
+	Email              *string            `json:"email"`
+	Phone              *string            `json:"phone"`
+	CountryIso2        *string            `json:"country_iso2"`
+	SourceUpdatedAt    pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload         json.RawMessage    `json:"raw_payload"`
+	PayloadHash        string             `json:"payload_hash"`
+	RunID              *string            `json:"run_id"`
+}
+
+// Ariregister
+func (q *Queries) UpsertAriregisterRawInput(ctx context.Context, arg UpsertAriregisterRawInputParams) (AriregisterCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, upsertAriregisterRawInput,
+		arg.SourcePullRunID,
+		arg.SourceNativeID,
+		arg.RegistryCode,
+		arg.LegalName,
+		arg.RegistrationStatus,
+		arg.LegalForm,
+		arg.VatNumber,
+		arg.Website,
+		arg.Email,
+		arg.Phone,
+		arg.CountryIso2,
+		arg.SourceUpdatedAt,
+		arg.RawPayload,
+		arg.PayloadHash,
+		arg.RunID,
+	)
+	var i AriregisterCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.RegistryCode,
+		&i.LegalName,
+		&i.RegistrationStatus,
+		&i.LegalForm,
+		&i.VatNumber,
+		&i.Website,
+		&i.Email,
+		&i.Phone,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.RawPayloadEn,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.RunID,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertBrregRawInput = `-- name: UpsertBrregRawInput :one
@@ -667,6 +1159,95 @@ func (q *Queries) UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInp
 	return i, err
 }
 
+const upsertCVRRawInput = `-- name: UpsertCVRRawInput :one
+
+INSERT INTO cvr_company_raw_inputs (
+    source_pull_run_id, source_native_id, cvr_number, company_name,
+    registration_status, company_type, website, email, phone, country_iso2,
+    source_updated_at, raw_payload, payload_hash, run_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+ON CONFLICT (cvr_number, payload_hash) DO UPDATE SET last_seen_at = now()
+RETURNING id, source_pull_run_id, source_native_id, cvr_number, company_name, registration_status, company_type, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
+`
+
+type UpsertCVRRawInputParams struct {
+	SourcePullRunID    pgtype.UUID        `json:"source_pull_run_id"`
+	SourceNativeID     string             `json:"source_native_id"`
+	CvrNumber          string             `json:"cvr_number"`
+	CompanyName        *string            `json:"company_name"`
+	RegistrationStatus *string            `json:"registration_status"`
+	CompanyType        *string            `json:"company_type"`
+	Website            *string            `json:"website"`
+	Email              *string            `json:"email"`
+	Phone              *string            `json:"phone"`
+	CountryIso2        *string            `json:"country_iso2"`
+	SourceUpdatedAt    pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload         json.RawMessage    `json:"raw_payload"`
+	PayloadHash        string             `json:"payload_hash"`
+	RunID              *string            `json:"run_id"`
+}
+
+// CVR
+func (q *Queries) UpsertCVRRawInput(ctx context.Context, arg UpsertCVRRawInputParams) (CvrCompanyRawInput, error) {
+	row := q.db.QueryRow(ctx, upsertCVRRawInput,
+		arg.SourcePullRunID,
+		arg.SourceNativeID,
+		arg.CvrNumber,
+		arg.CompanyName,
+		arg.RegistrationStatus,
+		arg.CompanyType,
+		arg.Website,
+		arg.Email,
+		arg.Phone,
+		arg.CountryIso2,
+		arg.SourceUpdatedAt,
+		arg.RawPayload,
+		arg.PayloadHash,
+		arg.RunID,
+	)
+	var i CvrCompanyRawInput
+	err := row.Scan(
+		&i.ID,
+		&i.SourcePullRunID,
+		&i.SourceNativeID,
+		&i.CvrNumber,
+		&i.CompanyName,
+		&i.RegistrationStatus,
+		&i.CompanyType,
+		&i.Website,
+		&i.Email,
+		&i.Phone,
+		&i.CountryIso2,
+		&i.SourceUpdatedAt,
+		&i.RawPayload,
+		&i.RawPayloadEn,
+		&i.PayloadHash,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.ProcessingStatus,
+		&i.ProcessingAttempts,
+		&i.ProcessingError,
+		&i.ProcessingLeaseBy,
+		&i.ProcessingLeaseUntil,
+		&i.ProcessedAt,
+		&i.RunID,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertCompaniesHouseRawInput = `-- name: UpsertCompaniesHouseRawInput :one
 
 INSERT INTO companies_house_company_raw_inputs (
@@ -738,11 +1319,11 @@ INSERT INTO gleif_company_raw_inputs (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (lei, payload_hash) DO UPDATE SET last_seen_at = now()
-RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
+RETURNING id, source_pull_run_id, source_native_id, lei, legal_name, registration_status, headquarters_country_code, parent_lei, ultimate_parent_lei, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, legal_jurisdiction, legal_form_code, legal_form_name, registration_authority_id, entity_category, entity_creation_date
 `
 
 type UpsertGLEIFCompanyRawInputParams struct {
-	SourcePullRunID         uuid.UUID          `json:"source_pull_run_id"`
+	SourcePullRunID         pgtype.UUID        `json:"source_pull_run_id"`
 	SourceNativeID          string             `json:"source_native_id"`
 	Lei                     string             `json:"lei"`
 	LegalName               *string            `json:"legal_name"`
@@ -795,6 +1376,12 @@ func (q *Queries) UpsertGLEIFCompanyRawInput(ctx context.Context, arg UpsertGLEI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RunID,
+		&i.LegalJurisdiction,
+		&i.LegalFormCode,
+		&i.LegalFormName,
+		&i.RegistrationAuthorityID,
+		&i.EntityCategory,
+		&i.EntityCreationDate,
 	)
 	return i, err
 }

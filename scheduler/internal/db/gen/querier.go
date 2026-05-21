@@ -13,7 +13,9 @@ import (
 type Querier interface {
 	ApproveCompanyFinancial(ctx context.Context, arg ApproveCompanyFinancialParams) error
 	BulkUpdateCompanyFinancialStatus(ctx context.Context, arg BulkUpdateCompanyFinancialStatusParams) error
+	ClaimPendingAriregisterRawInputs(ctx context.Context, arg ClaimPendingAriregisterRawInputsParams) ([]AriregisterCompanyRawInput, error)
 	ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendingBrregRawInputsParams) ([]BrregCompanyRawInput, error)
+	ClaimPendingCVRRawInputs(ctx context.Context, arg ClaimPendingCVRRawInputsParams) ([]CvrCompanyRawInput, error)
 	ClaimPendingCompaniesHouseRawInputs(ctx context.Context, arg ClaimPendingCompaniesHouseRawInputsParams) ([]CompaniesHouseCompanyRawInput, error)
 	ClaimPendingGLEIFRawInputs(ctx context.Context, arg ClaimPendingGLEIFRawInputsParams) ([]GleifCompanyRawInput, error)
 	CountCompanies(ctx context.Context, arg CountCompaniesParams) (int64, error)
@@ -28,8 +30,10 @@ type Querier interface {
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
 	CreateTemporalExecution(ctx context.Context, arg CreateTemporalExecutionParams) (TemporalExecution, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
+	GetAriregisterRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (AriregisterCompanyRawInput, error)
 	GetBrregRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (BrregCompanyRawInput, error)
 	GetCPEEntityLinkByToken(ctx context.Context, cpeVendorToken string) (CpeEntityLink, error)
+	GetCVRRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (CvrCompanyRawInput, error)
 	GetCompaniesHouseRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (CompaniesHouseCompanyRawInput, error)
 	GetCompany(ctx context.Context, id uuid.UUID) (Company, error)
 	GetCompanyAddressesByNativeID(ctx context.Context, nativeID string) ([]CompanyAddress, error)
@@ -66,7 +70,9 @@ type Querier interface {
 	GetSyncCheckpoint(ctx context.Context, sourceName string) (SourceSyncCheckpoint, error)
 	GetTemporalExecution(ctx context.Context, id uuid.UUID) (TemporalExecution, error)
 	IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	IgnoreCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -119,15 +125,21 @@ type Querier interface {
 	ListReviewCandidateIDs(ctx context.Context, arg ListReviewCandidateIDsParams) ([]uuid.UUID, error)
 	ListSources(ctx context.Context) ([]DataSource, error)
 	ListTemporalExecutions(ctx context.Context, arg ListTemporalExecutionsParams) ([]TemporalExecution, error)
+	MarkAriregisterRawInputFailed(ctx context.Context, arg MarkAriregisterRawInputFailedParams) error
+	MarkAriregisterRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkBrregRawInputFailed(ctx context.Context, arg MarkBrregRawInputFailedParams) error
 	MarkBrregRawInputProcessed(ctx context.Context, id uuid.UUID) error
+	MarkCVRRawInputFailed(ctx context.Context, arg MarkCVRRawInputFailedParams) error
+	MarkCVRRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkCompaniesHouseRawInputFailed(ctx context.Context, arg MarkCompaniesHouseRawInputFailedParams) error
 	MarkCompaniesHouseRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	MarkGLEIFRawInputFailed(ctx context.Context, arg MarkGLEIFRawInputFailedParams) error
 	MarkGLEIFRawInputProcessed(ctx context.Context, id uuid.UUID) error
 	RejectCompanyFinancial(ctx context.Context, arg RejectCompanyFinancialParams) error
 	RetryAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	RetryCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryCompaniesHouseRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryDomainDiscoveryRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -167,8 +179,12 @@ type Querier interface {
 	UpdateSourceScheduleEnabled(ctx context.Context, arg UpdateSourceScheduleEnabledParams) error
 	UpdateTemporalExecutionFailed(ctx context.Context, arg UpdateTemporalExecutionFailedParams) error
 	UpdateTemporalExecutionStarted(ctx context.Context, arg UpdateTemporalExecutionStartedParams) error
+	// Ariregister
+	UpsertAriregisterRawInput(ctx context.Context, arg UpsertAriregisterRawInputParams) (AriregisterCompanyRawInput, error)
 	// Brreg
 	UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInputParams) (BrregCompanyRawInput, error)
+	// CVR
+	UpsertCVRRawInput(ctx context.Context, arg UpsertCVRRawInputParams) (CvrCompanyRawInput, error)
 	// Companies House
 	UpsertCompaniesHouseRawInput(ctx context.Context, arg UpsertCompaniesHouseRawInputParams) (CompaniesHouseCompanyRawInput, error)
 	UpsertCompanyAddress(ctx context.Context, arg UpsertCompanyAddressParams) error

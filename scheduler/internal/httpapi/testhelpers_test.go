@@ -421,6 +421,30 @@ func (s *stubQuerier) MarkBrregRawInputProcessed(ctx context.Context, id uuid.UU
 func (s *stubQuerier) MarkBrregRawInputFailed(ctx context.Context, arg db.MarkBrregRawInputFailedParams) error {
 	return nil
 }
+func (s *stubQuerier) UpsertCVRRawInput(ctx context.Context, arg db.UpsertCVRRawInputParams) (db.CvrCompanyRawInput, error) {
+	return db.CvrCompanyRawInput{}, nil
+}
+func (s *stubQuerier) ClaimPendingCVRRawInputs(ctx context.Context, arg db.ClaimPendingCVRRawInputsParams) ([]db.CvrCompanyRawInput, error) {
+	return nil, nil
+}
+func (s *stubQuerier) MarkCVRRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (s *stubQuerier) MarkCVRRawInputFailed(ctx context.Context, arg db.MarkCVRRawInputFailedParams) error {
+	return nil
+}
+func (s *stubQuerier) UpsertAriregisterRawInput(ctx context.Context, arg db.UpsertAriregisterRawInputParams) (db.AriregisterCompanyRawInput, error) {
+	return db.AriregisterCompanyRawInput{}, nil
+}
+func (s *stubQuerier) ClaimPendingAriregisterRawInputs(ctx context.Context, arg db.ClaimPendingAriregisterRawInputsParams) ([]db.AriregisterCompanyRawInput, error) {
+	return nil, nil
+}
+func (s *stubQuerier) MarkAriregisterRawInputProcessed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (s *stubQuerier) MarkAriregisterRawInputFailed(ctx context.Context, arg db.MarkAriregisterRawInputFailedParams) error {
+	return nil
+}
 func (s *stubQuerier) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	if !s.hasExpectation("RetryGLEIFRawInput") {
 		return uuid.UUID{}, nil
@@ -458,6 +482,34 @@ func (s *stubQuerier) RetryBrregRawInput(ctx context.Context, id uuid.UUID) (uui
 }
 func (s *stubQuerier) IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	if !s.hasExpectation("IgnoreBrregRawInput") {
+		return uuid.UUID{}, nil
+	}
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryCVRRawInput") {
+		return uuid.UUID{}, nil
+	}
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreCVRRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreCVRRawInput") {
+		return uuid.UUID{}, nil
+	}
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) RetryAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("RetryAriregisterRawInput") {
+		return uuid.UUID{}, nil
+	}
+	ret := s.Called(ctx, id)
+	return ret.Get(0).(uuid.UUID), ret.Error(1)
+}
+func (s *stubQuerier) IgnoreAriregisterRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	if !s.hasExpectation("IgnoreAriregisterRawInput") {
 		return uuid.UUID{}, nil
 	}
 	ret := s.Called(ctx, id)
@@ -739,6 +791,12 @@ func (s *stubQuerier) GetCompaniesHouseRawInputForCompanyApproval(ctx context.Co
 }
 func (s *stubQuerier) GetBrregRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.BrregCompanyRawInput, error) {
 	return db.BrregCompanyRawInput{}, nil
+}
+func (s *stubQuerier) GetCVRRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.CvrCompanyRawInput, error) {
+	return db.CvrCompanyRawInput{}, nil
+}
+func (s *stubQuerier) GetAriregisterRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (db.AriregisterCompanyRawInput, error) {
+	return db.AriregisterCompanyRawInput{}, nil
 }
 func (s *stubQuerier) InsertCompanyFromRawInput(ctx context.Context, arg db.InsertCompanyFromRawInputParams) (db.Company, error) {
 	return db.Company{}, nil
