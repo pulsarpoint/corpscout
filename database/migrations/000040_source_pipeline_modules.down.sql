@@ -153,7 +153,7 @@ WHERE name = 'gleif';
 
 UPDATE data_sources
 SET pull_task_type = 'source_pull',
-    processor_task_type = 'source_process',
+    processor_task_type = NULL,
     requires_translation = false,
     config = '{
       "api_url":   "https://cvrapi.dk/api",
@@ -169,7 +169,7 @@ WHERE name = 'cvr';
 
 UPDATE data_sources
 SET pull_task_type = 'source_pull',
-    processor_task_type = 'source_process',
+    processor_task_type = NULL,
     requires_translation = false,
     config = '{
       "api_url":   "https://ariregister.rik.ee/api/1/",
