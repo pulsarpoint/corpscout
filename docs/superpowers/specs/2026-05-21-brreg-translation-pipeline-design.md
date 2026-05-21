@@ -66,7 +66,7 @@ ALTER TABLE brreg_company_raw_inputs
   ADD COLUMN translation_lease_by        TEXT,
   ADD COLUMN translation_lease_until     TIMESTAMPTZ,
   ADD CONSTRAINT chk_brreg_translation_status CHECK (
-    translation_status IN ('pending', 'translating', 'translated', 'failed', 'skipped')
+    translation_status IN ('pending', 'translating', 'translated', 'failed')
   );
 
 CREATE INDEX idx_brreg_raw_translation_status
@@ -80,11 +80,10 @@ CREATE INDEX idx_brreg_raw_translation_lease
 `translation_status` values:
 - `pending` — newly inserted, not yet translated
 - `translating` — claimed by an active activity; `translation_lease_by` and `translation_lease_until` are set
-- `translated` — `raw_payload_en` is populated; covers both LLM-translated rows and cache-only rows (see § Skipped semantics below)
-- `skipped` — record has no translatable fields at all (only structural renames apply); `raw_payload_en` is built without any LLM call or cache lookup
+- `translated` — `raw_payload_en` is populated; this is the only success state, regardless of whether translation required LLM calls, cache lookups, or only structural renames
 - `failed` — translation attempted and errored; `translation_error` is set
 
-Both `translated` and `skipped` produce a populated `raw_payload_en` and satisfy the `IS NOT NULL` gate for `ClaimPendingBrregRawInputs`.
+`translated` produces a populated `raw_payload_en` and satisfies the `IS NOT NULL` gate for `ClaimPendingBrregRawInputs`.
 
 **Lease and stale-row recovery:** `translation_lease_by` is the Temporal workflow run ID; `translation_lease_until` is `now() + 10 minutes`. The `TranslateBrregBatch` claim step also reclaims stale leases — rows where `translation_status = 'translating' AND translation_lease_until < now()` are treated as `pending` and included in the next claim. This means a crashed activity can never strand rows longer than 10 minutes.
 
@@ -229,7 +228,7 @@ type TranslateBrregInput struct {
 
 type TranslateBrregBatchResult struct {
   Claimed    int `json:"claimed"`     // rows locked in this batch
-  Translated int `json:"translated"`  // rows where raw_payload_en was written (translated + skipped)
+  Translated int `json:"translated"`  // rows where raw_payload_en was written
   Failed     int `json:"failed"`      // rows where translation_status was set to failed
 }
 ```
@@ -292,17 +291,16 @@ No `source_process` enqueue — processing is always triggered manually by the o
    ```
    For free-text fields (`aktivitet`, etc.) send per-row strings grouped together.
 
-6. **Validate LLM response**: parse JSON; assert every returned key is a strict subset of sent keys. Discard any invented keys with a warning log. If JSON is unparseable → fail the activity (Temporal retries).
+6. **Validate LLM response**: parse JSON. If unparseable → fail the activity (Temporal retries). For each sent key: if the LLM returned it, use the translation; if the LLM omitted it → mark that row `failed` with `translation_error = "LLM omitted key: <term>"`. Discard any keys the LLM invented (not in the input) with a warning log — they are not written to cache.
 
 7. **Build `raw_payload_en`** for each row using: structural renames + cache hits + new LLM translations + originals for any LLM misses (per-text fallback).
 
 8. **Write in one transaction**:
-   - Upsert new translations into `translation_cache`
-   - Update each row: set `raw_payload_en`, `translation_model`, `translation_prompt_version`, `translation_attempts`, `translated_at`, clear `translation_lease_by` and `translation_lease_until`
-   - `translation_status` is set to:
-     - `translated` — if the record had any cached or LLM-translated fields (enum or free-text); this includes cache-only rows where no LLM call was needed
-     - `skipped` — only if the record contained no cached or LLM fields at all (all fields were structural renames); this is rare in practice
-     - `failed` — single-row error path (see error table)
+   - Upsert new translations into `translation_cache` (only for successfully translated strings)
+   - For each **successfully translated** row: set `raw_payload_en`, `translation_status = 'translated'`, `translation_model`, `translation_prompt_version`, `translation_attempts`, `translated_at`, clear `translation_lease_by` and `translation_lease_until`
+   - For each **failed** row: set `translation_status = 'failed'`, `translation_error`, `translation_attempts`; clear lease fields; leave `raw_payload_en = NULL`
+
+A `failed` row never has `raw_payload_en` written. It remains `NULL` and is excluded from the processor gate until the operator retries it.
 
 The DB transaction never opens until after all LLM calls complete.
 
@@ -310,12 +308,12 @@ The DB transaction never opens until after all LLM calls complete.
 
 | Scenario | Behaviour |
 |---|---|
-| LLM returns invalid JSON | Activity fails → Temporal retries (up to configured max attempts) |
-| LLM omits a specific key | Keep original Norwegian text for that field; mark row `translated` with fallback |
-| LLM call times out | Activity fails → Temporal retries |
+| LLM call times out or HTTP error | Activity fails → Temporal retries (transient; rows stay `translating` with active lease) |
+| LLM returns invalid JSON | Activity fails → Temporal retries (up to configured max attempts; if exhausted, rows are reclaimed by the next run's stale-lease path and `translation_attempts` is incremented) |
+| LLM omits a key from the response | Mark affected row `failed` with `translation_error = "LLM omitted key: <term>"`; continue with rest of batch — silent Norwegian fallback is not used |
 | Single row fails to build `raw_payload_en` | Mark that row `failed` with `translation_error`; continue with rest of batch |
 | All rows in batch fail | Activity returns `claimed=N, translated=0, failed=N`; workflow continues because `claimed > 0` — it stops only when the next claim returns nothing |
-| Stale lease (activity crashed mid-batch) | Next batch's claim query reclaims rows where `translation_lease_until < now()`; rows are reset to `translating` with a new lease |
+| Stale lease (activity crashed mid-batch) | Next batch's claim query reclaims rows where `translation_lease_until < now()`; rows re-enter processing with a fresh lease |
 
 ---
 
@@ -378,8 +376,7 @@ Response:
 {
   "pending": 983241,
   "translating": 50,
-  "translated": 12803,
-  "skipped": 231,
+  "translated": 13034,
   "failed": 17,
   "total": 996342
 }
@@ -400,8 +397,8 @@ Add `translation_status` to list response items. Add `translation_status` as an 
 ### Raw inputs list page (brreg source only)
 
 **Table additions:**
-- New `Translation` column showing a badge: `Translated` (green) / `Pending` (amber) / `Skipped` (muted) / `Failed` (red) / `Translating` (blue spinner)
-- Filter dropdown alongside existing status filter: "Translation: All / Pending / Translated / Failed / Skipped"
+- New `Translation` column showing a badge: `Translated` (green) / `Pending` (amber) / `Failed` (red) / `Translating` (blue spinner)
+- Filter dropdown alongside existing status filter: "Translation: All / Pending / Translated / Failed"
 
 **Header actions:**
 - When `pending > 0`: banner — "N items need translation" with a **Translate All** button
@@ -476,13 +473,13 @@ Expected response:
 | `TestBuildRawPayloadEn_LegalNameNotTranslated` | `navn` value is copied verbatim |
 | `TestBuildRawPayloadEn_BooleansAndDatesPassThrough` | Booleans, dates, numbers, codes copied as-is |
 | `TestExtractTranslatableStrings` | Only `aktivitet`, `vedtektsfestetFormaal`, etc. collected for LLM; enum fields collected for cache |
-| `TestTranslateBrregBatch_CacheHitSkipsLLM` | When all strings are in cache (full key match), no LLM call is made; row marked `translated` not `skipped` |
+| `TestTranslateBrregBatch_CacheHitSkipsLLM` | When all strings are in cache (full key match), no LLM call is made; row marked `translated` |
 | `TestTranslateBrregBatch_CacheKeyMismatch_TreatedAsMiss` | Cache row for same text but different model/prompt_version is not used |
 | `TestTranslateBrregBatch_CacheMissSendsToLLM` | Cache miss strings are sent to LLM; results stored in cache keyed by full (model, prompt_version) |
 | `TestTranslateBrregBatch_LLMInventedKeyDiscarded` | Key in LLM response not in input is silently dropped |
 | `TestTranslateBrregBatch_InvalidLLMJSONFails` | Non-JSON LLM response causes activity error |
-| `TestTranslateBrregBatch_PerTextFallback` | LLM omitting a key keeps original text; row still marked `translated` |
-| `TestTranslateBrregBatch_StructuralOnlyRow_MarkedSkipped` | Row with no enum or free-text fields is marked `skipped` |
+| `TestTranslateBrregBatch_LLMOmitsKey_MarksRowFailed` | LLM omitting a key marks that row `failed` with error; raw_payload_en stays NULL; other rows in batch succeed |
+| `TestTranslateBrregBatch_StructuralOnlyRow_MarkedTranslated` | Row with no enum or free-text fields is still marked `translated` |
 | `TestTranslateBrregBatch_SetsLease` | Claimed rows have `translation_lease_by` and `translation_lease_until` set |
 | `TestTranslateBrregBatch_ReclaimsStaleRows` | Rows with `translating` + expired lease are included in the next claim |
 | `TestTranslateBrregBatch_ClearsLeaseOnSuccess` | Written rows have `translation_lease_by = NULL` and `translation_lease_until = NULL` |
