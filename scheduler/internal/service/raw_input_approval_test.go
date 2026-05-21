@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +86,52 @@ func brregApprovalRows(rowID uuid.UUID, orgNumber, orgName, translationStatus st
 	)
 }
 
+func cvrApprovalRows(rowID uuid.UUID, cvrNumber, companyName, translationStatus string, rawPayloadEn []byte) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "source_pull_run_id", "source_native_id", "cvr_number", "company_name",
+		"registration_status", "company_type", "website", "email", "phone", "country_iso2",
+		"source_updated_at", "raw_payload", "raw_payload_en", "payload_hash",
+		"first_seen_at", "last_seen_at", "processing_status", "processing_attempts", "processing_error",
+		"processing_lease_by", "processing_lease_until", "processed_at", "run_id",
+		"translation_status", "translation_attempts", "translation_error", "translation_model",
+		"translation_prompt_version", "translated_at", "translation_lease_by", "translation_lease_until",
+		"translation_fx_source", "translation_fx_rate_date", "created_at", "updated_at",
+	}).AddRow(
+		rowID, pgtype.UUID{}, cvrNumber, cvrNumber, &companyName,
+		ptrString("registered"), ptrString("aps"), ptrString("https://example.dk"),
+		ptrString("info@example.dk"), ptrString("+45 12 34 56 78"), (*string)(nil),
+		pgtype.Timestamptz{}, []byte(`{"cvrNummer":"`+cvrNumber+`"}`), rawPayloadEn, "hash1",
+		time.Time{}, time.Time{}, "pending", int32(0), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, pgtype.Timestamptz{}, (*string)(nil),
+		translationStatus, int32(0), (*string)(nil), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, (*string)(nil), pgtype.Timestamptz{},
+		(*string)(nil), pgtype.Date{}, time.Time{}, time.Time{},
+	)
+}
+
+func ariregisterApprovalRows(rowID uuid.UUID, registryCode, legalName, translationStatus string, rawPayloadEn []byte) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "source_pull_run_id", "source_native_id", "registry_code", "legal_name",
+		"registration_status", "legal_form", "vat_number", "website", "email", "phone", "country_iso2",
+		"source_updated_at", "raw_payload", "raw_payload_en", "payload_hash",
+		"first_seen_at", "last_seen_at", "processing_status", "processing_attempts", "processing_error",
+		"processing_lease_by", "processing_lease_until", "processed_at", "run_id",
+		"translation_status", "translation_attempts", "translation_error", "translation_model",
+		"translation_prompt_version", "translated_at", "translation_lease_by", "translation_lease_until",
+		"translation_fx_source", "translation_fx_rate_date", "created_at", "updated_at",
+	}).AddRow(
+		rowID, pgtype.UUID{}, registryCode, registryCode, &legalName,
+		ptrString("registered"), ptrString("OU"), (*string)(nil), ptrString("https://example.ee"),
+		ptrString("info@example.ee"), ptrString("+372 5555 0000"), (*string)(nil),
+		pgtype.Timestamptz{}, []byte(`{"registry_code":"`+registryCode+`"}`), rawPayloadEn, "hash1",
+		time.Time{}, time.Time{}, "pending", int32(0), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, pgtype.Timestamptz{}, (*string)(nil),
+		translationStatus, int32(0), (*string)(nil), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, (*string)(nil), pgtype.Timestamptz{},
+		(*string)(nil), pgtype.Date{}, time.Time{}, time.Time{},
+	)
+}
+
 func ptrString(s string) *string { return &s }
 
 func TestApproveCompanyRawInput_CompaniesHouseCreatesCompanyAndMarksProcessed(t *testing.T) {
@@ -146,4 +194,228 @@ func TestApproveCompanyRawInput_BrregRequiresTranslation(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, service.ErrRawInputRequiresTranslation))
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_CVRRequiresTranslation(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRows(rowID, "12345678", "Dansk ApS", "pending", nil))
+	mock.ExpectRollback()
+
+	_, err = service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrRawInputRequiresTranslation))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_AriregisterRequiresTranslation(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("ariregister").
+		WillReturnRows(sourceRows(sourceID, "ariregister", "ariregister_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, registry_code`).WithArgs(rowID).
+		WillReturnRows(ariregisterApprovalRows(rowID, "12345678", "Eesti OU", "failed", nil))
+	mock.ExpectRollback()
+
+	_, err = service.ApproveCompanyRawInput(ctx, mock, "ariregister", rowID, "ops", "")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrRawInputRequiresTranslation))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_CVRCreatesCompanyAndPersistsEnrichment(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+
+	payload := []byte(`{
+		"financials": [{
+			"year": 2023,
+			"employee_count": 42,
+			"revenue_amount": 1234000,
+			"revenue_currency": "DKK",
+			"profit_amount": 234000
+		}],
+		"ownership": [{"name": "Unresolved Holding", "ownership_percentage": 25}]
+	}`)
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRows(rowID, "12345678", "Dansk ApS", "translated", payload))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("DK").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "DK").
+		WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`SELECT id, lei, name`).WithArgs("dansk-aps").
+		WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`INSERT INTO companies`).
+		WithArgs(
+			"dansk-aps", "Dansk ApS", countryID, ptrString("12345678"), (*string)(nil),
+			"active", ptrString("https://example.dk"), pgUUID(sourceID), (*string)(nil), (*string)(nil), pgxmock.AnyArg(),
+		).
+		WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "info@example.dk", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "cvr", pgxmock.AnyArg(),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`},
+	).WillReturnRows(companyEmailRows(companyID, "info@example.dk", "cvr"))
+	mock.ExpectQuery(`INSERT INTO company_phones`).WithArgs(
+		companyID, "+45 12 34 56 78", pgxmock.AnyArg(), "official", "cvr", pgxmock.AnyArg(),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`},
+	).WillReturnRows(companyPhoneRows(companyID, "+45 12 34 56 78", "cvr"))
+	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
+		companyID, int32(2023), "cvr", ptrInt32(42), ptrInt64(1234000), ptrString("DKK"), (*int64)(nil), ptrInt64(234000), (*int64)(nil),
+	).WillReturnRows(companyFinancialRows(companyID, 2023, "cvr"))
+	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
+		(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil), (*int32)(nil),
+		[]byte(nil), []byte(nil), jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, "Unresolved Holding"}, (*int32)(nil), (*int64)(nil), companyID,
+	).WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectExec(`UPDATE cvr_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, "dansk-aps", company.CanonicalSlug)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_AriregisterFindsCompanyAndPersistsEnrichment(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+
+	payload := []byte(`{
+		"annual_reports": [{
+			"year": 2022,
+			"indicators": {
+				"employee_count": 7,
+				"revenue_amount": 550000,
+				"profit_amount": 44000
+			},
+			"currency": "EUR"
+		}],
+		"beneficial_owners": [{"name": "Unresolved Owner", "control_type": "beneficial_owner"}]
+	}`)
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("ariregister").
+		WillReturnRows(sourceRows(sourceID, "ariregister", "ariregister_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, registry_code`).WithArgs(rowID).
+		WillReturnRows(ariregisterApprovalRows(rowID, "12345678", "Eesti OU", "translated", payload))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("EE").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "EE").
+		WillReturnRows(companyRows(companyID, "eesti-ou", "Eesti OU", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "info@example.ee", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "ariregister", pgxmock.AnyArg(),
+		jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`},
+	).WillReturnRows(companyEmailRows(companyID, "info@example.ee", "ariregister"))
+	mock.ExpectQuery(`INSERT INTO company_phones`).WithArgs(
+		companyID, "+372 5555 0000", pgxmock.AnyArg(), "official", "ariregister", pgxmock.AnyArg(),
+		jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`},
+	).WillReturnRows(companyPhoneRows(companyID, "+372 5555 0000", "ariregister"))
+	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
+		companyID, int32(2022), "ariregister", ptrInt32(7), ptrInt64(550000), ptrString("EUR"), (*int64)(nil), ptrInt64(44000), (*int64)(nil),
+	).WillReturnRows(companyFinancialRows(companyID, 2022, "ariregister"))
+	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
+		(*string)(nil), (*string)(nil), (*string)(nil), ptrString("https://example.ee"), (*int32)(nil),
+		[]byte(nil), []byte(nil), jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`, "Unresolved Owner"}, (*int32)(nil), (*int64)(nil), companyID,
+	).WillReturnRows(companyRows(companyID, "eesti-ou", "Eesti OU", countryID))
+	mock.ExpectExec(`UPDATE ariregister_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "ariregister", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, companyID, company.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func ptrInt32(v int32) *int32 { return &v }
+func ptrInt64(v int64) *int64 { return &v }
+
+func companyEmailRows(companyID uuid.UUID, email, source string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "company_id", "email", "description", "purpose", "name", "source", "confidence",
+		"evidence", "metadata", "removed_at", "created_at", "updated_at",
+	}).AddRow(
+		uuid.New(), companyID, email, (*string)(nil), "official", (*string)(nil), source, (*float32)(nil),
+		json.RawMessage(`{}`), json.RawMessage(nil), pgtype.Timestamptz{}, time.Time{}, time.Time{},
+	)
+}
+
+func companyPhoneRows(companyID uuid.UUID, phone, source string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "company_id", "phone", "description", "purpose", "source", "confidence",
+		"evidence", "metadata", "removed_at", "created_at", "updated_at",
+	}).AddRow(
+		uuid.New(), companyID, phone, (*string)(nil), "official", source, (*float32)(nil),
+		json.RawMessage(`{}`), json.RawMessage(nil), pgtype.Timestamptz{}, time.Time{}, time.Time{},
+	)
+}
+
+func companyFinancialRows(companyID uuid.UUID, year int32, source string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "company_id", "year", "source_name", "employee_count", "revenue_amount",
+		"revenue_currency", "revenue_usd", "profit_amount", "profit_usd", "status",
+		"reviewed_by", "reviewed_at", "created_at", "updated_at",
+	}).AddRow(
+		uuid.New(), companyID, year, source, (*int32)(nil), (*int64)(nil),
+		(*string)(nil), (*int64)(nil), (*int64)(nil), (*int64)(nil), "suggested",
+		(*string)(nil), pgtype.Timestamptz{}, time.Time{}, time.Time{},
+	)
+}
+
+type jsonContainsArg []string
+
+func (a jsonContainsArg) Match(v interface{}) bool {
+	var b []byte
+	switch value := v.(type) {
+	case []byte:
+		b = value
+	case json.RawMessage:
+		b = value
+	case string:
+		b = []byte(value)
+	default:
+		return false
+	}
+	text := string(b)
+	for _, fragment := range a {
+		if !strings.Contains(text, fragment) {
+			return false
+		}
+	}
+	return true
 }
