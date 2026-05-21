@@ -24,6 +24,26 @@ type Pages = {
       "name": string;
     };
   };
+  "/sources/:name/pipeline": {
+    params: {
+      "name": string;
+    };
+  };
+  "/sources/:name/schedule": {
+    params: {
+      "name": string;
+    };
+  };
+  "/sources/:name/config": {
+    params: {
+      "name": string;
+    };
+  };
+  "/sources/:name/logs": {
+    params: {
+      "name": string;
+    };
+  };
   "/domains/:id": {
     params: {
       "id": string;
@@ -61,7 +81,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/companies/:id" | "/sources/:name" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/review/financials" | "/review/companies" | "/review/domains" | "/jobs";
+    page: "/" | "/companies/:id" | "/sources/:name" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs" | "/domains/:id" | "/companies" | "/dashboard" | "/domains" | "/sources" | "/review" | "/review/financials" | "/review/companies" | "/review/domains" | "/jobs";
   };
   "routes/companies_.$id.tsx": {
     id: "routes/companies_.$id";
@@ -69,7 +89,27 @@ type RouteFiles = {
   };
   "routes/sources_.$name.tsx": {
     id: "routes/sources_.$name";
+    page: "/sources/:name" | "/sources/:name/pipeline" | "/sources/:name/schedule" | "/sources/:name/config" | "/sources/:name/logs";
+  };
+  "routes/sources_.$name.pipeline.tsx": {
+    id: "routes/sources_.$name.pipeline";
+    page: "/sources/:name/pipeline";
+  };
+  "routes/sources_.$name.schedule.tsx": {
+    id: "routes/sources_.$name.schedule";
+    page: "/sources/:name/schedule";
+  };
+  "routes/sources_.$name._index.tsx": {
+    id: "routes/sources_.$name._index";
     page: "/sources/:name";
+  };
+  "routes/sources_.$name.config.tsx": {
+    id: "routes/sources_.$name.config";
+    page: "/sources/:name/config";
+  };
+  "routes/sources_.$name.logs.tsx": {
+    id: "routes/sources_.$name.logs";
+    page: "/sources/:name/logs";
   };
   "routes/domains_.$id.tsx": {
     id: "routes/domains_.$id";
@@ -125,6 +165,11 @@ type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/companies_.$id": typeof import("./app/routes/companies_.$id.tsx");
   "routes/sources_.$name": typeof import("./app/routes/sources_.$name.tsx");
+  "routes/sources_.$name.pipeline": typeof import("./app/routes/sources_.$name.pipeline.tsx");
+  "routes/sources_.$name.schedule": typeof import("./app/routes/sources_.$name.schedule.tsx");
+  "routes/sources_.$name._index": typeof import("./app/routes/sources_.$name._index.tsx");
+  "routes/sources_.$name.config": typeof import("./app/routes/sources_.$name.config.tsx");
+  "routes/sources_.$name.logs": typeof import("./app/routes/sources_.$name.logs.tsx");
   "routes/domains_.$id": typeof import("./app/routes/domains_.$id.tsx");
   "routes/companies": typeof import("./app/routes/companies.tsx");
   "routes/dashboard": typeof import("./app/routes/dashboard.tsx");
