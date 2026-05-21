@@ -19,6 +19,9 @@ export interface RawInput {
   status: string;
   translation_status?: "pending" | "translating" | "translated" | "failed";
   created_at: string;
+  company_suggestion_id?: string;
+  company_suggestion_status?: string;
+  can_approve_company?: boolean;
 }
 
 export interface RawInputListResponse {
