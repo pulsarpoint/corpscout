@@ -17,6 +17,7 @@ export interface RawInput {
   name: string;
   native_id: string;
   status: string;
+  translation_status?: "pending" | "translating" | "translated" | "failed";
   created_at: string;
 }
 
@@ -42,6 +43,15 @@ export interface RawInputDetail {
   processing_error?: string;
   payload_hash: string;
   raw_payload: Record<string, unknown>;
+  raw_payload_en?: Record<string, unknown>;
+  translation_status?: "pending" | "translating" | "translated" | "failed";
+  translation_attempts?: number;
+  translation_error?: string;
+  translation_model?: string;
+  translation_prompt_version?: string;
+  translation_fx_source?: string;
+  translation_fx_rate_date?: string;
+  translated_at?: string;
   first_seen_at: string;
   last_seen_at: string;
   processed_at?: string;
@@ -238,6 +248,15 @@ export interface SourceRawInput {
   last_seen_at: string;
   payload_hash: string;
   has_suggestion: boolean;
+  raw_payload_en: Record<string, unknown> | null;
+  translation_status: "pending" | "translating" | "translated" | "failed" | null;
+  translation_attempts: number | null;
+  translation_error: string | null;
+  translation_model: string | null;
+  translation_prompt_version: string | null;
+  translated_at: string | null;
+  translation_fx_source: string | null;
+  translation_fx_rate_date: string | null;
 }
 
 export interface SuggestionSourceLink {
@@ -253,8 +272,13 @@ export interface SuggestionSourceLink {
   created_at: string;
 }
 
-export interface RawPayloadRow {
-  raw_payload: Record<string, unknown>;
+export interface BrregTranslationStats {
+  pending: number;
+  translating: number;
+  translated: number;
+  failed: number;
+  ready_to_process: number;
+  total: number;
 }
 
 export interface JobError {

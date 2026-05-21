@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getSyncCheckpoint = `-- name: GetSyncCheckpoint :one
@@ -16,13 +14,6 @@ SELECT source_name, cursor, last_completed_at, updated_at
 FROM source_sync_checkpoints
 WHERE source_name = $1
 `
-
-type SourceSyncCheckpoint struct {
-	SourceName      string             `json:"source_name"`
-	Cursor          string             `json:"cursor"`
-	LastCompletedAt pgtype.Timestamptz `json:"last_completed_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
 
 func (q *Queries) GetSyncCheckpoint(ctx context.Context, sourceName string) (SourceSyncCheckpoint, error) {
 	row := q.db.QueryRow(ctx, getSyncCheckpoint, sourceName)

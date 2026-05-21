@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -15,6 +17,8 @@ import (
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/client"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
@@ -25,13 +29,13 @@ type syncCheckpointView struct {
 	LastCompletedAt *time.Time `json:"last_completed_at,omitempty"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	// Derived fields parsed from cursor.
-	Mode            string `json:"mode"`                // "bulk" | "incremental" | "none"
-	BulkDate        string `json:"bulk_date,omitempty"` // date of last bulk, e.g. "2026-05-21"
+	Mode     string `json:"mode"`                // "bulk" | "incremental" | "none"
+	BulkDate string `json:"bulk_date,omitempty"` // date of last bulk, e.g. "2026-05-21"
 }
 
 type sourceView struct {
 	db.DataSource
-	Config         json.RawMessage    `json:"config"`
+	Config         json.RawMessage     `json:"config"`
 	SyncCheckpoint *syncCheckpointView `json:"sync_checkpoint,omitempty"`
 }
 
@@ -50,7 +54,7 @@ func toSourceViewWithCheckpoint(s db.DataSource, cp *db.SourceSyncCheckpoint) so
 	}
 	scv := &syncCheckpointView{
 		Cursor:    cp.Cursor,
-		UpdatedAt: cp.UpdatedAt.Time,
+		UpdatedAt: cp.UpdatedAt,
 	}
 	if cp.LastCompletedAt.Valid {
 		t := cp.LastCompletedAt.Time
@@ -332,13 +336,12 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}
-	if h.rv == nil {
-		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
-		return
-	}
-
 	// Sources with a Temporal pipeline are dispatched as DataTask River jobs.
 	if _, country := workers.TemporalWorkflowForSource(name); country != "" {
+		if h.rv == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduler not available")
+			return
+		}
 		if _, err := h.rv.Insert(r.Context(), workers.DataTaskArgs{
 			Source:  name,
 			Country: country,
@@ -358,6 +361,10 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "pull task type not supported for manual trigger")
 		return
 	}
+	if h.rv == nil {
+		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
+		return
+	}
 	if _, err := h.rv.Insert(r.Context(), workers.SourcePullArgs{
 		SourceName:  name,
 		TriggerType: "manual",
@@ -373,6 +380,150 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})
+}
+
+type translateBrregRequest struct {
+	IDs        []string `json:"ids,omitempty"`
+	FXRateDate string   `json:"fx_rate_date,omitempty"`
+}
+
+type brregTranslationStats struct {
+	Pending        int64 `json:"pending"`
+	Translating    int64 `json:"translating"`
+	Translated     int64 `json:"translated"`
+	Failed         int64 `json:"failed"`
+	ReadyToProcess int64 `json:"ready_to_process"`
+	Total          int64 `json:"total"`
+}
+
+func (h *Handlers) handleTranslateBrreg(w http.ResponseWriter, r *http.Request) {
+	var req translateBrregRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.FXRateDate != "" {
+		if _, err := time.Parse("2006-01-02", req.FXRateDate); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid fx_rate_date")
+			return
+		}
+	}
+	if h.temporal == nil {
+		writeError(w, http.StatusServiceUnavailable, "temporal client not available")
+		return
+	}
+
+	workflowID := "translate-brreg-all"
+	if len(req.IDs) > 0 {
+		workflowID = fmt.Sprintf("translate-brreg-ids-%d", time.Now().Unix())
+	}
+	input := map[string]any{
+		"ids":            req.IDs,
+		"prompt_version": envWithDefault("LLM_PROMPT_VERSION", "v1"),
+		"model":          envWithDefault("LLM_MODEL", "qwen3:6b"),
+		"fx_rate_date":   req.FXRateDate,
+	}
+
+	run, err := h.temporal.ExecuteWorkflow(r.Context(),
+		client.StartWorkflowOptions{
+			ID:        workflowID,
+			TaskQueue: "corpscout-pipelines",
+		},
+		"TranslateBrregRawInputs",
+		input,
+	)
+	if err != nil {
+		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStarted) {
+			writeError(w, http.StatusConflict, "translation workflow already running")
+			return
+		}
+		slog.Error("start brreg translation workflow", "workflow_id", workflowID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"workflow_id":     workflowID,
+		"workflow_run_id": run.GetRunID(),
+		"status":          "started",
+	})
+}
+
+func (h *Handlers) handleProcessSource(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if _, err := h.db.GetSourceByName(r.Context(), name); err != nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+	if h.rv == nil {
+		writeError(w, http.StatusServiceUnavailable, "scheduler not available")
+		return
+	}
+
+	result, err := h.rv.Insert(r.Context(), workers.SourceProcessArgs{
+		SourceName: name,
+	}, &river.InsertOpts{
+		Queue: "source_process",
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+				rivertype.JobStateScheduled,
+			},
+		},
+	})
+	if err != nil {
+		slog.Error("manual source process", "source", name, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if result.UniqueSkippedAsDuplicate {
+		writeError(w, http.StatusConflict, "source process already running")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": result.Job.ID, "status": "enqueued"})
+}
+
+func (h *Handlers) handleBrregTranslationStats(w http.ResponseWriter, r *http.Request) {
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "database pool not available")
+		return
+	}
+	var stats brregTranslationStats
+	if err := h.pool.QueryRow(r.Context(), `
+		SELECT
+			COUNT(*) FILTER (WHERE translation_status = 'pending') AS pending,
+			COUNT(*) FILTER (WHERE translation_status = 'translating') AS translating,
+			COUNT(*) FILTER (WHERE translation_status = 'translated') AS translated,
+			COUNT(*) FILTER (WHERE translation_status = 'failed') AS failed,
+			COUNT(*) FILTER (WHERE translation_status = 'translated' AND processing_status = 'pending') AS ready_to_process,
+			COUNT(*) AS total
+		FROM brreg_company_raw_inputs
+	`).Scan(
+		&stats.Pending,
+		&stats.Translating,
+		&stats.Translated,
+		&stats.Failed,
+		&stats.ReadyToProcess,
+		&stats.Total,
+	); err != nil {
+		slog.Error("brreg translation stats", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func envWithDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func (h *Handlers) handleProbeSource(w http.ResponseWriter, r *http.Request) {

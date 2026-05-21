@@ -22,13 +22,16 @@ SET processing_status = 'processing',
     updated_at = now()
 WHERE id IN (
     SELECT id FROM brreg_company_raw_inputs
-    WHERE processing_status = 'pending'
-       OR (processing_status = 'processing' AND processing_lease_until < now())
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
     ORDER BY created_at
     LIMIT $3
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
+RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, raw_payload_en, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date
 `
 
 type ClaimPendingBrregRawInputsParams struct {
@@ -69,6 +72,17 @@ func (q *Queries) ClaimPendingBrregRawInputs(ctx context.Context, arg ClaimPendi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RunID,
+			&i.RawPayloadEn,
+			&i.TranslationStatus,
+			&i.TranslationAttempts,
+			&i.TranslationError,
+			&i.TranslationModel,
+			&i.TranslationPromptVersion,
+			&i.TranslatedAt,
+			&i.TranslationLeaseBy,
+			&i.TranslationLeaseUntil,
+			&i.TranslationFxSource,
+			&i.TranslationFxRateDate,
 		); err != nil {
 			return nil, err
 		}
@@ -474,11 +488,11 @@ INSERT INTO brreg_company_raw_inputs (
 )
 VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (organization_number, payload_hash) DO UPDATE SET last_seen_at = now()
-RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id
+RETURNING id, source_pull_run_id, source_native_id, organization_number, organization_name, registration_status, website, country_iso2, source_updated_at, raw_payload, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, created_at, updated_at, run_id, raw_payload_en, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date
 `
 
 type UpsertBrregRawInputParams struct {
-	SourcePullRunID    uuid.UUID          `json:"source_pull_run_id"`
+	SourcePullRunID    pgtype.UUID        `json:"source_pull_run_id"`
 	SourceNativeID     string             `json:"source_native_id"`
 	OrganizationName   *string            `json:"organization_name"`
 	RegistrationStatus *string            `json:"registration_status"`
@@ -524,6 +538,17 @@ func (q *Queries) UpsertBrregRawInput(ctx context.Context, arg UpsertBrregRawInp
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RunID,
+		&i.RawPayloadEn,
+		&i.TranslationStatus,
+		&i.TranslationAttempts,
+		&i.TranslationError,
+		&i.TranslationModel,
+		&i.TranslationPromptVersion,
+		&i.TranslatedAt,
+		&i.TranslationLeaseBy,
+		&i.TranslationLeaseUntil,
+		&i.TranslationFxSource,
+		&i.TranslationFxRateDate,
 	)
 	return i, err
 }
@@ -540,7 +565,7 @@ RETURNING id, source_pull_run_id, source_native_id, company_number, company_name
 `
 
 type UpsertCompaniesHouseRawInputParams struct {
-	SourcePullRunID uuid.UUID          `json:"source_pull_run_id"`
+	SourcePullRunID pgtype.UUID        `json:"source_pull_run_id"`
 	SourceNativeID  string             `json:"source_native_id"`
 	CompanyName     *string            `json:"company_name"`
 	CompanyStatus   *string            `json:"company_status"`

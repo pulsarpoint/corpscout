@@ -510,3 +510,43 @@ func TestTriggerSource_returns_404_for_unknown(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code)
 	q.AssertExpectations(t)
 }
+
+func TestTranslateBrreg_missingTemporal_returns503(t *testing.T) {
+	q := &stubQuerier{}
+
+	r := routerFor(newTestHandlers(q))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/brreg/translate", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestTranslateBrreg_invalidFXDate_returns400(t *testing.T) {
+	q := &stubQuerier{}
+
+	r := routerFor(newTestHandlers(q))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/brreg/translate", strings.NewReader(`{"fx_rate_date":"not-a-date"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestProcessSource_missingRiver_returns503(t *testing.T) {
+	q := &stubQuerier{}
+	q.On("GetSourceByName", mock.Anything, "brreg").Return(db.DataSource{Name: "brreg"}, nil)
+
+	r := routerFor(newTestHandlers(q))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/brreg/process", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	q.AssertExpectations(t)
+}

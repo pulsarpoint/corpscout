@@ -95,8 +95,11 @@ SET processing_status = 'processing',
     updated_at = now()
 WHERE id IN (
     SELECT id FROM brreg_company_raw_inputs
-    WHERE processing_status = 'pending'
-       OR (processing_status = 'processing' AND processing_lease_until < now())
+    WHERE (
+        processing_status = 'pending'
+        OR (processing_status = 'processing' AND processing_lease_until < now())
+    )
+    AND raw_payload_en IS NOT NULL
     ORDER BY created_at
     LIMIT $3
     FOR UPDATE SKIP LOCKED

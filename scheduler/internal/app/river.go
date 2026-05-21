@@ -31,7 +31,7 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 		slog.Info("river migration applied", "version", v.Version, "direction", "up")
 	}
 
-	sourcePullWorker := workers.NewSourcePullWorker(q, crawler, pool)
+	sourcePullWorker := workers.NewSourcePullWorker(q, crawler)
 	sourceProcessWorker := workers.NewSourceProcessWorker(q, pool)
 	domainCrawlWorker := workers.NewDomainCrawlWorker(q, crawler, s3)
 	domainImportWorker := workers.NewDomainImportWorker(q, s3)
@@ -62,6 +62,5 @@ func setupRiver(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, q db
 	if err != nil {
 		return nil, err
 	}
-	sourcePullWorker.SetRiverClient(rc)
 	return rc, nil
 }

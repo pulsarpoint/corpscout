@@ -88,7 +88,7 @@ func (p *BrregProcessor) processOne(ctx context.Context, src db.DataSource, row 
 			SourceID:         src.ID,
 			SourceInputTable: "brreg_company_raw_inputs",
 			SourceInputKey:   row.ID.String(),
-			SourcePullRunID:  pgtype.UUID{Bytes: row.SourcePullRunID, Valid: true},
+			SourcePullRunID:  row.SourcePullRunID,
 		}); err != nil {
 			return errors.Wrap(err, "insert source link")
 		}

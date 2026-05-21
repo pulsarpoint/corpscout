@@ -4,14 +4,18 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type RowSelectionState,
 } from "@tanstack/react-table";
-import { Check, Minus } from "lucide-react";
+import { Check, Languages, Minus } from "lucide-react";
+import { toast } from "sonner";
+import { api, errorMessage } from "~/lib/api";
 import { pgrest } from "~/lib/pgrest";
 import { formatDate } from "~/lib/utils";
-import type { DataSource, SourceRawInput } from "~/types/api";
+import type { BrregTranslationStats, DataSource, SourceRawInput } from "~/types/api";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -38,9 +42,18 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
   const [selected, setSelected] = useState<SourceRawInput | null>(null);
   const [error, setError] = useState<string>();
   const [refreshToken, setRefreshToken] = useState(0);
+  const [translationFilter, setTranslationFilter] = useState<"all" | "pending" | "translated" | "failed">("all");
+  const [translationStats, setTranslationStats] = useState<BrregTranslationStats>();
+  const [translating, setTranslating] = useState(false);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const isBrreg = source.name === "brreg";
+  const selectedIds = useMemo(
+    () => Object.entries(rowSelection).filter(([, selected]) => selected).map(([id]) => id),
+    [rowSelection],
+  );
 
-  const columns = useMemo<ColumnDef<SourceRawInput>[]>(
-    () => [
+  const columns = useMemo<ColumnDef<SourceRawInput>[]>(() => {
+    const cols: ColumnDef<SourceRawInput>[] = [
       {
         header: "Status",
         accessorKey: "processing_status",
@@ -50,6 +63,42 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
           </Badge>
         ),
       },
+    ];
+    if (isBrreg) {
+      cols.unshift({
+        id: "select",
+        enableSorting: false,
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected() ? true : table.getIsSomePageRowsSelected() ? "indeterminate" : false}
+            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
+            aria-label="Select rows"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            disabled={!row.getCanSelect()}
+            onCheckedChange={(checked) => row.toggleSelected(!!checked)}
+            aria-label="Select row"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ),
+      });
+      cols.splice(1, 0, {
+        header: "Translation",
+        accessorKey: "translation_status",
+        cell: ({ row }) => {
+          const status = row.original.translation_status ?? "pending";
+          return (
+            <Badge className={translationStatusClass(status)} variant="outline">
+              {status}
+            </Badge>
+          );
+        },
+      });
+    }
+    cols.push(
       {
         header: "Native ID",
         accessorKey: "source_native_id",
@@ -91,17 +140,28 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
           )
         ),
       },
-    ],
-    [],
-  );
+    );
+    return cols;
+  }, [isBrreg]);
 
   const table = useReactTable({
     data: rows,
     columns,
+    state: { rowSelection },
+    getRowId: (row) => row.id,
+    onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     pageCount: Math.ceil(total / PAGE_SIZE),
+    enableRowSelection: (row) => {
+      const status = row.original.translation_status ?? "pending";
+      return isBrreg && (status === "pending" || status === "failed");
+    },
   });
+
+  useEffect(() => {
+    setRowSelection({});
+  }, [rows]);
 
   const fetchRows = useCallback(() => {
     let cancelled = false;
@@ -111,13 +171,18 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
     setRows([]);
     setTotal(0);
 
-    pgrest<SourceRawInput>("v_source_raw_inputs", {
+    const filters: Record<string, string | number> = {
       source_name: `eq.${source.name}`,
       processing_status: liveStatusFilter(group),
       order: "last_seen_at.desc",
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
-    })
+    };
+    if (isBrreg && translationFilter !== "all") {
+      filters.translation_status = `eq.${translationFilter}`;
+    }
+
+    pgrest<SourceRawInput>("v_source_raw_inputs", filters)
       .then((result) => {
         if (cancelled) return;
         const nextPageCount = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
@@ -143,13 +208,59 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [group, page, source.name]);
+  }, [group, isBrreg, page, source.name, translationFilter]);
 
   useEffect(() => fetchRows(), [fetchRows, refreshToken]);
+
+  const fetchTranslationStats = useCallback(() => {
+    if (!isBrreg) return;
+    let cancelled = false;
+    api.getBrregTranslationStats()
+      .then((stats) => {
+        if (!cancelled) setTranslationStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslationStats(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBrreg]);
+
+  useEffect(() => fetchTranslationStats(), [fetchTranslationStats, refreshToken]);
 
   function selectGroup(nextGroup: "live" | "archive") {
     setGroup(nextGroup);
     setPage(1);
+  }
+
+  async function translateAll() {
+    setTranslating(true);
+    try {
+      await api.translateBrreg();
+      toast.success("Brreg translation workflow started.");
+      setRefreshToken((current) => current + 1);
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to start Brreg translation."));
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  async function translateSelected() {
+    if (selectedIds.length === 0) return;
+
+    setTranslating(true);
+    try {
+      await api.translateBrreg({ ids: selectedIds });
+      toast.success("Brreg translation workflow started.");
+      setRowSelection({});
+      setRefreshToken((current) => current + 1);
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to start Brreg translation."));
+    } finally {
+      setTranslating(false);
+    }
   }
 
   const pageCount = Math.ceil(total / PAGE_SIZE);
@@ -174,6 +285,42 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
           Archive
         </Button>
       </div>
+
+      {isBrreg && (
+        <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="outline">Pending {translationStats?.pending.toLocaleString() ?? "-"}</Badge>
+            <Badge variant="outline">Translated {translationStats?.translated.toLocaleString() ?? "-"}</Badge>
+            <Badge variant="outline">Failed {translationStats?.failed.toLocaleString() ?? "-"}</Badge>
+            <Badge variant="outline">Ready {translationStats?.ready_to_process.toLocaleString() ?? "-"}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(["all", "pending", "translated", "failed"] as const).map((filter) => (
+              <Button
+                key={filter}
+                size="sm"
+                variant={translationFilter === filter ? "secondary" : "outline"}
+                onClick={() => {
+                  setTranslationFilter(filter);
+                  setPage(1);
+                }}
+              >
+                {filter[0].toUpperCase() + filter.slice(1)}
+              </Button>
+            ))}
+            <Button size="sm" disabled={translating || (translationStats?.pending ?? 0) === 0} onClick={translateAll}>
+              <Languages className="size-4" />
+              {translating ? "Starting..." : "Translate All"}
+            </Button>
+            {selectedIds.length > 0 && (
+              <Button size="sm" disabled={translating} onClick={translateSelected}>
+                <Languages className="size-4" />
+                Translate Selected ({selectedIds.length})
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -267,4 +414,17 @@ export function RawInputsTab({ source }: RawInputsTabProps) {
       />
     </div>
   );
+}
+
+function translationStatusClass(status: string) {
+  switch (status) {
+    case "translated":
+      return "border-green-200 bg-green-100 text-green-800";
+    case "failed":
+      return "border-red-200 bg-red-100 text-red-800";
+    case "translating":
+      return "border-blue-200 bg-blue-100 text-blue-800";
+    default:
+      return "border-amber-200 bg-amber-100 text-amber-800";
+  }
 }

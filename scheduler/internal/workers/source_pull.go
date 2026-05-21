@@ -9,9 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
-	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
@@ -22,16 +20,10 @@ type SourcePullWorker struct {
 	river.WorkerDefaults[SourcePullArgs]
 	db      db.Querier
 	crawler *crawlerclient.Client
-	pool    *pgxpool.Pool
-	rv      *river.Client[pgx.Tx]
 }
 
-func NewSourcePullWorker(q db.Querier, crawler *crawlerclient.Client, pool *pgxpool.Pool) *SourcePullWorker {
-	return &SourcePullWorker{db: q, crawler: crawler, pool: pool}
-}
-
-func (w *SourcePullWorker) SetRiverClient(rc *river.Client[pgx.Tx]) {
-	w.rv = rc
+func NewSourcePullWorker(q db.Querier, crawler *crawlerclient.Client) *SourcePullWorker {
+	return &SourcePullWorker{db: q, crawler: crawler}
 }
 
 func (w *SourcePullWorker) Work(ctx context.Context, job *river.Job[SourcePullArgs]) error {
@@ -85,15 +77,6 @@ func (w *SourcePullWorker) Work(ctx context.Context, job *river.Job[SourcePullAr
 		LastSourceModifiedAt: pgtype.Timestamptz{},
 	})
 
-	if src.ProcessorTaskType != nil && *src.ProcessorTaskType == "source_process" && w.rv != nil {
-		if _, err := w.rv.Insert(ctx, SourceProcessArgs{
-			SourceName: src.Name,
-			PullRunID:  run.ID.String(),
-		}, &river.InsertOpts{Queue: "source_process"}); err != nil {
-			slog.Error("source pull: enqueue source_process job", "source", src.Name, "error", err)
-			return errors.Wrap(err, "enqueue source_process job")
-		}
-	}
 	return nil
 }
 
@@ -170,7 +153,7 @@ func (w *SourcePullWorker) upsertRecord(ctx context.Context, sourceName string, 
 		num := *rec.RegistrationNumber
 		companyType, _ := rec.RawData["type"].(string)
 		row, err := w.db.UpsertCompaniesHouseRawInput(ctx, db.UpsertCompaniesHouseRawInputParams{
-			SourcePullRunID: runID,
+			SourcePullRunID: pgtype.UUID{Bytes: runID, Valid: true},
 			SourceNativeID:  num,
 			CompanyName:     ptrStr(rec.Name),
 			CompanyStatus:   ptrStr(rec.Status),
@@ -195,7 +178,7 @@ func (w *SourcePullWorker) upsertRecord(ctx context.Context, sourceName string, 
 			website = *rec.Website
 		}
 		row, err := w.db.UpsertBrregRawInput(ctx, db.UpsertBrregRawInputParams{
-			SourcePullRunID:  runID,
+			SourcePullRunID:  pgtype.UUID{Bytes: runID, Valid: true},
 			SourceNativeID:   num,
 			OrganizationName: ptrStr(rec.Name),
 			Website:          ptrStr(website),

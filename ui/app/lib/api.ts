@@ -25,6 +25,7 @@ import type {
   TemporalExecutionsResponse,
   RawInputListResponse,
   RawInputDetail,
+  BrregTranslationStats,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -131,6 +132,7 @@ export const api = {
     limit?: number;
     source?: string;
     status?: string;
+    translation_status?: string;
     q?: string;
     sort?: string;
     dir?: "asc" | "desc";
@@ -140,6 +142,7 @@ export const api = {
     if (params.limit) qs.set("limit", String(params.limit));
     if (params.source) qs.set("source", params.source);
     if (params.status) qs.set("status", params.status);
+    if (params.translation_status) qs.set("translation_status", params.translation_status);
     if (params.q) qs.set("q", params.q);
     if (params.sort) qs.set("sort", params.sort);
     if (params.dir) qs.set("dir", params.dir);
@@ -218,6 +221,15 @@ export const api = {
 
   triggerSource: (name: string) =>
     post<{ status: string }>(`/sources/${name}/trigger`, {}),
+
+  processSource: (name: string) =>
+    post<{ status: string; job_id: number }>(`/sources/${name}/process`, {}),
+
+  translateBrreg: (body: { ids?: string[]; fx_rate_date?: string } = {}) =>
+    post<{ status: string; workflow_id: string; workflow_run_id?: string }>("/sources/brreg/translate", body),
+
+  getBrregTranslationStats: () =>
+    get<BrregTranslationStats>("/sources/brreg/translation-stats"),
 
   probeSource: (name: string) =>
     post<SourceProbeResult>(`/sources/${name}/probe`, {}),

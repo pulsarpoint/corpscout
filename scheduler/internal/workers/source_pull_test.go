@@ -134,7 +134,7 @@ func TestSourcePullWorker_WritesRawInputsOnly(t *testing.T) {
 	}
 
 	crawler := crawlerclient.New(srv.URL)
-	w := workers.NewSourcePullWorker(q, crawler, nil)
+	w := workers.NewSourcePullWorker(q, crawler)
 
 	job := &river.Job[workers.SourcePullArgs]{
 		JobRow: &rivertype.JobRow{ID: 1, Kind: "source_pull"},

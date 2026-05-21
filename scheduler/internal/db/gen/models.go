@@ -86,33 +86,44 @@ type AiCompanyProfileRawInput struct {
 }
 
 type BrregCompanyRawInput struct {
-	ID                   uuid.UUID          `json:"id"`
-	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
-	SourceNativeID       string             `json:"source_native_id"`
-	OrganizationNumber   string             `json:"organization_number"`
-	OrganizationName     *string            `json:"organization_name"`
-	RegistrationStatus   *string            `json:"registration_status"`
-	Website              *string            `json:"website"`
-	CountryIso2          *string            `json:"country_iso2"`
-	SourceUpdatedAt      pgtype.Timestamptz `json:"source_updated_at"`
-	RawPayload           json.RawMessage    `json:"raw_payload"`
-	PayloadHash          string             `json:"payload_hash"`
-	FirstSeenAt          time.Time          `json:"first_seen_at"`
-	LastSeenAt           time.Time          `json:"last_seen_at"`
-	ProcessingStatus     string             `json:"processing_status"`
-	ProcessingAttempts   int32              `json:"processing_attempts"`
-	ProcessingError      *string            `json:"processing_error"`
-	ProcessingLeaseBy    *string            `json:"processing_lease_by"`
-	ProcessingLeaseUntil pgtype.Timestamptz `json:"processing_lease_until"`
-	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
-	CreatedAt            time.Time          `json:"created_at"`
-	UpdatedAt            time.Time          `json:"updated_at"`
-	RunID                *string            `json:"run_id"`
+	ID                       uuid.UUID          `json:"id"`
+	SourcePullRunID          pgtype.UUID        `json:"source_pull_run_id"`
+	SourceNativeID           string             `json:"source_native_id"`
+	OrganizationNumber       string             `json:"organization_number"`
+	OrganizationName         *string            `json:"organization_name"`
+	RegistrationStatus       *string            `json:"registration_status"`
+	Website                  *string            `json:"website"`
+	CountryIso2              *string            `json:"country_iso2"`
+	SourceUpdatedAt          pgtype.Timestamptz `json:"source_updated_at"`
+	RawPayload               json.RawMessage    `json:"raw_payload"`
+	PayloadHash              string             `json:"payload_hash"`
+	FirstSeenAt              time.Time          `json:"first_seen_at"`
+	LastSeenAt               time.Time          `json:"last_seen_at"`
+	ProcessingStatus         string             `json:"processing_status"`
+	ProcessingAttempts       int32              `json:"processing_attempts"`
+	ProcessingError          *string            `json:"processing_error"`
+	ProcessingLeaseBy        *string            `json:"processing_lease_by"`
+	ProcessingLeaseUntil     pgtype.Timestamptz `json:"processing_lease_until"`
+	ProcessedAt              pgtype.Timestamptz `json:"processed_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	RunID                    *string            `json:"run_id"`
+	RawPayloadEn             []byte             `json:"raw_payload_en"`
+	TranslationStatus        string             `json:"translation_status"`
+	TranslationAttempts      int32              `json:"translation_attempts"`
+	TranslationError         *string            `json:"translation_error"`
+	TranslationModel         *string            `json:"translation_model"`
+	TranslationPromptVersion *string            `json:"translation_prompt_version"`
+	TranslatedAt             pgtype.Timestamptz `json:"translated_at"`
+	TranslationLeaseBy       *string            `json:"translation_lease_by"`
+	TranslationLeaseUntil    pgtype.Timestamptz `json:"translation_lease_until"`
+	TranslationFxSource      *string            `json:"translation_fx_source"`
+	TranslationFxRateDate    pgtype.Date        `json:"translation_fx_rate_date"`
 }
 
 type CompaniesHouseCompanyRawInput struct {
 	ID                   uuid.UUID          `json:"id"`
-	SourcePullRunID      uuid.UUID          `json:"source_pull_run_id"`
+	SourcePullRunID      pgtype.UUID        `json:"source_pull_run_id"`
 	SourceNativeID       string             `json:"source_native_id"`
 	CompanyNumber        string             `json:"company_number"`
 	CompanyName          *string            `json:"company_name"`
@@ -750,6 +761,13 @@ type SourcePullRun struct {
 	CreatedAt        time.Time          `json:"created_at"`
 }
 
+type SourceSyncCheckpoint struct {
+	SourceName      string             `json:"source_name"`
+	Cursor          string             `json:"cursor"`
+	LastCompletedAt pgtype.Timestamptz `json:"last_completed_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
 type SuggestionSourceLink struct {
 	ID               uuid.UUID   `json:"id"`
 	SuggestionTable  string      `json:"suggestion_table"`
@@ -778,6 +796,18 @@ type TemporalExecution struct {
 	RiverJobID     *int64             `json:"river_job_id"`
 	StartedAt      time.Time          `json:"started_at"`
 	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+}
+
+type TranslationCache struct {
+	Category       string    `json:"category"`
+	OriginalHash   string    `json:"original_hash"`
+	SourceLang     string    `json:"source_lang"`
+	TargetLang     string    `json:"target_lang"`
+	PromptVersion  string    `json:"prompt_version"`
+	Model          string    `json:"model"`
+	OriginalText   string    `json:"original_text"`
+	TranslatedText string    `json:"translated_text"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type VCompany struct {
@@ -942,15 +972,24 @@ type VResolvedEntity struct {
 }
 
 type VSourceRawInput struct {
-	ID                 uuid.UUID `json:"id"`
-	SourceName         string    `json:"source_name"`
-	SourceInputTable   string    `json:"source_input_table"`
-	SourceNativeID     string    `json:"source_native_id"`
-	ProcessingStatus   string    `json:"processing_status"`
-	ProcessingAttempts int32     `json:"processing_attempts"`
-	ProcessingError    *string   `json:"processing_error"`
-	FirstSeenAt        time.Time `json:"first_seen_at"`
-	LastSeenAt         time.Time `json:"last_seen_at"`
-	PayloadHash        string    `json:"payload_hash"`
-	HasSuggestion      bool      `json:"has_suggestion"`
+	ID                       uuid.UUID          `json:"id"`
+	SourceName               string             `json:"source_name"`
+	SourceInputTable         string             `json:"source_input_table"`
+	SourceNativeID           string             `json:"source_native_id"`
+	ProcessingStatus         string             `json:"processing_status"`
+	ProcessingAttempts       int32              `json:"processing_attempts"`
+	ProcessingError          *string            `json:"processing_error"`
+	FirstSeenAt              time.Time          `json:"first_seen_at"`
+	LastSeenAt               time.Time          `json:"last_seen_at"`
+	PayloadHash              string             `json:"payload_hash"`
+	HasSuggestion            bool               `json:"has_suggestion"`
+	RawPayloadEn             []byte             `json:"raw_payload_en"`
+	TranslationStatus        *string            `json:"translation_status"`
+	TranslationAttempts      *int32             `json:"translation_attempts"`
+	TranslationError         *string            `json:"translation_error"`
+	TranslationModel         *string            `json:"translation_model"`
+	TranslationPromptVersion *string            `json:"translation_prompt_version"`
+	TranslatedAt             pgtype.Timestamptz `json:"translated_at"`
+	TranslationFxSource      *string            `json:"translation_fx_source"`
+	TranslationFxRateDate    pgtype.Date        `json:"translation_fx_rate_date"`
 }

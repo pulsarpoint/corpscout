@@ -722,5 +722,13 @@ func (s *stubQuerier) UpsertSyncCheckpoint(ctx context.Context, arg db.UpsertSyn
 	return nil
 }
 
+func (s *stubQuerier) GetCompanyAddressesByNativeID(ctx context.Context, nativeID string) ([]db.CompanyAddress, error) {
+	return nil, nil
+}
+
+func (s *stubQuerier) UpsertCompanyAddress(ctx context.Context, arg db.UpsertCompanyAddressParams) error {
+	return nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)

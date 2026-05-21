@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, Save } from "lucide-react";
-import type { DataSource } from "~/types/api";
+import { Play, Save, Send } from "lucide-react";
+import { api } from "~/lib/api";
+import type { BrregTranslationStats, DataSource } from "~/types/api";
 import { formatDate, timeAgo } from "~/lib/utils";
 import { validateDuration } from "~/components/app/source-detail/sourceDetailUtils";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -16,8 +17,10 @@ interface ScheduleTabProps {
   source: DataSource;
   saving: boolean;
   triggering: boolean;
+  processing: boolean;
   onPatch: (patch: SourcePatch) => Promise<void>;
   onTrigger: () => Promise<void>;
+  onProcess: () => Promise<void>;
 }
 
 function parseDurationMs(value: string): number | undefined {
@@ -44,11 +47,14 @@ export function ScheduleTab({
   source,
   saving,
   triggering,
+  processing,
   onPatch,
   onTrigger,
+  onProcess,
 }: ScheduleTabProps) {
   const [duration, setDuration] = useState(source.schedule_expression ?? "");
   const [durationError, setDurationError] = useState<string>();
+  const [brregStats, setBrregStats] = useState<BrregTranslationStats>();
   const isIntervalSchedule = source.schedule_kind === "interval";
 
   useEffect(() => {
@@ -57,6 +63,8 @@ export function ScheduleTab({
   }, [source.schedule_expression]);
 
   const nextRun = useMemo(() => nextRunText(source), [source]);
+  const brregBlocked = source.name === "brreg" && (brregStats?.ready_to_process ?? 0) === 0;
+  const processDisabled = processing || brregBlocked;
 
   async function saveDuration() {
     if (!isIntervalSchedule) return;
@@ -69,6 +77,24 @@ export function ScheduleTab({
       schedule_expression: duration.trim(),
     });
   }
+
+  useEffect(() => {
+    if (source.name !== "brreg") {
+      setBrregStats(undefined);
+      return;
+    }
+    let cancelled = false;
+    api.getBrregTranslationStats()
+      .then((stats) => {
+        if (!cancelled) setBrregStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setBrregStats(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [source.name]);
 
   return (
     <div className="space-y-4">
@@ -153,10 +179,21 @@ export function ScheduleTab({
               <p className="text-sm text-muted-foreground">
                 Manual trigger works even when the source is disabled or the schedule is paused.
               </p>
-              <Button disabled={triggering} onClick={onTrigger} variant="outline">
-                <Play className="size-4" />
-                {triggering ? "Queuing..." : "Trigger now"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {source.name === "brreg" && (
+                  <Badge variant="outline">Ready {brregStats?.ready_to_process.toLocaleString() ?? "-"}</Badge>
+                )}
+                <span title={brregBlocked ? "Translate rows first" : undefined}>
+                  <Button disabled={processDisabled} onClick={onProcess} variant="outline">
+                    <Send className="size-4" />
+                    {processing ? "Queuing..." : "Process"}
+                  </Button>
+                </span>
+                <Button disabled={triggering} onClick={onTrigger} variant="outline">
+                  <Play className="size-4" />
+                  {triggering ? "Queuing..." : "Trigger now"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

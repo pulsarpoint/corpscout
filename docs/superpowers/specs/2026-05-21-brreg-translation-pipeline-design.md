@@ -42,7 +42,7 @@ Operator (UI)
          └─ reads/writes translation_cache
 ```
 
-Translation ends when all claimed rows have a populated `raw_payload_en`. No `source_process` job is enqueued automatically — the operator triggers company processing manually (see § Processing gate below).
+Translation ends when there are no claimable pending or stale-translating rows left. Successful rows have populated `raw_payload_en`; failed rows remain `failed` with `raw_payload_en = NULL` until the operator retries them explicitly. No `source_process` job is enqueued automatically — the operator triggers company processing manually (see § Processing gate below).
 
 ### Processing gate (manual, operator-triggered)
 
@@ -65,6 +65,8 @@ ALTER TABLE brreg_company_raw_inputs
   ADD COLUMN translated_at               TIMESTAMPTZ,
   ADD COLUMN translation_lease_by        TEXT,
   ADD COLUMN translation_lease_until     TIMESTAMPTZ,
+  ADD COLUMN translation_fx_source        TEXT,
+  ADD COLUMN translation_fx_rate_date     DATE,
   ADD CONSTRAINT chk_brreg_translation_status CHECK (
     translation_status IN ('pending', 'translating', 'translated', 'failed')
   );
@@ -85,7 +87,7 @@ CREATE INDEX idx_brreg_raw_translation_lease
 
 `translated` produces a populated `raw_payload_en` and satisfies the `IS NOT NULL` gate for `ClaimPendingBrregRawInputs`.
 
-**Lease and stale-row recovery:** `translation_lease_by` is the Temporal workflow run ID; `translation_lease_until` is `now() + 10 minutes`. The `TranslateBrregBatch` claim step also reclaims stale leases — rows where `translation_status = 'translating' AND translation_lease_until < now()` are treated as `pending` and included in the next claim. This means a crashed activity can never strand rows longer than 10 minutes.
+**Lease and stale-row recovery:** `translation_lease_by` is the Temporal workflow run ID; `translation_lease_until` is `now() + 10 minutes`. The `TranslateBrregBatch` claim step also reclaims stale leases — rows where `translation_status = 'translating' AND translation_lease_until < now()` are treated as `pending` and included in the next claim. The same workflow run may also reclaim its own active lease immediately (`translation_lease_by = <workflow_run_id>`) so a Temporal activity retry after an LLM timeout does not return `claimed=0` and prematurely stop the workflow. This means a crashed activity can never strand rows longer than 10 minutes, while a retry of the same workflow can continue immediately.
 
 ### Migration: `translation_cache` table
 
@@ -106,7 +108,7 @@ CREATE TABLE translation_cache (
 
 `original_hash` is `sha256(trim(lower(original_text)))` hex-encoded. `category` is one of: `org_form`, `sector_code`, `industry_code`, `capital_type`, `activity`, `statutory_purpose`, `vat_description`, `other`.
 
-Using `(category, original_hash, prompt_version, model)` as the key means changing the prompt or upgrading the model automatically produces new cache entries without invalidating old ones — old translations remain available as a fallback.
+Using `(category, original_hash, source_lang, target_lang, prompt_version, model)` as the key means changing the prompt or upgrading the model automatically produces new cache entries without deleting historical cache rows. Runtime lookups only use the current `(source_lang, target_lang, prompt_version, model)` tuple; old translations are retained for audit/history, not as automatic fallback.
 
 ---
 
@@ -131,8 +133,8 @@ Using `(category, original_hash, prompt_version, model)` as the key means changi
 | `registrertIForetaksregisteret` | `in_business_register` | boolean |
 | `harRegistrertAntallAnsatte` | `has_registered_employees` | boolean |
 | `sisteInnsendteAarsregnskap` | `last_annual_report_year` | string/number |
-| `kapital.belop` | `capital.amount` | number |
-| `kapital.valuta` | `capital.currency` | ISO code |
+| `kapital.belop` | `capital.amount` | converted to USD; original amount preserved as `capital.original_amount` |
+| `kapital.valuta` | `capital.currency` | always `USD` in `raw_payload_en`; original currency preserved as `capital.original_currency` |
 | `kapital.antallAksjer` | `capital.shares` | number |
 | `forretningsadresse` | `business_address` | see address mapping below |
 | `postadresse` | `postal_address` | see address mapping below |
@@ -162,6 +164,46 @@ These are finite enum-like values. The first time a value is seen it goes to the
 | `naeringskode1/2/3.beskrivelse` | `industry_code` | "Elektrisk installasjonsarbeid" → "Electrical installation work" |
 | `naeringskode1/2/3.kode` | *(copy as-is)* | "43.210" |
 | `kapital.type` | `capital_type` | "Aksjekapital" → "Share capital" |
+
+### Currency normalization (official exchange rate)
+
+Monetary values in `raw_payload_en` are normalized to USD. For Brreg this applies to `kapital.belop` / `kapital.valuta` today, and any future mapped monetary field should follow the same pattern. Rows with no mapped monetary field do not need FX conversion and should leave FX metadata absent/null.
+
+Use an official central-bank exchange-rate feed. The implementation should reuse the existing corpscout `fxrates` design, which converts through the European Central Bank daily reference feed:
+
+`https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml`
+
+The ECB feed includes both NOK and USD rates relative to EUR. Convert source currency to USD with:
+
+```text
+amount_usd = amount_original / rate[source_currency] * rate["USD"]
+```
+
+`raw_payload_en.capital.amount` is the converted USD amount, rounded to two decimal places for display JSON. `raw_payload_en.capital.amount_usd_cents` is the integer USD-cent value for exact comparisons. The original registry amount and currency are preserved.
+
+If FX loading or conversion fails for a row that has a mapped monetary field, the row is marked `failed` with `translation_error` and `raw_payload_en` remains `NULL`. We should not produce an English payload with mixed or unconverted currency.
+
+`capital` output shape:
+
+```json
+{
+  "amount": 2843.48,
+  "currency": "USD",
+  "amount_usd_cents": 284348,
+  "original_amount": 30000.00,
+  "original_currency": "NOK",
+  "exchange_rate": {
+    "source": "ECB",
+    "rate_date": "2026-05-21",
+    "source_currency": "NOK",
+    "target_currency": "USD",
+    "source_rate_per_eur": 11.5000,
+    "target_rate_per_eur": 1.0900
+  },
+  "shares": 100,
+  "type": "Share capital"
+}
+```
 
 ### Always LLM (free text, unique per company)
 
@@ -198,7 +240,23 @@ If any of these arrays are empty or absent, the field is included as an empty ar
   "activities": ["Holding company."],
   "statutory_purpose": ["Own and manage investments."],
   "vat_descriptions": [],
-  "capital": { "amount": 30000.00, "currency": "NOK", "shares": 100, "type": "Share capital" },
+  "capital": {
+    "amount": 2843.48,
+    "currency": "USD",
+    "amount_usd_cents": 284348,
+    "original_amount": 30000.00,
+    "original_currency": "NOK",
+    "exchange_rate": {
+      "source": "ECB",
+      "rate_date": "2026-05-21",
+      "source_currency": "NOK",
+      "target_currency": "USD",
+      "source_rate_per_eur": 11.5000,
+      "target_rate_per_eur": 1.0900
+    },
+    "shares": 100,
+    "type": "Share capital"
+  },
   "business_address": {
     "street": ["Storengveien 50D"],
     "city": "STABEKK",
@@ -224,6 +282,7 @@ type TranslateBrregInput struct {
   PromptVersion string   `json:"prompt_version"`    // e.g. "v1"
   Model         string   `json:"model"`             // e.g. "qwen3:6b"
   Accumulated   int      `json:"accumulated"`       // rows translated so far (ContinueAsNew)
+  FXRateDate    string   `json:"fx_rate_date"`      // optional YYYY-MM-DD; empty = latest official rate
 }
 
 type TranslateBrregBatchResult struct {
@@ -237,9 +296,10 @@ type TranslateBrregBatchResult struct {
 
 ```
 TranslateBrregRawInputs(input):
+  workflowRunID = workflow.GetInfo(ctx).WorkflowExecution.RunID
   pagesThisRun = 0
   loop:
-    result = TranslateBrregBatch(input.IDs, input.PromptVersion, input.Model, batchSize=50)
+    result = TranslateBrregBatch(input.IDs, input.PromptVersion, input.Model, input.FXRateDate, workflowRunID, batchSize=50)
     accumulated += result.Translated
     if result.Claimed == 0: break             // nothing left to work on
     if input.IDs is non-empty: break          // specific IDs → single pass only
@@ -256,16 +316,19 @@ No `source_process` enqueue — processing is always triggered manually by the o
 ### `TranslateBrregBatch` activity
 
 1. **Claim rows**:
-   - All-pending path: `WHERE translation_status = 'pending' OR (translation_status = 'translating' AND translation_lease_until < now())`
-   - Specific-IDs path: `WHERE (translation_status IN ('pending', 'failed') OR (translation_status = 'translating' AND translation_lease_until < now())) AND id = ANY($ids)`
+   - All-pending path: `WHERE translation_status = 'pending' OR (translation_status = 'translating' AND (translation_lease_until < now() OR translation_lease_by = $workflow_run_id))`
+   - Specific-IDs path: `WHERE (translation_status IN ('pending', 'failed') OR (translation_status = 'translating' AND (translation_lease_until < now() OR translation_lease_by = $workflow_run_id))) AND id = ANY($ids)`
 
-   Both paths reclaim stale leases inline. Use `FOR UPDATE SKIP LOCKED LIMIT 50`. Immediately mark claimed rows `translating`, set `translation_lease_by = <workflow_run_id>`, `translation_lease_until = now() + 10 minutes`, and increment `translation_attempts`. Return `Claimed = len(rows)`; exit early with `Claimed = 0` if the query returns nothing.
+   Both paths reclaim stale leases inline and let the same Temporal workflow run reclaim its own active lease during an activity retry. The workflow passes `workflow.GetInfo(ctx).WorkflowExecution.RunID` to the activity as `$workflow_run_id`. Use `FOR UPDATE SKIP LOCKED LIMIT 50`. Immediately mark claimed rows `translating`, set `translation_lease_by = <workflow_run_id>`, `translation_lease_until = now() + 10 minutes`, and increment `translation_attempts`. Return `Claimed = len(rows)`; exit early with `Claimed = 0` if the query returns nothing.
 
-2. **Extract translatable strings**: for each row, build two collections:
+2. **Extract translatable strings and monetary values**: for each row, build three collections:
    - `cached_lookups`: map of `{category → []unique_text}` for enum-like fields
    - `llm_required`: map of `{row_id → []unique_text}` for free-text fields
+   - `monetary_values`: mapped monetary fields requiring USD conversion, starting with `kapital.belop` / `kapital.valuta`
 
-3. **Load cache**: use the full primary key for all lookups:
+3. **Load official FX rates when needed**: if any claimed row has mapped monetary values, load official ECB rates once per activity attempt, or from a short-lived in-process cache. If `FXRateDate` is set, use the official rate for that date; if that date is unavailable or historical lookup is not implemented, fail validation before translating rows. If `FXRateDate` is empty, use the latest ECB daily feed. The activity records the effective source (`ECB`) and rate date on rows where FX conversion is used.
+
+4. **Load cache**: use the full primary key for all lookups:
    ```sql
    SELECT category, original_hash, translated_text
    FROM translation_cache
@@ -277,9 +340,9 @@ No `source_process` enqueue — processing is always triggered manually by the o
    ```
    One query for all unique strings in the batch. Cache hits from a different model or prompt version are not used; they will result in a new LLM call and a new cache row keyed to the current (model, prompt_version) pair.
 
-4. **Identify cache misses** per category. Collect all unique strings not in cache for the current (model, prompt_version).
+5. **Identify cache misses** per category. Collect all unique strings not in cache for the current (model, prompt_version).
 
-5. **LLM call** (if any misses): send one request per category with cache misses:
+6. **LLM call** (if any misses): send one request per category with cache misses:
    ```json
    {
      "model": "qwen3:6b",
@@ -291,26 +354,28 @@ No `source_process` enqueue — processing is always triggered manually by the o
    ```
    For free-text fields (`aktivitet`, etc.) send per-row strings grouped together.
 
-6. **Validate LLM response**: parse JSON. If unparseable → fail the activity (Temporal retries). For each sent key: if the LLM returned it, use the translation; if the LLM omitted it → mark that row `failed` with `translation_error = "LLM omitted key: <term>"`. Discard any keys the LLM invented (not in the input) with a warning log — they are not written to cache.
+7. **Validate LLM response**: parse JSON. If unparseable → fail the activity (Temporal retries). For each sent key: if the LLM returned it, use the translation; if the LLM omitted it → mark that row `failed` with `translation_error = "LLM omitted key: <term>"`. Discard any keys the LLM invented (not in the input) with a warning log — they are not written to cache.
 
-7. **Build `raw_payload_en`** for each row using: structural renames + cache hits + new LLM translations + originals for any LLM misses (per-text fallback).
+8. **Build `raw_payload_en`** only for rows with complete translation and FX coverage, using structural renames + USD-normalized monetary values + cache hits + new LLM translations. Rows missing a required LLM translation or failing currency conversion are marked `failed` and do not get `raw_payload_en`.
 
-8. **Write in one transaction**:
+9. **Write in one transaction**:
    - Upsert new translations into `translation_cache` (only for successfully translated strings)
-   - For each **successfully translated** row: set `raw_payload_en`, `translation_status = 'translated'`, `translation_model`, `translation_prompt_version`, `translation_attempts`, `translated_at`, clear `translation_lease_by` and `translation_lease_until`
+   - For each **successfully translated** row: set `raw_payload_en`, `translation_status = 'translated'`, `translation_model`, `translation_prompt_version`, `translation_fx_source` and `translation_fx_rate_date` when FX conversion was used, `translation_attempts`, `translated_at`, clear `translation_lease_by` and `translation_lease_until`
    - For each **failed** row: set `translation_status = 'failed'`, `translation_error`, `translation_attempts`; clear lease fields; leave `raw_payload_en = NULL`
 
 A `failed` row never has `raw_payload_en` written. It remains `NULL` and is excluded from the processor gate until the operator retries it.
 
-The DB transaction never opens until after all LLM calls complete.
+The final write transaction never opens until after all LLM calls complete. The earlier claim step still uses its own short transaction to lease rows.
 
 ### Error handling
 
 | Scenario | Behaviour |
 |---|---|
-| LLM call times out or HTTP error | Activity fails → Temporal retries (transient; rows stay `translating` with active lease) |
-| LLM returns invalid JSON | Activity fails → Temporal retries (up to configured max attempts; if exhausted, rows are reclaimed by the next run's stale-lease path and `translation_attempts` is incremented) |
+| LLM call times out or HTTP error | Activity fails → Temporal retries. The retry may reclaim rows leased by the same workflow run immediately; otherwise rows become available through stale-lease recovery. |
+| LLM returns invalid JSON | Activity fails → Temporal retries. The retry may reclaim same-run leases immediately; if attempts are exhausted, rows are reclaimed by a later run's stale-lease path and `translation_attempts` is incremented. |
 | LLM omits a key from the response | Mark affected row `failed` with `translation_error = "LLM omitted key: <term>"`; continue with rest of batch — silent Norwegian fallback is not used |
+| FX feed load fails | Activity fails → Temporal retries; rows stay leased for same-run retry or stale-lease recovery |
+| FX conversion fails for a row | Mark that row `failed` with `translation_error = "FX conversion failed: <currency>"`; leave `raw_payload_en = NULL`; continue with rest of batch |
 | Single row fails to build `raw_payload_en` | Mark that row `failed` with `translation_error`; continue with rest of batch |
 | All rows in batch fail | Activity returns `claimed=N, translated=0, failed=N`; workflow continues because `claimed > 0` — it stops only when the next claim returns nothing |
 | Stale lease (activity crashed mid-batch) | Next batch's claim query reclaims rows where `translation_lease_until < now()`; rows re-enter processing with a fresh lease |
@@ -336,13 +401,21 @@ Response:
 
 Returns 409 if a `source_process` job for that source is already `pending` or `running`. Returns 404 if the source name is unknown.
 
-**UI placement:** A **Process** button is added to every source detail page (the existing `sources_.$name.tsx` route), regardless of source type. It is disabled and shows "Processing…" while a job is in flight. For brreg it is also disabled until `translated > 0` — the tooltip reads "Translate rows first" when both `translated == 0` and `pending > 0`.
+**UI placement:** A **Process** button is added to every source detail page (the existing `sources_.$name.tsx` route), regardless of source type. It is disabled and shows "Processing..." while a job is in flight. For brreg it is also disabled until `ready_to_process > 0`, where `ready_to_process` is the count of rows with `translation_status = 'translated' AND processing_status = 'pending'`. The tooltip reads "Translate rows first" when `ready_to_process == 0` and translation `pending > 0`.
 
 ---
 
 ## `ClaimPendingBrregRawInputs` query change
 
-Add `AND raw_payload_en IS NOT NULL` to the existing WHERE clause. This is the only change to the processor — no other logic changes.
+Add the `raw_payload_en IS NOT NULL` gate with explicit parentheses around the existing processing-status predicate. This is the only change to the processor — no other logic changes.
+
+```sql
+WHERE (
+    processing_status = 'pending'
+    OR (processing_status = 'processing' AND processing_lease_until < now())
+)
+AND raw_payload_en IS NOT NULL
+```
 
 ---
 
@@ -352,11 +425,13 @@ Add `AND raw_payload_en IS NOT NULL` to the existing WHERE clause. This is the o
 
 Request body (optional):
 ```json
-{ "ids": ["uuid1", "uuid2"] }
+{ "ids": ["uuid1", "uuid2"], "fx_rate_date": "2026-05-21" }
 ```
 
 - If `ids` is absent or empty: trigger `TranslateBrregRawInputs` for all pending rows
 - If `ids` is present: trigger for those specific rows only
+- If `fx_rate_date` is absent or empty: use the latest official ECB daily rate
+- If `fx_rate_date` is present: validate `YYYY-MM-DD` and require official rates for that date before starting the workflow; if the date is unsupported or unavailable, return HTTP 400
 
 Response:
 ```json
@@ -378,13 +453,14 @@ Response:
   "translating": 50,
   "translated": 13034,
   "failed": 17,
+  "ready_to_process": 12800,
   "total": 996342
 }
 ```
 
 ### Existing raw input detail endpoint
 
-Add `raw_payload_en`, `translation_status`, `translation_attempts`, `translation_error`, `translation_model`, `translation_prompt_version`, `translated_at` to the response for brreg rows.
+Add `raw_payload_en`, `translation_status`, `translation_attempts`, `translation_error`, `translation_model`, `translation_prompt_version`, `translation_fx_source`, `translation_fx_rate_date`, `translated_at` to the response for brreg rows.
 
 ### Existing raw inputs list endpoint
 
@@ -410,7 +486,7 @@ Clicking either button calls `POST /api/v1/sources/brreg/translate` (with or wit
 
 Below the existing raw payload viewer, add a **Translation** section:
 
-**Stats row**: `translation_status` badge · model · prompt version · attempts · `translated_at` · error message (if failed)
+**Stats row**: `translation_status` badge · model · prompt version · FX source/date · attempts · `translated_at` · error message (if failed)
 
 **Payload panels** (two columns side by side):
 - Left: **Norwegian (original)** — formatted JSON of `raw_payload`
@@ -443,6 +519,25 @@ func (c *Client) TranslateMap(ctx context.Context, category string, inputs map[s
 
 ---
 
+## FX Rates Client (data-pipelines go-worker)
+
+Add a small `fxrates` package to `data-pipelines/services/go-worker`, based on the existing corpscout scheduler `internal/fxrates` package.
+
+The package exposes:
+
+```go
+type Rates struct { ... }
+
+func Load(ctx context.Context) (*Rates, error)              // latest official ECB daily reference feed
+func LoadForDate(ctx context.Context, date time.Time) (*Rates, error) // optional historical rate support
+func (r *Rates) ToUSDCents(amount float64, currency string) (int64, error)
+func (r *Rates) RateDate() time.Time
+```
+
+The first implementation may support latest-rate conversion only if historical ECB lookup is not already available locally. If `TranslateBrregInput.FXRateDate` is supplied before historical lookup exists, the trigger endpoint returns HTTP 400 before starting the workflow rather than silently using a different date.
+
+---
+
 ## Translation Prompt
 
 **Prompt version: `v1`**
@@ -472,6 +567,8 @@ Expected response:
 | `TestBuildRawPayloadEn_KeyMapping` | All Norwegian keys produce correct English keys; no unknown keys in output; omitted Norwegian-only fields are absent |
 | `TestBuildRawPayloadEn_LegalNameNotTranslated` | `navn` value is copied verbatim |
 | `TestBuildRawPayloadEn_BooleansAndDatesPassThrough` | Booleans, dates, numbers, codes copied as-is |
+| `TestBuildRawPayloadEn_CapitalConvertedToUSD` | `kapital.belop`/`kapital.valuta` produces USD `capital.amount`, `capital.amount_usd_cents`, original amount/currency, and exchange-rate metadata |
+| `TestBuildRawPayloadEn_FXFailureMarksRowFailed` | FX conversion failure leaves `raw_payload_en = NULL` and marks the row failed |
 | `TestExtractTranslatableStrings` | Only `aktivitet`, `vedtektsfestetFormaal`, etc. collected for LLM; enum fields collected for cache |
 | `TestTranslateBrregBatch_CacheHitSkipsLLM` | When all strings are in cache (full key match), no LLM call is made; row marked `translated` |
 | `TestTranslateBrregBatch_CacheKeyMismatch_TreatedAsMiss` | Cache row for same text but different model/prompt_version is not used |
@@ -482,12 +579,16 @@ Expected response:
 | `TestTranslateBrregBatch_StructuralOnlyRow_MarkedTranslated` | Row with no enum or free-text fields is still marked `translated` |
 | `TestTranslateBrregBatch_SetsLease` | Claimed rows have `translation_lease_by` and `translation_lease_until` set |
 | `TestTranslateBrregBatch_ReclaimsStaleRows` | Rows with `translating` + expired lease are included in the next claim |
+| `TestTranslateBrregBatch_ReclaimsSameWorkflowLease` | A Temporal activity retry can reclaim rows leased by the same workflow run before lease expiry |
 | `TestTranslateBrregBatch_ClearsLeaseOnSuccess` | Written rows have `translation_lease_by = NULL` and `translation_lease_until = NULL` |
 | `TestTranslateBrregBatch_ReturnsCounts` | Result struct has correct `claimed`, `translated`, `failed` values |
+| `TestTranslateBrregBatch_LoadsFXOncePerAttempt` | Batch translation loads official exchange rates once and reuses them for all rows in the activity attempt |
 | `TestClaimPendingBrregRawInputs_ExcludesNullPayloadEn` | Processor query returns zero rows when `raw_payload_en IS NULL` |
+| `TestClaimPendingBrregRawInputs_PreservesProcessingRetryGate` | Processor query keeps the original pending/stale-processing status logic inside parentheses before applying `raw_payload_en IS NOT NULL` |
 | `TestTranslateBrregWorkflow_StopsWhenClaimedIsZero` | Workflow exits cleanly when batch returns `claimed=0` |
 | `TestTranslateBrregWorkflow_ContinuesWhenAllBatchFailed` | Workflow continues if `claimed > 0` even when `translated=0, failed=N` |
 | `TestTranslateBrregWorkflow_SpecificIDsSinglePass` | IDs-only run does not loop or ContinueAsNew |
 | `TestMarkExecutionComplete_NoRiverJobEnqueued` | `MarkExecutionComplete` completes without inserting any River job |
 | `TestProcessSourceHandler_EnqueuesJob` | `POST /api/v1/sources/:name/process` inserts a `source_process` River job |
 | `TestProcessSourceHandler_409WhenAlreadyRunning` | Returns 409 if a job for that source is already pending or running |
+| `TestBrregTranslationStats_ReadyToProcess` | `ready_to_process` counts translated rows that still have `processing_status = 'pending'` |

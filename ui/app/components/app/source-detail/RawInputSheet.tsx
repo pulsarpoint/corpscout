@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Ban, RotateCcw } from "lucide-react";
+import { Ban, Languages, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "~/lib/api";
 import { pgrest } from "~/lib/pgrest";
 import { formatDate } from "~/lib/utils";
 import type {
   DataSource,
-  RawPayloadRow,
+  RawInputDetail,
   SourceRawInput,
   SuggestionSourceLink,
 } from "~/types/api";
@@ -38,15 +38,17 @@ export function RawInputSheet({
   onChanged,
 }: RawInputSheetProps) {
   const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  const [detail, setDetail] = useState<RawInputDetail | null>(null);
   const [links, setLinks] = useState<SuggestionSourceLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
-  const [action, setAction] = useState<"retry" | "ignore" | null>(null);
+  const [action, setAction] = useState<"retry" | "ignore" | "translate" | null>(null);
   const retryOnlyResetsStatus = source.name === "ai_company_profile" || source.name === "domain_discovery";
 
   useEffect(() => {
     if (!open || !row) {
       setPayload(null);
+      setDetail(null);
       setLinks([]);
       setError(undefined);
       return;
@@ -57,20 +59,17 @@ export function RawInputSheet({
     setError(undefined);
 
     Promise.all([
-      pgrest<RawPayloadRow>(row.source_input_table, {
-        id: "eq." + row.id,
-        select: "raw_payload",
-        limit: 1,
-      }),
+      api.getRawInput(row.source_name, row.id),
       pgrest<SuggestionSourceLink>("suggestion_source_links", {
         source_input_table: "eq." + row.source_input_table,
         source_input_key: "eq." + row.id,
         order: "created_at.desc",
       }),
     ])
-      .then(([payloadResult, linksResult]) => {
+      .then(([detailResult, linksResult]) => {
         if (cancelled) return;
-        setPayload(payloadResult.data[0]?.raw_payload ?? null);
+        setDetail(detailResult);
+        setPayload(detailResult.raw_payload ?? null);
         setLinks(linksResult.data);
       })
       .catch(() => {
@@ -104,6 +103,21 @@ export function RawInputSheet({
         err,
         nextAction === "retry" ? "Failed to retry raw input." : "Failed to ignore raw input.",
       ));
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function handleTranslate() {
+    if (!row) return;
+
+    setAction("translate");
+    try {
+      await api.translateBrreg({ ids: [row.id] });
+      toast.success("Translation workflow started.");
+      onChanged();
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to start translation."));
     } finally {
       setAction(null);
     }
@@ -148,6 +162,17 @@ export function RawInputSheet({
                 <Ban className="size-4" />
                 Ignore
               </Button>
+              {source.name === "brreg" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={action !== null || row.translation_status === "translating" || row.translation_status === "translated"}
+                  onClick={handleTranslate}
+                >
+                  <Languages className="size-4" />
+                  Translate
+                </Button>
+              )}
             </div>
             {retryOnlyResetsStatus && (
               <Alert>
@@ -168,6 +193,15 @@ export function RawInputSheet({
               <MetadataItem label="Last seen" value={formatDate(row.last_seen_at)} />
               <MetadataItem label="Payload hash" value={row.payload_hash} breakValue />
             </div>
+
+            {source.name === "brreg" && (
+              <div className="grid gap-3 rounded-md border p-3 text-sm sm:grid-cols-4">
+                <MetadataItem label="Translation" value={detail?.translation_status ?? row.translation_status ?? "pending"} />
+                <MetadataItem label="Model" value={detail?.translation_model ?? row.translation_model ?? "-"} />
+                <MetadataItem label="FX" value={detail?.translation_fx_source ? `${detail.translation_fx_source} ${detail.translation_fx_rate_date ?? ""}` : "-"} />
+                <MetadataItem label="Translated" value={detail?.translated_at ? formatDate(detail.translated_at) : "-"} />
+              </div>
+            )}
 
             <section className="space-y-2">
               <h3 className="text-sm font-medium">Suggestion links</h3>
@@ -194,12 +228,38 @@ export function RawInputSheet({
               </section>
             )}
 
-            <section className="space-y-2">
-              <h3 className="text-sm font-medium">Raw payload</h3>
-              <pre className="max-h-[32rem] overflow-auto rounded-md border bg-muted p-3 text-xs">
-                {loading ? "Loading..." : JSON.stringify(payload, null, 2)}
-              </pre>
-            </section>
+            {source.name === "brreg" && (detail?.translation_error || row.translation_error) && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium">Translation error</h3>
+                <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border bg-muted p-3 text-xs">
+                  {detail?.translation_error ?? row.translation_error}
+                </pre>
+              </section>
+            )}
+
+            {source.name === "brreg" ? (
+              <section className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Norwegian payload</h3>
+                  <pre className="max-h-[32rem] overflow-auto rounded-md border bg-muted p-3 text-xs">
+                    {loading ? "Loading..." : JSON.stringify(payload, null, 2)}
+                  </pre>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">English payload</h3>
+                  <pre className="max-h-[32rem] overflow-auto rounded-md border bg-muted p-3 text-xs">
+                    {loading ? "Loading..." : JSON.stringify(detail?.raw_payload_en ?? null, null, 2)}
+                  </pre>
+                </div>
+              </section>
+            ) : (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium">Raw payload</h3>
+                <pre className="max-h-[32rem] overflow-auto rounded-md border bg-muted p-3 text-xs">
+                  {loading ? "Loading..." : JSON.stringify(payload, null, 2)}
+                </pre>
+              </section>
+            )}
           </div>
         ) : (
           <SheetHeader className="px-0">

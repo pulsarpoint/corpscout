@@ -25,6 +25,7 @@ export default function SourceDetailPage() {
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (!name) return;
@@ -37,6 +38,7 @@ export default function SourceDetailPage() {
     setError(undefined);
     setSaving(false);
     setTriggering(false);
+    setProcessing(false);
     api.getSource(name)
       .then((loadedSource) => {
         if (!ignore) setSource(loadedSource);
@@ -91,6 +93,21 @@ export default function SourceDetailPage() {
     }
   }
 
+  async function handleProcess() {
+    const sourceName = source?.name;
+    if (!sourceName) return;
+
+    setProcessing(true);
+    try {
+      await api.processSource(sourceName);
+      toast.success(`${sourceName} processing queued.`);
+    } catch (err) {
+      toast.error(errorMessage(err, `Failed to process ${sourceName}.`));
+    } finally {
+      if (latestNameRef.current === sourceName) setProcessing(false);
+    }
+  }
+
   if (loading) return <Skeleton className="h-64 w-full" />;
   if (error || !source) {
     return (
@@ -126,8 +143,10 @@ export default function SourceDetailPage() {
             source={source}
             saving={saving}
             triggering={triggering}
+            processing={processing}
             onPatch={handlePatch}
             onTrigger={handleTrigger}
+            onProcess={handleProcess}
           />
         </TabsContent>
         <TabsContent value="config">
