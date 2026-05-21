@@ -569,3 +569,22 @@ func TestGetSource_includes_requires_translation(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, true, body["requires_translation"])
 }
+
+func TestGetSource_requires_translation_defaults_false(t *testing.T) {
+	q := &stubQuerier{}
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		ID:   uuid.New(),
+		Name: "gleif",
+		// RequiresTranslation omitted — zero value is false
+	}, nil)
+
+	r := routerFor(newTestHandlers(q))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sources/gleif", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, false, body["requires_translation"])
+}
