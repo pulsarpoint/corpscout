@@ -144,5 +144,53 @@ CREATE OR REPLACE VIEW v_source_raw_inputs AS
 
 GRANT SELECT ON v_source_raw_inputs TO corpscout_anon;
 
+UPDATE data_sources
+SET pull_task_type = 'source_pull',
+    processor_task_type = NULL,
+    requires_translation = false,
+    updated_at = now()
+WHERE name = 'gleif';
+
+UPDATE data_sources
+SET pull_task_type = 'source_pull',
+    processor_task_type = 'source_process',
+    requires_translation = false,
+    config = '{
+      "api_url":   "https://cvrapi.dk/api",
+      "docs_url":  "https://cvrapi.dk/documentation",
+      "protocol":  "REST/JSON",
+      "page_size": 100,
+      "fields":    ["name", "country", "registration_number", "status", "website"],
+      "auth_env":  "CVR_API_TOKEN",
+      "notes":     "Danish Central Business Register. API token required. API does not return a total record count."
+    }'::jsonb,
+    updated_at = now()
+WHERE name = 'cvr';
+
+UPDATE data_sources
+SET pull_task_type = 'source_pull',
+    processor_task_type = 'source_process',
+    requires_translation = false,
+    config = '{
+      "api_url":   "https://ariregister.rik.ee/api/1/",
+      "docs_url":  "https://ariregister.rik.ee/eng/api",
+      "protocol":  "REST/JSON",
+      "page_size": 200,
+      "fields":    ["name", "country", "registration_number", "status"],
+      "auth_env":  null,
+      "notes":     "Estonian Business Register (Ariregister). Public open data, no auth required. Uses offset-based pagination."
+    }'::jsonb,
+    updated_at = now()
+WHERE name = 'ariregister';
+
+ALTER TABLE gleif_company_raw_inputs
+    DROP COLUMN IF EXISTS legal_jurisdiction,
+    DROP COLUMN IF EXISTS legal_form_code,
+    DROP COLUMN IF EXISTS legal_form_name,
+    DROP COLUMN IF EXISTS registration_authority_id,
+    DROP COLUMN IF EXISTS entity_category,
+    DROP COLUMN IF EXISTS entity_creation_date;
+
+-- Keep source_pull_run_id nullable so rollback does not break Temporal-written rows.
 DROP TABLE IF EXISTS ariregister_company_raw_inputs;
 DROP TABLE IF EXISTS cvr_company_raw_inputs;
