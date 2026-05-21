@@ -50,3 +50,9 @@ export function sourceHasProcessor(source: DataSource): boolean {
     || source.input_table_name === "companies_house_company_raw_inputs"
     || source.input_table_name === "brreg_company_raw_inputs";
 }
+
+const TEMPORAL_SOURCES = new Set(["companies_house", "brreg"]);
+
+export function hasPipeline(source: DataSource): boolean {
+  return TEMPORAL_SOURCES.has(source.name);
+}

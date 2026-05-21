@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -322,4 +323,88 @@ func (h *Handlers) resolveRawInputAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	return src, id, support, true
+}
+
+type rawInputDetail struct {
+	ID                 string          `json:"id"`
+	Source             string          `json:"source"`
+	Name               string          `json:"name"`
+	NativeID           string          `json:"native_id"`
+	Status             string          `json:"status"`
+	CompanyType        string          `json:"company_type,omitempty"`
+	RegistrationStatus string          `json:"registration_status,omitempty"`
+	Website            string          `json:"website,omitempty"`
+	CountryISO2        string          `json:"country_iso2,omitempty"`
+	RunID              string          `json:"run_id,omitempty"`
+	ProcessingAttempts int             `json:"processing_attempts"`
+	ProcessingError    string          `json:"processing_error,omitempty"`
+	PayloadHash        string          `json:"payload_hash"`
+	RawPayload         json.RawMessage `json:"raw_payload"`
+	FirstSeenAt        time.Time       `json:"first_seen_at"`
+	LastSeenAt         time.Time       `json:"last_seen_at"`
+	ProcessedAt        *time.Time      `json:"processed_at,omitempty"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+}
+
+// handleGetRawInput returns full detail for a single raw input row.
+// URL: GET /api/v1/raw-inputs/{source}/{id}
+func (h *Handlers) handleGetRawInput(w http.ResponseWriter, r *http.Request) {
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "database pool not available")
+		return
+	}
+	source := chi.URLParam(r, "source")
+	idStr := chi.URLParam(r, "id")
+
+	var row rawInputDetail
+	var err error
+
+	switch source {
+	case "companies_house":
+		err = h.pool.QueryRow(r.Context(), `
+			SELECT id::text, 'companies_house', company_name, company_number,
+			       processing_status, company_type, '', '', COALESCE(country_iso2,''),
+			       COALESCE(run_id,''), processing_attempts, COALESCE(processing_error,''),
+			       payload_hash, raw_payload,
+			       first_seen_at, last_seen_at, processed_at, created_at, updated_at
+			FROM companies_house_company_raw_inputs WHERE id = $1
+		`, idStr).Scan(
+			&row.ID, &row.Source, &row.Name, &row.NativeID,
+			&row.Status, &row.CompanyType, &row.RegistrationStatus, &row.Website, &row.CountryISO2,
+			&row.RunID, &row.ProcessingAttempts, &row.ProcessingError,
+			&row.PayloadHash, &row.RawPayload,
+			&row.FirstSeenAt, &row.LastSeenAt, &row.ProcessedAt, &row.CreatedAt, &row.UpdatedAt,
+		)
+	case "brreg":
+		err = h.pool.QueryRow(r.Context(), `
+			SELECT id::text, 'brreg', organization_name, organization_number,
+			       processing_status, '', registration_status, COALESCE(website,''), COALESCE(country_iso2,''),
+			       COALESCE(run_id,''), processing_attempts, COALESCE(processing_error,''),
+			       payload_hash, raw_payload,
+			       first_seen_at, last_seen_at, processed_at, created_at, updated_at
+			FROM brreg_company_raw_inputs WHERE id = $1
+		`, idStr).Scan(
+			&row.ID, &row.Source, &row.Name, &row.NativeID,
+			&row.Status, &row.CompanyType, &row.RegistrationStatus, &row.Website, &row.CountryISO2,
+			&row.RunID, &row.ProcessingAttempts, &row.ProcessingError,
+			&row.PayloadHash, &row.RawPayload,
+			&row.FirstSeenAt, &row.LastSeenAt, &row.ProcessedAt, &row.CreatedAt, &row.UpdatedAt,
+		)
+	default:
+		writeError(w, http.StatusBadRequest, "unknown source")
+		return
+	}
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "raw input not found")
+			return
+		}
+		slog.Error("get raw input detail", "source", source, "id", idStr, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, row)
 }

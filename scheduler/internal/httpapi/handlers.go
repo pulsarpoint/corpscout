@@ -93,6 +93,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		r.Get("/companies/{id}/financials", h.handleListCompanyFinancials)
 		r.Post("/financials/{id}/review", h.handleReviewFinancial)
 		r.Get("/raw-inputs", h.handleListRawInputs)
+		r.Get("/raw-inputs/{source}/{id}", h.handleGetRawInput)
 		r.Get("/suggestions/companies", h.handleListCompanySuggestions)
 		r.Get("/suggestions/companies/ids", h.handleListCompanySuggestionIDs)
 		r.Post("/suggestions/companies/bulk", h.handleBulkCompanySuggestions)

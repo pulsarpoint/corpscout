@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/riverqueue/river"
@@ -51,7 +52,27 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 		return fmt.Errorf("no workflow registered for source %q", args.Source)
 	}
 
-	// 1. Insert a tracking row (status = starting).
+	// 1. Read saved checkpoint to determine pipeline mode.
+	// Brreg: "bulk:YYYY-MM-DD" cursor means bulk was done → incremental.
+	// No checkpoint or any other cursor → bulk first.
+	savedCursor := ""
+	brregMode := ""          // only set for brreg
+	brregIncrementalFrom := ""
+	if checkpoint, err := w.db.GetSyncCheckpoint(ctx, args.Source); err == nil {
+		savedCursor = checkpoint.Cursor
+		slog.Info("data_task: checkpoint found", "source", args.Source, "cursor", savedCursor)
+	}
+	if args.Source == "brreg" {
+		if strings.HasPrefix(savedCursor, "bulk:") {
+			brregMode = "incremental"
+			brregIncrementalFrom = strings.TrimPrefix(savedCursor, "bulk:") + ",0"
+		} else {
+			brregMode = "bulk"
+		}
+		slog.Info("data_task: brreg mode", "mode", brregMode, "incremental_from", brregIncrementalFrom)
+	}
+
+	// 2. Insert a tracking row (status = starting).
 	country := args.Country
 	riverJobID := job.ID
 	exec, err := w.db.CreateTemporalExecution(ctx, db.CreateTemporalExecutionParams{
@@ -65,7 +86,7 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 		return errors.Wrap(err, "create temporal execution record")
 	}
 
-	// 2. Start the Temporal workflow. Input fields are compatible across all sources.
+	// 3. Start the Temporal workflow. Pass saved cursor for incremental pull.
 	workflowID := fmt.Sprintf("pull-%s-%s-%d", args.Source, args.Country, job.ID)
 	we, err := w.temporal.ExecuteWorkflow(ctx,
 		client.StartWorkflowOptions{
@@ -77,6 +98,9 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 			"country":          args.Country,
 			"ids":              args.IDs,
 			"corpscout_run_id": exec.ID.String(),
+			"cursor":           savedCursor,
+			"mode":             brregMode,
+			"incremental_from": brregIncrementalFrom,
 		},
 	)
 	if err != nil {
@@ -91,7 +115,7 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 		return errors.Wrap(err, "start temporal workflow")
 	}
 
-	// 3. Record the workflow ID so the UI can track it.
+	// 4. Record the workflow ID so the UI can track it.
 	runID := we.GetRunID()
 	if err := w.db.UpdateTemporalExecutionStarted(ctx, db.UpdateTemporalExecutionStartedParams{
 		ID:            exec.ID,

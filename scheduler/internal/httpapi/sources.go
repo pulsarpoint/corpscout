@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -19,9 +20,19 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
+type syncCheckpointView struct {
+	Cursor          string     `json:"cursor"`
+	LastCompletedAt *time.Time `json:"last_completed_at,omitempty"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	// Derived fields parsed from cursor.
+	Mode            string `json:"mode"`                // "bulk" | "incremental" | "none"
+	BulkDate        string `json:"bulk_date,omitempty"` // date of last bulk, e.g. "2026-05-21"
+}
+
 type sourceView struct {
 	db.DataSource
-	Config json.RawMessage `json:"config"`
+	Config         json.RawMessage    `json:"config"`
+	SyncCheckpoint *syncCheckpointView `json:"sync_checkpoint,omitempty"`
 }
 
 func toSourceView(s db.DataSource) sourceView {
@@ -30,6 +41,31 @@ func toSourceView(s db.DataSource) sourceView {
 		cfg = json.RawMessage("null")
 	}
 	return sourceView{DataSource: s, Config: cfg}
+}
+
+func toSourceViewWithCheckpoint(s db.DataSource, cp *db.SourceSyncCheckpoint) sourceView {
+	v := toSourceView(s)
+	if cp == nil {
+		return v
+	}
+	scv := &syncCheckpointView{
+		Cursor:    cp.Cursor,
+		UpdatedAt: cp.UpdatedAt.Time,
+	}
+	if cp.LastCompletedAt.Valid {
+		t := cp.LastCompletedAt.Time
+		scv.LastCompletedAt = &t
+	}
+	if strings.HasPrefix(cp.Cursor, "bulk:") {
+		scv.Mode = "incremental" // bulk done, now doing incremental
+		scv.BulkDate = strings.TrimPrefix(cp.Cursor, "bulk:")
+	} else if cp.Cursor != "" {
+		scv.Mode = "incremental"
+	} else {
+		scv.Mode = "none"
+	}
+	v.SyncCheckpoint = scv
+	return v
 }
 
 func toSourceViews(sources []db.DataSource) []sourceView {
@@ -57,7 +93,12 @@ func (h *Handlers) handleGetSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, toSourceView(source))
+	cp, err := h.db.GetSyncCheckpoint(r.Context(), name)
+	if err != nil {
+		writeJSON(w, http.StatusOK, toSourceView(source))
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceViewWithCheckpoint(source, &cp))
 }
 
 type patchSourceRequest struct {

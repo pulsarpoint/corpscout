@@ -27,6 +27,28 @@ export interface RawInputListResponse {
   limit: number;
 }
 
+export interface RawInputDetail {
+  id: string;
+  source: string;
+  name: string;
+  native_id: string;
+  status: string;
+  company_type?: string;
+  registration_status?: string;
+  website?: string;
+  country_iso2?: string;
+  run_id?: string;
+  processing_attempts: number;
+  processing_error?: string;
+  payload_hash: string;
+  raw_payload: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+  processed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type Signal = "registry_website" | "wikidata" | "certsh" | "whois" | "search" | "manual_upload";
 
 export interface ReviewCandidate {
@@ -133,10 +155,19 @@ export interface DomainListResponse {
 
 export type SourceConfig = Record<string, unknown>;
 
+export interface SyncCheckpoint {
+  cursor: string;
+  last_completed_at?: string;
+  updated_at: string;
+  mode: "bulk" | "incremental" | "none";
+  bulk_date?: string;
+}
+
 export interface DataSource {
   id: string;
   name: string;
   display_name: string | null;
+  sync_checkpoint?: SyncCheckpoint;
   description: string | null;
   source_group: string;
   input_table_name: string;

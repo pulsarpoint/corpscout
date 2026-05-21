@@ -60,6 +60,7 @@ type Querier interface {
 	GetSourceByName(ctx context.Context, name string) (DataSource, error)
 	GetSourcesWithCapabilities(ctx context.Context) ([]DataSource, error)
 	GetStats(ctx context.Context) (GetStatsRow, error)
+	GetSyncCheckpoint(ctx context.Context, sourceName string) (SourceSyncCheckpoint, error)
 	GetTemporalExecution(ctx context.Context, id uuid.UUID) (TemporalExecution, error)
 	IgnoreAIRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	IgnoreBrregRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -185,6 +186,7 @@ type Querier interface {
 	UpsertDomainWithSource(ctx context.Context, arg UpsertDomainWithSourceParams) (Domain, error)
 	// GLEIF
 	UpsertGLEIFCompanyRawInput(ctx context.Context, arg UpsertGLEIFCompanyRawInputParams) (GleifCompanyRawInput, error)
+	UpsertSyncCheckpoint(ctx context.Context, arg UpsertSyncCheckpointParams) error
 }
 
 var _ Querier = (*Queries)(nil)

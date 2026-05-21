@@ -714,5 +714,13 @@ func (s *stubQuerier) UpdateTemporalExecutionStarted(ctx context.Context, arg db
 	return nil
 }
 
+// Sync checkpoint stubs
+func (s *stubQuerier) GetSyncCheckpoint(ctx context.Context, sourceName string) (db.SourceSyncCheckpoint, error) {
+	return db.SourceSyncCheckpoint{}, nil
+}
+func (s *stubQuerier) UpsertSyncCheckpoint(ctx context.Context, arg db.UpsertSyncCheckpointParams) error {
+	return nil
+}
+
 // ensure stubQuerier satisfies the interface at compile time
 var _ db.Querier = (*stubQuerier)(nil)

@@ -12,7 +12,8 @@ import { ScheduleTab } from "~/components/app/source-detail/ScheduleTab";
 import { ConfigTab } from "~/components/app/source-detail/ConfigTab";
 import { LogsTab } from "~/components/app/source-detail/LogsTab";
 import { RawInputsTab } from "~/components/app/source-detail/RawInputsTab";
-import { hasRawInputs } from "~/components/app/source-detail/sourceDetailUtils";
+import { PipelineTab } from "~/components/app/source-detail/PipelineTab";
+import { hasRawInputs, hasPipeline } from "~/components/app/source-detail/sourceDetailUtils";
 
 type SourcePatch = Parameters<typeof api.patchSource>[1];
 
@@ -117,6 +118,7 @@ export default function SourceDetailPage() {
           <TabsTrigger value="config">Config</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           {hasRawInputs(source) && <TabsTrigger value="raw-inputs">Raw Inputs</TabsTrigger>}
+          {hasPipeline(source) && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="schedule">
@@ -137,6 +139,11 @@ export default function SourceDetailPage() {
         {hasRawInputs(source) && (
           <TabsContent value="raw-inputs">
             <RawInputsTab source={source} />
+          </TabsContent>
+        )}
+        {hasPipeline(source) && (
+          <TabsContent value="pipeline">
+            <PipelineTab source={source} />
           </TabsContent>
         )}
       </Tabs>

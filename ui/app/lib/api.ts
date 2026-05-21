@@ -24,6 +24,7 @@ import type {
   VCompany,
   TemporalExecutionsResponse,
   RawInputListResponse,
+  RawInputDetail,
 } from "~/types/api";
 
 const BASE = "/api/v1";
@@ -144,6 +145,9 @@ export const api = {
     if (params.dir) qs.set("dir", params.dir);
     return get<RawInputListResponse>(`/raw-inputs?${qs.toString()}`);
   },
+
+  getRawInput: (source: string, id: string) =>
+    get<RawInputDetail>(`/raw-inputs/${source}/${id}`),
 
   getCompanySuggestions: (page = 1, limit = 50) =>
     get<CompanySuggestionListResponse>(`/suggestions/companies?page=${page}&limit=${limit}`),
