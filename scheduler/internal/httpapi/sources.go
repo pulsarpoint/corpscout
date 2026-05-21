@@ -337,14 +337,14 @@ func (h *Handlers) handleTriggerSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Sources with a Temporal pipeline are dispatched as DataTask River jobs.
-	if _, country := workers.TemporalWorkflowForSource(name); country != "" {
+	if cfg, ok := workers.TemporalWorkflowForSource(name); ok {
 		if h.rv == nil {
 			writeError(w, http.StatusServiceUnavailable, "scheduler not available")
 			return
 		}
 		if _, err := h.rv.Insert(r.Context(), workers.DataTaskArgs{
 			Source:  name,
-			Country: country,
+			Country: cfg.Country,
 		}, &river.InsertOpts{
 			Queue: "data_task",
 		}); err != nil {

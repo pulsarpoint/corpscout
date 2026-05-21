@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"go.temporal.io/sdk/client"
 
 	"github.com/pulsarpoint/corpscout/scheduler/internal/crawlerclient"
@@ -17,10 +19,16 @@ import (
 	"github.com/pulsarpoint/corpscout/scheduler/internal/s3client"
 )
 
+type riverInserter interface {
+	Insert(context.Context, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error)
+	InsertTx(context.Context, pgx.Tx, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error)
+	JobCancel(context.Context, int64) (*rivertype.JobRow, error)
+}
+
 // Handlers holds shared dependencies for all REST API handlers.
 type Handlers struct {
 	db            db.Querier
-	rv            *river.Client[pgx.Tx]
+	rv            riverInserter
 	pool          *pgxpool.Pool
 	crawler       *crawlerclient.Client
 	s3            *s3client.Client
@@ -30,7 +38,7 @@ type Handlers struct {
 }
 
 // NewHandlers constructs Handlers. pool, rv, crawler, s3 and temporal may be nil in tests.
-func NewHandlers(q db.Querier, rv *river.Client[pgx.Tx], pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string, tc client.Client, temporalUIURL string) *Handlers {
+func NewHandlers(q db.Querier, rv riverInserter, pool *pgxpool.Pool, crawler *crawlerclient.Client, s3 *s3client.Client, postgrestURL string, tc client.Client, temporalUIURL string) *Handlers {
 	return &Handlers{db: q, rv: rv, pool: pool, crawler: crawler, s3: s3, postgrestURL: postgrestURL, temporal: tc, temporalUIURL: temporalUIURL}
 }
 

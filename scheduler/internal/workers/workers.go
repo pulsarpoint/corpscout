@@ -39,6 +39,7 @@ type DataTaskArgs struct {
 	Source  string   `json:"source"`
 	Country string   `json:"country"`
 	IDs     []string `json:"ids,omitempty"`
+	Force   bool     `json:"force,omitempty"`
 }
 
 func (DataTaskArgs) Kind() string { return "data_task" }

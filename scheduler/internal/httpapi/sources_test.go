@@ -13,12 +13,14 @@ import (
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 	"github.com/pulsarpoint/corpscout/scheduler/internal/httpapi"
+	"github.com/pulsarpoint/corpscout/scheduler/internal/workers"
 )
 
 type sourceConfigStubQuerier struct {
@@ -49,6 +51,25 @@ type rawInputRetryRecorder struct {
 func (r *rawInputRetryRecorder) RetryGLEIFRawInput(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	r.retryGLEIFCalled = true
 	return r.stubQuerier.RetryGLEIFRawInput(ctx, id)
+}
+
+type riverInsertRecorder struct {
+	args river.JobArgs
+	opts *river.InsertOpts
+}
+
+func (r *riverInsertRecorder) Insert(_ context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	r.args = args
+	r.opts = opts
+	return &rivertype.JobInsertResult{}, nil
+}
+
+func (r *riverInsertRecorder) InsertTx(context.Context, pgx.Tx, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error) {
+	return &rivertype.JobInsertResult{}, nil
+}
+
+func (r *riverInsertRecorder) JobCancel(context.Context, int64) (*rivertype.JobRow, error) {
+	return &rivertype.JobRow{}, nil
 }
 
 func TestListSources_returns_all(t *testing.T) {
@@ -508,6 +529,30 @@ func TestTriggerSource_returns_404_for_unknown(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
+	q.AssertExpectations(t)
+}
+
+func TestTriggerSource_gleif_queuesTemporalDataTask(t *testing.T) {
+	q := &stubQuerier{}
+	rv := &riverInsertRecorder{}
+
+	q.On("GetSourceByName", mock.Anything, "gleif").Return(db.DataSource{
+		Name: "gleif",
+	}, nil)
+
+	r := routerFor(httpapi.NewHandlers(q, rv, nil, nil, nil, "", nil, ""))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/gleif/trigger", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.JSONEq(t, `{"status":"queued"}`, w.Body.String())
+	require.NotNil(t, rv.opts)
+	require.Equal(t, "data_task", rv.opts.Queue)
+	require.Equal(t, workers.DataTaskArgs{
+		Source: "gleif",
+	}, rv.args)
 	q.AssertExpectations(t)
 }
 

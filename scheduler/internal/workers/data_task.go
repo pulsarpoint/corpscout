@@ -13,23 +13,25 @@ import (
 	db "github.com/pulsarpoint/corpscout/scheduler/internal/db/gen"
 )
 
-// sourceWorkflowType maps a source name to its Temporal workflow type.
-// Add new sources here as they are implemented.
-var sourceWorkflowType = map[string]string{
-	"companies_house": "PullCompaniesHouse",
-	"brreg":           "PullBrreg",
+type TemporalSourceWorkflow struct {
+	WorkflowType string
+	Country      string
+	FirstMode    string
+	NextMode     string
+	BulkFirst    bool
 }
 
-// sourceDefaultCountry maps a source name to its default ISO-3166 country code.
-var sourceDefaultCountry = map[string]string{
-	"companies_house": "GB",
-	"brreg":           "NO",
+var sourceWorkflows = map[string]TemporalSourceWorkflow{
+	"companies_house": {WorkflowType: "PullCompaniesHouse", Country: "GB"},
+	"brreg":           {WorkflowType: "PullBrreg", Country: "NO", FirstMode: "bulk", NextMode: "incremental", BulkFirst: true},
+	"gleif":           {WorkflowType: "PullGLEIF", FirstMode: "bulk", NextMode: "delta", BulkFirst: true},
+	"cvr":             {WorkflowType: "PullCVR", Country: "DK", FirstMode: "bulk", NextMode: "incremental", BulkFirst: true},
+	"ariregister":     {WorkflowType: "PullAriregister", Country: "EE", FirstMode: "bulk", NextMode: "refresh", BulkFirst: true},
 }
 
-// TemporalWorkflowForSource returns the workflow type and default country for a
-// source that has a Temporal pipeline, or ("", "") if none is registered.
-func TemporalWorkflowForSource(source string) (workflowType, country string) {
-	return sourceWorkflowType[source], sourceDefaultCountry[source]
+func TemporalWorkflowForSource(source string) (TemporalSourceWorkflow, bool) {
+	cfg, ok := sourceWorkflows[source]
+	return cfg, ok
 }
 
 // DataTaskWorker starts a source-specific Temporal workflow and records its ID.
@@ -47,36 +49,43 @@ func NewDataTaskWorker(q db.Querier, tc client.Client) *DataTaskWorker {
 func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs]) error {
 	args := job.Args
 
-	wfType, ok := sourceWorkflowType[args.Source]
+	cfg, ok := TemporalWorkflowForSource(args.Source)
 	if !ok {
 		return fmt.Errorf("no workflow registered for source %q", args.Source)
 	}
 
 	// 1. Read saved checkpoint to determine pipeline mode.
-	// Brreg: "bulk:YYYY-MM-DD" cursor means bulk was done → incremental.
-	// No checkpoint or any other cursor → bulk first.
 	savedCursor := ""
-	brregMode := ""          // only set for brreg
-	brregIncrementalFrom := ""
+	checkpointExists := false
 	if checkpoint, err := w.db.GetSyncCheckpoint(ctx, args.Source); err == nil {
+		checkpointExists = true
 		savedCursor = checkpoint.Cursor
 		slog.Info("data_task: checkpoint found", "source", args.Source, "cursor", savedCursor)
 	}
-	if args.Source == "brreg" {
-		if strings.HasPrefix(savedCursor, "bulk:") {
-			brregMode = "incremental"
-			brregIncrementalFrom = strings.TrimPrefix(savedCursor, "bulk:") + ",0"
-		} else {
-			brregMode = "bulk"
+
+	mode := ""
+	if cfg.BulkFirst {
+		mode = cfg.FirstMode
+		if checkpointExists {
+			mode = cfg.NextMode
 		}
-		slog.Info("data_task: brreg mode", "mode", brregMode, "incremental_from", brregIncrementalFrom)
+	}
+	incrementalFrom := ""
+	if args.Source == "brreg" && strings.HasPrefix(savedCursor, "bulk:") {
+		incrementalFrom = strings.TrimPrefix(savedCursor, "bulk:") + ",0"
+	}
+	if mode != "" {
+		slog.Info("data_task: source mode", "source", args.Source, "mode", mode, "incremental_from", incrementalFrom)
 	}
 
 	// 2. Insert a tracking row (status = starting).
 	country := args.Country
+	if country == "" {
+		country = cfg.Country
+	}
 	riverJobID := job.ID
 	exec, err := w.db.CreateTemporalExecution(ctx, db.CreateTemporalExecutionParams{
-		WorkflowType: wfType,
+		WorkflowType: cfg.WorkflowType,
 		SourceName:   args.Source,
 		Country:      &country,
 		InputIds:     args.IDs,
@@ -87,20 +96,22 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 	}
 
 	// 3. Start the Temporal workflow. Pass saved cursor for incremental pull.
-	workflowID := fmt.Sprintf("pull-%s-%s-%d", args.Source, args.Country, job.ID)
+	workflowID := fmt.Sprintf("pull-%s-%s-%d", args.Source, country, job.ID)
 	we, err := w.temporal.ExecuteWorkflow(ctx,
 		client.StartWorkflowOptions{
 			ID:        workflowID,
 			TaskQueue: "corpscout-pipelines",
 		},
-		wfType,
+		cfg.WorkflowType,
 		map[string]any{
-			"country":          args.Country,
+			"country":          country,
 			"ids":              args.IDs,
 			"corpscout_run_id": exec.ID.String(),
+			"run_id":           workflowID,
 			"cursor":           savedCursor,
-			"mode":             brregMode,
-			"incremental_from": brregIncrementalFrom,
+			"mode":             mode,
+			"incremental_from": incrementalFrom,
+			"force":            args.Force,
 		},
 	)
 	if err != nil {
@@ -128,7 +139,7 @@ func (w *DataTaskWorker) Work(ctx context.Context, job *river.Job[DataTaskArgs])
 	slog.Info("data_task: Temporal workflow started",
 		"workflow_id", workflowID,
 		"source", args.Source,
-		"country", args.Country,
+		"country", country,
 	)
 	return nil // River job done — Temporal handles the rest.
 }
