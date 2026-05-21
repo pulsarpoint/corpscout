@@ -1001,14 +1001,17 @@ INSERT INTO ariregister_company_raw_inputs (
     registration_status, legal_form, vat_number, website, email, phone, country_iso2,
     source_updated_at, raw_payload, payload_hash, run_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES (
+    $1, $2, $2, $3,
+    $4, $5, $6, $7, $8, $9, $10,
+    $11, $12, $13, $14
+)
 ON CONFLICT (registry_code, payload_hash) DO UPDATE SET last_seen_at = now()
 RETURNING id, source_pull_run_id, source_native_id, registry_code, legal_name, registration_status, legal_form, vat_number, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
 `
 
 type UpsertAriregisterRawInputParams struct {
 	SourcePullRunID    pgtype.UUID        `json:"source_pull_run_id"`
-	SourceNativeID     string             `json:"source_native_id"`
 	RegistryCode       string             `json:"registry_code"`
 	LegalName          *string            `json:"legal_name"`
 	RegistrationStatus *string            `json:"registration_status"`
@@ -1028,7 +1031,6 @@ type UpsertAriregisterRawInputParams struct {
 func (q *Queries) UpsertAriregisterRawInput(ctx context.Context, arg UpsertAriregisterRawInputParams) (AriregisterCompanyRawInput, error) {
 	row := q.db.QueryRow(ctx, upsertAriregisterRawInput,
 		arg.SourcePullRunID,
-		arg.SourceNativeID,
 		arg.RegistryCode,
 		arg.LegalName,
 		arg.RegistrationStatus,
@@ -1166,14 +1168,17 @@ INSERT INTO cvr_company_raw_inputs (
     registration_status, company_type, website, email, phone, country_iso2,
     source_updated_at, raw_payload, payload_hash, run_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES (
+    $1, $2, $2, $3,
+    $4, $5, $6, $7, $8, $9,
+    $10, $11, $12, $13
+)
 ON CONFLICT (cvr_number, payload_hash) DO UPDATE SET last_seen_at = now()
 RETURNING id, source_pull_run_id, source_native_id, cvr_number, company_name, registration_status, company_type, website, email, phone, country_iso2, source_updated_at, raw_payload, raw_payload_en, payload_hash, first_seen_at, last_seen_at, processing_status, processing_attempts, processing_error, processing_lease_by, processing_lease_until, processed_at, run_id, translation_status, translation_attempts, translation_error, translation_model, translation_prompt_version, translated_at, translation_lease_by, translation_lease_until, translation_fx_source, translation_fx_rate_date, created_at, updated_at
 `
 
 type UpsertCVRRawInputParams struct {
 	SourcePullRunID    pgtype.UUID        `json:"source_pull_run_id"`
-	SourceNativeID     string             `json:"source_native_id"`
 	CvrNumber          string             `json:"cvr_number"`
 	CompanyName        *string            `json:"company_name"`
 	RegistrationStatus *string            `json:"registration_status"`
@@ -1192,7 +1197,6 @@ type UpsertCVRRawInputParams struct {
 func (q *Queries) UpsertCVRRawInput(ctx context.Context, arg UpsertCVRRawInputParams) (CvrCompanyRawInput, error) {
 	row := q.db.QueryRow(ctx, upsertCVRRawInput,
 		arg.SourcePullRunID,
-		arg.SourceNativeID,
 		arg.CvrNumber,
 		arg.CompanyName,
 		arg.RegistrationStatus,

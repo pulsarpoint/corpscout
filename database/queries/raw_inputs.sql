@@ -124,7 +124,11 @@ INSERT INTO cvr_company_raw_inputs (
     registration_status, company_type, website, email, phone, country_iso2,
     source_updated_at, raw_payload, payload_hash, run_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES (
+    sqlc.arg('source_pull_run_id'), sqlc.arg('cvr_number'), sqlc.arg('cvr_number'), sqlc.narg('company_name'),
+    sqlc.narg('registration_status'), sqlc.narg('company_type'), sqlc.narg('website'), sqlc.narg('email'), sqlc.narg('phone'), sqlc.narg('country_iso2'),
+    sqlc.arg('source_updated_at'), sqlc.arg('raw_payload'), sqlc.arg('payload_hash'), sqlc.narg('run_id')
+)
 ON CONFLICT (cvr_number, payload_hash) DO UPDATE SET last_seen_at = now()
 RETURNING *;
 
@@ -166,7 +170,11 @@ INSERT INTO ariregister_company_raw_inputs (
     registration_status, legal_form, vat_number, website, email, phone, country_iso2,
     source_updated_at, raw_payload, payload_hash, run_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES (
+    sqlc.arg('source_pull_run_id'), sqlc.arg('registry_code'), sqlc.arg('registry_code'), sqlc.narg('legal_name'),
+    sqlc.narg('registration_status'), sqlc.narg('legal_form'), sqlc.narg('vat_number'), sqlc.narg('website'), sqlc.narg('email'), sqlc.narg('phone'), sqlc.narg('country_iso2'),
+    sqlc.arg('source_updated_at'), sqlc.arg('raw_payload'), sqlc.arg('payload_hash'), sqlc.narg('run_id')
+)
 ON CONFLICT (registry_code, payload_hash) DO UPDATE SET last_seen_at = now()
 RETURNING *;
 
