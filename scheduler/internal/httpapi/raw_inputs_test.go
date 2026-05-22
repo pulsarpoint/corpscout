@@ -61,6 +61,44 @@ func TestListRawInputs_includesCVRAndAriregisterRows(t *testing.T) {
 	require.NoError(t, pool.ExpectationsWereMet())
 }
 
+func TestListRawInputs_includesGLEIFRows(t *testing.T) {
+	pool := newSQLContainsMock(t)
+	defer pool.Close()
+
+	createdAt := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	pool.ExpectQuery("COUNT(*) FROM;;gleif_company_raw_inputs;;legal_name ILIKE;;!companies_house_company_raw_inputs;;!brreg_company_raw_inputs;;!cvr_company_raw_inputs;;!ariregister_company_raw_inputs").
+		WithArgs("%Acme%").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+	pool.ExpectQuery("SELECT id, source, name, native_id, status, translation_status, created_at;;gleif_company_raw_inputs;;legal_name ILIKE").
+		WithArgs("%Acme%", 50, 0).
+		WillReturnRows(pgxmock.NewRows([]string{"id", "source", "name", "native_id", "status", "translation_status", "created_at"}).
+			AddRow("gleif-id", "gleif", "Acme Global Ltd", "5493001KJTIIGC8Y1R12", "pending", nil, createdAt))
+
+	r := routerFor(httpapi.NewHandlers(&stubQuerier{}, nil, pool, nil, nil, "", nil, ""))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/raw-inputs?source=gleif&q=Acme", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		Items []struct {
+			Source            string  `json:"source"`
+			Name              string  `json:"name"`
+			NativeID          string  `json:"native_id"`
+			TranslationStatus *string `json:"translation_status"`
+		} `json:"items"`
+		Total int64 `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, int64(1), body.Total)
+	require.Len(t, body.Items, 1)
+	assert.Equal(t, "gleif", body.Items[0].Source)
+	assert.Equal(t, "Acme Global Ltd", body.Items[0].Name)
+	assert.Equal(t, "5493001KJTIIGC8Y1R12", body.Items[0].NativeID)
+	assert.Nil(t, body.Items[0].TranslationStatus)
+	require.NoError(t, pool.ExpectationsWereMet())
+}
+
 func TestListRawInputs_translationStatusFiltersTranslatedSourcesOnly(t *testing.T) {
 	pool := newSQLContainsMock(t)
 	defer pool.Close()
@@ -90,6 +128,40 @@ func TestListRawInputs_translationStatusFiltersTranslatedSourcesOnly(t *testing.
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Len(t, body.Items, 3)
 	assert.Equal(t, []string{"brreg", "cvr", "ariregister"}, []string{body.Items[0].Source, body.Items[1].Source, body.Items[2].Source})
+	require.NoError(t, pool.ExpectationsWereMet())
+}
+
+func TestGetRawInput_includesGLEIFDetail(t *testing.T) {
+	pool := newSQLContainsMock(t)
+	defer pool.Close()
+
+	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	pool.ExpectQuery("gleif_company_raw_inputs;;legal_name;;lei;;registration_status;;headquarters_country_code").
+		WithArgs("raw-id").
+		WillReturnRows(pgxmock.NewRows([]string{
+			"id", "source", "name", "native_id", "processing_status", "company_type", "registration_status", "website", "country_iso2",
+			"run_id", "processing_attempts", "processing_error", "payload_hash", "raw_payload",
+			"first_seen_at", "last_seen_at", "processed_at", "created_at", "updated_at",
+		}).AddRow(
+			"raw-id", "gleif", "Acme Global Ltd", "5493001KJTIIGC8Y1R12", "pending", "", "ACTIVE", "", "US",
+			"run-1", 1, "", "hash", []byte(`{"lei":"5493001KJTIIGC8Y1R12"}`),
+			now, now, nil, now, now,
+		))
+
+	r := routerFor(httpapi.NewHandlers(&stubQuerier{}, nil, pool, nil, nil, "", nil, ""))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/raw-inputs/gleif/raw-id", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, "gleif", body["source"])
+	assert.Equal(t, "Acme Global Ltd", body["name"])
+	assert.Equal(t, "5493001KJTIIGC8Y1R12", body["native_id"])
+	assert.Equal(t, "ACTIVE", body["registration_status"])
+	assert.Equal(t, "US", body["country_iso2"])
+	assert.NotContains(t, body, "translation_status")
 	require.NoError(t, pool.ExpectationsWereMet())
 }
 

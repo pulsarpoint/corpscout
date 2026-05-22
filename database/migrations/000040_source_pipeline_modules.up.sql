@@ -142,13 +142,35 @@ WHERE name IN ('gleif', 'cvr', 'ariregister');
 
 UPDATE data_sources
 SET config = '{
+  "api_url": "https://goldencopy.gleif.org/api/v2/golden-copies/publishes",
+  "docs_url": "https://www.gleif.org/en/lei-data/gleif-golden-copy",
+  "api_docs_url": "https://goldencopy.gleif.org/api/v2/golden-copies/publishes",
+  "protocol": "GLEIF Golden Copy file download",
+  "page_size": null,
+  "datasets": ["lei2"],
+  "modes": {
+    "full": "lei2/latest.json",
+    "delta": "lei2/latest.json?delta=LastDay"
+  },
+  "fields": ["lei", "legal_name", "entity_status", "headquarters_country", "legal_jurisdiction", "legal_form", "registration_authority", "parent_lei", "ultimate_parent_lei"],
+  "auth_env": null,
+  "notes": "Official GLEIF LEI Golden Copy file source. Full refresh uses the latest LEI Level 1 golden copy; daily delta uses latest.json?delta=LastDay. No auth required."
+}'::jsonb,
+    updated_at = now()
+WHERE name = 'gleif';
+
+UPDATE data_sources
+SET config = '{
   "api_url": "https://datafordeler.dk/dataoversigt/det-centrale-virksomhedsregister-cvr/cvr-fildownload/",
   "docs_url": "https://datafordeler.dk/dataoversigt/det-centrale-virksomhedsregister-cvr/cvr-fildownload/",
   "access_url": "https://datafordeler.dk/vejledning/brugeradgang/anmodning-om-adgang/det-centrale-virksomhedsregister-cvr/",
   "protocol": "Datafordeler CVR file download",
   "page_size": null,
   "fields": ["cvr_number", "name", "status", "company_type", "website", "email", "phone"],
-  "auth_env": "DATAFORDELER_CVR_TOKEN",
+  "base_url_env": "CVR_FILEDOWNLOAD_BASE_URL",
+  "datasets_env": "CVR_FILEDOWNLOAD_DATASETS",
+  "auth_env": "CVR_FILEDOWNLOAD_BEARER_TOKEN",
+  "api_key_env": "CVR_FILEDOWNLOAD_API_KEY",
   "notes": "Official Danish CVR Datafordeler file-download source. Bulk file ingestion is preferred over third-party APIs; credentials are issued through Datafordeler access."
 }'::jsonb,
     updated_at = now()

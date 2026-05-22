@@ -40,6 +40,7 @@ type rawInputListSource struct {
 }
 
 var rawInputListSources = []rawInputListSource{
+	{source: "gleif", tableName: "gleif_company_raw_inputs", nameColumn: "legal_name", nativeColumn: "lei"},
 	{source: "companies_house", tableName: "companies_house_company_raw_inputs", nameColumn: "company_name", nativeColumn: "company_number"},
 	{source: "brreg", tableName: "brreg_company_raw_inputs", nameColumn: "organization_name", nativeColumn: "organization_number", translated: true},
 	{source: "cvr", tableName: "cvr_company_raw_inputs", nameColumn: "company_name", nativeColumn: "cvr_number", translated: true},
@@ -434,6 +435,21 @@ func (h *Handlers) handleGetRawInput(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	switch source {
+	case "gleif":
+		err = h.pool.QueryRow(r.Context(), `
+			SELECT id::text, 'gleif', COALESCE(legal_name,''), lei,
+			       COALESCE(processing_status,''), '', COALESCE(registration_status,''), '', COALESCE(headquarters_country_code,''),
+			       COALESCE(run_id,''), processing_attempts, COALESCE(processing_error,''),
+			       COALESCE(payload_hash,''), raw_payload,
+			       first_seen_at, last_seen_at, processed_at, created_at, updated_at
+			FROM gleif_company_raw_inputs WHERE id = $1
+		`, idStr).Scan(
+			&row.ID, &row.Source, &row.Name, &row.NativeID,
+			&row.Status, &row.CompanyType, &row.RegistrationStatus, &row.Website, &row.CountryISO2,
+			&row.RunID, &row.ProcessingAttempts, &row.ProcessingError,
+			&row.PayloadHash, &row.RawPayload,
+			&row.FirstSeenAt, &row.LastSeenAt, &row.ProcessedAt, &row.CreatedAt, &row.UpdatedAt,
+		)
 	case "companies_house":
 		err = h.pool.QueryRow(r.Context(), `
 			SELECT id::text, 'companies_house', company_name, company_number,

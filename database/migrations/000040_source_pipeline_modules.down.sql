@@ -148,6 +148,15 @@ UPDATE data_sources
 SET pull_task_type = 'source_pull',
     processor_task_type = NULL,
     requires_translation = false,
+    config = '{
+      "api_url":   "https://api.gleif.org/api/v1/lei-records",
+      "docs_url":  "https://www.gleif.org/en/lei-data/gleif-api",
+      "protocol":  "REST/JSON",
+      "page_size": 200,
+      "fields":    ["name", "country", "lei", "status", "address", "hq_address", "aliases"],
+      "auth_env":  null,
+      "notes":     "Global LEI database. Supports incremental sync via filter[lastUpdateTime]. No auth required."
+    }'::jsonb,
     updated_at = now()
 WHERE name = 'gleif';
 
