@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -41,6 +43,7 @@ type rawCompanyCandidate struct {
 	phones             []rawCompanyContact
 	financials         []rawCompanyFinancial
 	ownership          []rawCompanyOwnership
+	domains            []rawCompanyDomainSignal
 }
 
 type rawCompanyContact struct {
@@ -61,6 +64,14 @@ type rawCompanyFinancial struct {
 type rawCompanyOwnership struct {
 	Source string
 	Data   map[string]any
+}
+
+type rawCompanyDomainSignal struct {
+	Domain           string
+	Signal           string
+	RelationshipType string
+	Confidence       int16
+	Source           string
 }
 
 // ApproveCompanyRawInput creates or returns a resolved company directly from a
@@ -292,6 +303,7 @@ func buildCVRRawCompanyCandidate(row db.CvrCompanyRawInput, src db.DataSource) (
 	if phone != nil {
 		candidate.phones = append(candidate.phones, rawCompanyContact{Kind: "official", Value: *phone, Source: src.Name})
 	}
+	candidate.domains = rawCompanyDomainSignals(src.Name, website, candidate.emails)
 	return candidate, nil
 }
 
@@ -330,6 +342,7 @@ func buildAriregisterRawCompanyCandidate(row db.AriregisterCompanyRawInput, src 
 	if phone != nil {
 		candidate.phones = append(candidate.phones, rawCompanyContact{Kind: "official", Value: *phone, Source: src.Name})
 	}
+	candidate.domains = rawCompanyDomainSignals(src.Name, website, candidate.emails)
 	return candidate, nil
 }
 
@@ -415,6 +428,34 @@ func persistRawCompanyEnrichment(ctx context.Context, q *db.Queries, company db.
 				continue
 			}
 			return db.Company{}, errors.Wrap(err, "create company financial")
+		}
+	}
+
+	for _, signal := range candidate.domains {
+		if strings.TrimSpace(signal.Domain) == "" {
+			continue
+		}
+		evidence, err := rawInputDomainEvidence(candidate, signal)
+		if err != nil {
+			return db.Company{}, errors.Wrap(err, "build domain evidence")
+		}
+		domain, err := q.UpsertDomainWithSource(ctx, db.UpsertDomainWithSourceParams{
+			Domain:       signal.Domain,
+			ImportSource: "registry",
+		})
+		if err != nil {
+			return db.Company{}, errors.Wrap(err, "upsert registry domain")
+		}
+		if _, err := q.UpsertCompanyDomain(ctx, db.UpsertCompanyDomainParams{
+			CompanyID:        company.ID,
+			DomainID:         domain.ID,
+			RelationshipType: signal.RelationshipType,
+			Status:           "needs_review",
+			Signal:           signal.Signal,
+			Confidence:       signal.Confidence,
+			Evidence:         evidence,
+		}); err != nil {
+			return db.Company{}, errors.Wrap(err, "upsert registry company domain")
 		}
 	}
 
@@ -511,6 +552,88 @@ func rawCompanyOwnershipFromPayload(source string, payload map[string]any, keys 
 	return ownership
 }
 
+func rawCompanyDomainSignals(source string, website *string, emails []rawCompanyContact) []rawCompanyDomainSignal {
+	signals := []rawCompanyDomainSignal{}
+	if websiteDomain := normalizeDomainFromWebsite(website); websiteDomain != "" {
+		signals = append(signals, rawCompanyDomainSignal{
+			Domain:           websiteDomain,
+			Signal:           "registry_website",
+			RelationshipType: "official_site",
+			Confidence:       95,
+			Source:           source,
+		})
+	}
+	for _, email := range emails {
+		emailDomain := normalizeDomainFromEmail(email.Value)
+		if emailDomain == "" || isPublicEmailDomain(emailDomain) || hasDomainSignal(signals, emailDomain, "registry_email") {
+			continue
+		}
+		signals = append(signals, rawCompanyDomainSignal{
+			Domain:           emailDomain,
+			Signal:           "registry_email",
+			RelationshipType: "candidate",
+			Confidence:       45,
+			Source:           fallbackString(&email.Source, source),
+		})
+	}
+	return signals
+}
+
+func normalizeDomainFromWebsite(website *string) string {
+	if website == nil {
+		return ""
+	}
+	value := strings.TrimSpace(*website)
+	if value == "" {
+		return ""
+	}
+	if !strings.Contains(value, "://") {
+		value = "https://" + value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	host = strings.TrimPrefix(host, "www.")
+	if host == "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
+		return ""
+	}
+	return host
+}
+
+func normalizeDomainFromEmail(email string) string {
+	parts := strings.Split(strings.TrimSpace(strings.ToLower(email)), "@")
+	if len(parts) != 2 {
+		return ""
+	}
+	domain := strings.Trim(parts[1], ".")
+	if domain == "" || net.ParseIP(domain) != nil || !strings.Contains(domain, ".") {
+		return ""
+	}
+	return domain
+}
+
+func isPublicEmailDomain(domain string) bool {
+	switch strings.ToLower(strings.TrimSpace(domain)) {
+	case "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
+		"yahoo.com", "ymail.com", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me",
+		"protonmail.com", "mail.com", "gmx.com", "gmx.net":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasDomainSignal(signals []rawCompanyDomainSignal, domain, signal string) bool {
+	for _, existing := range signals {
+		if existing.Domain == domain && existing.Signal == signal {
+			return true
+		}
+	}
+	return false
+}
+
 func mergeRawCompanyOwnership(existing json.RawMessage, candidate rawCompanyCandidate) ([]byte, error) {
 	payload := map[string]any{}
 	if len(existing) > 0 && string(existing) != "null" {
@@ -540,6 +663,18 @@ func rawInputEnrichmentEvidence(candidate rawCompanyCandidate, source, kind stri
 	}
 	b, err := json.Marshal(payload)
 	return json.RawMessage(b), err
+}
+
+func rawInputDomainEvidence(candidate rawCompanyCandidate, signal rawCompanyDomainSignal) ([]byte, error) {
+	payload := map[string]any{
+		"source":           fallbackString(&signal.Source, candidate.sourceName),
+		"source_input_id":  candidate.id.String(),
+		"source_native_id": candidate.sourceNativeID,
+		"kind":             "domain",
+		"signal":           signal.Signal,
+		"domain":           signal.Domain,
+	}
+	return json.Marshal(payload)
 }
 
 func markRawInputApproved(ctx context.Context, q *db.Queries, inputTableName string, rawInputID uuid.UUID) error {

@@ -246,6 +246,7 @@ func TestApproveCompanyRawInput_CVRCreatesCompanyAndPersistsEnrichment(t *testin
 	sourceID := uuid.New()
 	countryID := uuid.New()
 	companyID := uuid.New()
+	domainID := uuid.New()
 
 	payload := []byte(`{
 		"financials": [{
@@ -290,6 +291,18 @@ func TestApproveCompanyRawInput_CVRCreatesCompanyAndPersistsEnrichment(t *testin
 	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
 		companyID, int32(2023), "cvr", ptrInt32(42), ptrInt64(1234000), ptrString("DKK"), (*int64)(nil), ptrInt64(234000), (*int64)(nil),
 	).WillReturnRows(companyFinancialRows(companyID, 2023, "cvr"))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "official_site", "needs_review", "registry_website", int16(95),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_website", 95))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "candidate", "needs_review", "registry_email", int16(45),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_email", 45))
 	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
 		(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil), (*int32)(nil),
 		[]byte(nil), []byte(nil), jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, "Unresolved Holding"}, (*int32)(nil), (*int64)(nil), companyID,
@@ -310,6 +323,7 @@ func TestApproveCompanyRawInput_AriregisterFindsCompanyAndPersistsEnrichment(t *
 	sourceID := uuid.New()
 	countryID := uuid.New()
 	companyID := uuid.New()
+	domainID := uuid.New()
 
 	payload := []byte(`{
 		"annual_reports": [{
@@ -348,6 +362,18 @@ func TestApproveCompanyRawInput_AriregisterFindsCompanyAndPersistsEnrichment(t *
 	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
 		companyID, int32(2022), "ariregister", ptrInt32(7), ptrInt64(550000), ptrString("EUR"), (*int64)(nil), ptrInt64(44000), (*int64)(nil),
 	).WillReturnRows(companyFinancialRows(companyID, 2022, "ariregister"))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.ee", "registry").
+		WillReturnRows(domainRows(domainID, "example.ee", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "official_site", "needs_review", "registry_website", int16(95),
+		jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.ee"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_website", 95))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.ee", "registry").
+		WillReturnRows(domainRows(domainID, "example.ee", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "candidate", "needs_review", "registry_email", int16(45),
+		jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.ee"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_email", 45))
 	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
 		(*string)(nil), (*string)(nil), (*string)(nil), ptrString("https://example.ee"), (*int32)(nil),
 		[]byte(nil), []byte(nil), jsonContainsArg{`"source":"ariregister"`, `"source_input_id":"` + rowID.String() + `"`, "Unresolved Owner"}, (*int32)(nil), (*int64)(nil), companyID,
@@ -368,6 +394,7 @@ func TestApproveCompanyRawInput_CVRSkipsReviewedFinancialConflict(t *testing.T) 
 	sourceID := uuid.New()
 	countryID := uuid.New()
 	companyID := uuid.New()
+	domainID := uuid.New()
 
 	payload := []byte(`{
 		"financials": [{
@@ -399,6 +426,18 @@ func TestApproveCompanyRawInput_CVRSkipsReviewedFinancialConflict(t *testing.T) 
 	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
 		companyID, int32(2023), "cvr", (*int32)(nil), ptrInt64(1234000), ptrString("DKK"), (*int64)(nil), (*int64)(nil), (*int64)(nil),
 	).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "official_site", "needs_review", "registry_website", int16(95),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_website", 95))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "candidate", "needs_review", "registry_email", int16(45),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_email", 45))
 	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
 		(*string)(nil), (*string)(nil), (*string)(nil), ptrString("https://example.dk"), (*int32)(nil),
 		[]byte(nil), []byte(nil), []byte(nil), (*int32)(nil), (*int64)(nil), companyID,
@@ -413,8 +452,160 @@ func TestApproveCompanyRawInput_CVRSkipsReviewedFinancialConflict(t *testing.T) 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestApproveCompanyRawInput_CVRPersistsRegistryWebsiteDomainSignal(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+	domainID := uuid.New()
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRows(rowID, "12345678", "Dansk ApS", "translated", []byte(`{}`)))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("DK").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "DK").
+		WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`SELECT id, lei, name`).WithArgs("dansk-aps").
+		WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`INSERT INTO companies`).
+		WithArgs(
+			"dansk-aps", "Dansk ApS", countryID, ptrString("12345678"), (*string)(nil),
+			"active", ptrString("https://example.dk"), pgUUID(sourceID), (*string)(nil), (*string)(nil), pgxmock.AnyArg(),
+		).
+		WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "info@example.dk", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyEmailRows(companyID, "info@example.dk", "cvr"))
+	mock.ExpectQuery(`INSERT INTO company_phones`).WithArgs(
+		companyID, "+45 12 34 56 78", pgxmock.AnyArg(), "official", "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyPhoneRows(companyID, "+45 12 34 56 78", "cvr"))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "official_site", "needs_review", "registry_website", int16(95),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_website", 95))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "candidate", "needs_review", "registry_email", int16(45),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_email", 45))
+	mock.ExpectExec(`UPDATE cvr_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, "dansk-aps", company.CanonicalSlug)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_CVRSkipsPublicEmailDomainSignal(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRowsWithContacts(rowID, "12345678", "Dansk ApS", "translated", []byte(`{}`), nil, ptrString("owner@gmail.com"), nil))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("DK").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "DK").
+		WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "owner@gmail.com", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyEmailRows(companyID, "owner@gmail.com", "cvr"))
+	mock.ExpectExec(`UPDATE cvr_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, companyID, company.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestApproveCompanyRawInput_CVRPersistsPrivateEmailDomainSignal(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+	domainID := uuid.New()
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRowsWithContacts(rowID, "12345678", "Dansk ApS", "translated", []byte(`{}`), nil, ptrString("billing@corp-example.dk"), nil))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("DK").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "DK").
+		WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "billing@corp-example.dk", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyEmailRows(companyID, "billing@corp-example.dk", "cvr"))
+	mock.ExpectQuery(`INSERT INTO domains`).WithArgs("corp-example.dk", "registry").
+		WillReturnRows(domainRows(domainID, "corp-example.dk", "registry"))
+	mock.ExpectQuery(`INSERT INTO company_domains`).WithArgs(
+		companyID, domainID, "candidate", "needs_review", "registry_email", int16(45),
+		jsonContainsArg{`"source":"cvr"`, `"source_input_id":"` + rowID.String() + `"`, `"domain":"corp-example.dk"`},
+	).WillReturnRows(companyDomainRows(companyID, domainID, "registry_email", 45))
+	mock.ExpectExec(`UPDATE cvr_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, companyID, company.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func ptrInt32(v int32) *int32 { return &v }
 func ptrInt64(v int64) *int64 { return &v }
+
+func cvrApprovalRowsWithContacts(rowID uuid.UUID, cvrNumber, companyName, translationStatus string, rawPayloadEn []byte, website, email, phone *string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "source_pull_run_id", "source_native_id", "cvr_number", "company_name",
+		"registration_status", "company_type", "website", "email", "phone", "country_iso2",
+		"source_updated_at", "raw_payload", "raw_payload_en", "payload_hash",
+		"first_seen_at", "last_seen_at", "processing_status", "processing_attempts", "processing_error",
+		"processing_lease_by", "processing_lease_until", "processed_at", "run_id",
+		"translation_status", "translation_attempts", "translation_error", "translation_model",
+		"translation_prompt_version", "translated_at", "translation_lease_by", "translation_lease_until",
+		"translation_fx_source", "translation_fx_rate_date", "created_at", "updated_at",
+	}).AddRow(
+		rowID, pgtype.UUID{}, cvrNumber, cvrNumber, &companyName,
+		ptrString("registered"), ptrString("aps"), website, email, phone, (*string)(nil),
+		pgtype.Timestamptz{}, []byte(`{"cvrNummer":"`+cvrNumber+`"}`), rawPayloadEn, "hash1",
+		time.Time{}, time.Time{}, "pending", int32(0), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, pgtype.Timestamptz{}, (*string)(nil),
+		translationStatus, int32(0), (*string)(nil), (*string)(nil),
+		(*string)(nil), pgtype.Timestamptz{}, (*string)(nil), pgtype.Timestamptz{},
+		(*string)(nil), pgtype.Date{}, time.Time{}, time.Time{},
+	)
+}
 
 func companyEmailRows(companyID uuid.UUID, email, source string) *pgxmock.Rows {
 	return pgxmock.NewRows([]string{
@@ -445,6 +636,24 @@ func companyFinancialRows(companyID uuid.UUID, year int32, source string) *pgxmo
 		uuid.New(), companyID, year, source, (*int32)(nil), (*int64)(nil),
 		(*string)(nil), (*int64)(nil), (*int64)(nil), (*int64)(nil), "suggested",
 		(*string)(nil), pgtype.Timestamptz{}, time.Time{}, time.Time{},
+	)
+}
+
+func domainRows(domainID uuid.UUID, domain, importSource string) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "domain", "first_seen_at", "last_verified_at", "import_source",
+	}).AddRow(
+		domainID, domain, time.Time{}, pgtype.Timestamptz{}, importSource,
+	)
+}
+
+func companyDomainRows(companyID, domainID uuid.UUID, signal string, confidence int16) *pgxmock.Rows {
+	return pgxmock.NewRows([]string{
+		"id", "company_id", "domain_id", "relationship_type", "status", "signal",
+		"confidence", "evidence", "first_seen_at", "last_seen_at",
+	}).AddRow(
+		uuid.New(), companyID, domainID, "official_site", "needs_review", signal,
+		confidence, json.RawMessage(`{}`), time.Time{}, time.Time{},
 	)
 }
 
