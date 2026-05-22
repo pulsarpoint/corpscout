@@ -265,11 +265,11 @@ func buildCVRRawCompanyCandidate(row db.CvrCompanyRawInput, src db.DataSource) (
 	if err != nil {
 		return rawCompanyCandidate{}, errors.Wrap(err, "decode cvr translated payload")
 	}
-	displayName := fallbackString(row.CompanyName, row.CvrNumber)
+	displayName := fallbackString(row.CompanyName, fallbackString(payloadStringPath(payload, "identity", "name"), row.CvrNumber))
 	countryISO2 := fallbackString(row.CountryIso2, "DK")
-	website := firstStringPtr(row.Website, payloadString(payload, "website", "official_website", "homepage"))
-	email := firstStringPtr(row.Email, payloadString(payload, "email", "official_email"))
-	phone := firstStringPtr(row.Phone, payloadString(payload, "phone", "official_phone"))
+	website := firstStringPtr(row.Website, payloadStringPath(payload, "contacts", "website"), payloadString(payload, "website", "official_website", "homepage"))
+	email := firstStringPtr(row.Email, payloadStringPath(payload, "contacts", "email"), payloadString(payload, "email", "official_email"))
+	phone := firstStringPtr(row.Phone, payloadStringPath(payload, "contacts", "phone"), payloadString(payload, "phone", "official_phone"))
 	registrationStatus := firstStringPtr(row.RegistrationStatus, payloadString(payload, "registration_status", "status"))
 
 	candidate := rawCompanyCandidate{
@@ -303,11 +303,11 @@ func buildAriregisterRawCompanyCandidate(row db.AriregisterCompanyRawInput, src 
 	if err != nil {
 		return rawCompanyCandidate{}, errors.Wrap(err, "decode ariregister translated payload")
 	}
-	displayName := fallbackString(row.LegalName, row.RegistryCode)
+	displayName := fallbackString(row.LegalName, fallbackString(payloadStringPath(payload, "identity", "name"), row.RegistryCode))
 	countryISO2 := fallbackString(row.CountryIso2, "EE")
-	website := firstStringPtr(row.Website, payloadString(payload, "website", "official_website", "homepage"))
-	email := firstStringPtr(row.Email, payloadString(payload, "email", "official_email"))
-	phone := firstStringPtr(row.Phone, payloadString(payload, "phone", "official_phone"))
+	website := firstStringPtr(row.Website, payloadStringPath(payload, "contacts", "website"), payloadString(payload, "website", "official_website", "homepage"))
+	email := firstStringPtr(row.Email, payloadStringPath(payload, "contacts", "email"), payloadString(payload, "email", "official_email"))
+	phone := firstStringPtr(row.Phone, payloadStringPath(payload, "contacts", "phone"), payloadString(payload, "phone", "official_phone"))
 	registrationStatus := firstStringPtr(row.RegistrationStatus, payloadString(payload, "registration_status", "status"))
 
 	candidate := rawCompanyCandidate{
@@ -611,6 +611,22 @@ func firstStringPtr(values ...*string) *string {
 
 func payloadString(payload map[string]any, keys ...string) *string {
 	value := stringFromAny(payloadValue(payload, keys...))
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func payloadStringPath(payload map[string]any, path ...string) *string {
+	var current any = payload
+	for _, key := range path {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil
+		}
+		current = m[key]
+	}
+	value := stringFromAny(current)
 	if value == "" {
 		return nil
 	}
