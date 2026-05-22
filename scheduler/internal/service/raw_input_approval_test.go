@@ -362,6 +362,57 @@ func TestApproveCompanyRawInput_AriregisterFindsCompanyAndPersistsEnrichment(t *
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestApproveCompanyRawInput_CVRSkipsReviewedFinancialConflict(t *testing.T) {
+	ctx := context.Background()
+	rowID := uuid.New()
+	sourceID := uuid.New()
+	countryID := uuid.New()
+	companyID := uuid.New()
+
+	payload := []byte(`{
+		"financials": [{
+			"year": 2023,
+			"revenue_amount": 1234000,
+			"revenue_currency": "DKK"
+		}]
+	}`)
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, name, display_name`).WithArgs("cvr").
+		WillReturnRows(sourceRows(sourceID, "cvr", "cvr_company_raw_inputs"))
+	mock.ExpectQuery(`SELECT id, source_pull_run_id, source_native_id, cvr_number`).WithArgs(rowID).
+		WillReturnRows(cvrApprovalRows(rowID, "12345678", "Dansk ApS", "translated", payload))
+	mock.ExpectQuery(`SELECT id FROM countries`).WithArgs("DK").
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(countryID))
+	mock.ExpectQuery(`SELECT c.id`).WithArgs(ptrString("12345678"), "DK").
+		WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectQuery(`INSERT INTO company_emails`).WithArgs(
+		companyID, "info@example.dk", pgxmock.AnyArg(), "official", pgxmock.AnyArg(), "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyEmailRows(companyID, "info@example.dk", "cvr"))
+	mock.ExpectQuery(`INSERT INTO company_phones`).WithArgs(
+		companyID, "+45 12 34 56 78", pgxmock.AnyArg(), "official", "cvr", pgxmock.AnyArg(), pgxmock.AnyArg(),
+	).WillReturnRows(companyPhoneRows(companyID, "+45 12 34 56 78", "cvr"))
+	mock.ExpectQuery(`INSERT INTO company_financials`).WithArgs(
+		companyID, int32(2023), "cvr", (*int32)(nil), ptrInt64(1234000), ptrString("DKK"), (*int64)(nil), (*int64)(nil), (*int64)(nil),
+	).WillReturnError(pgx.ErrNoRows)
+	mock.ExpectQuery(`UPDATE companies SET`).WithArgs(
+		(*string)(nil), (*string)(nil), (*string)(nil), ptrString("https://example.dk"), (*int32)(nil),
+		[]byte(nil), []byte(nil), []byte(nil), (*int32)(nil), (*int64)(nil), companyID,
+	).WillReturnRows(companyRows(companyID, "dansk-aps", "Dansk ApS", countryID))
+	mock.ExpectExec(`UPDATE cvr_company_raw_inputs`).WithArgs(rowID).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectCommit()
+
+	company, err := service.ApproveCompanyRawInput(ctx, mock, "cvr", rowID, "ops", "")
+	require.NoError(t, err)
+	assert.Equal(t, companyID, company.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func ptrInt32(v int32) *int32 { return &v }
 func ptrInt64(v int64) *int64 { return &v }
 

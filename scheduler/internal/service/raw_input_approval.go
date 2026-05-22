@@ -322,7 +322,7 @@ func buildAriregisterRawCompanyCandidate(row db.AriregisterCompanyRawInput, src 
 		processingStatus:   row.ProcessingStatus,
 		translated:         true,
 		financials:         rawCompanyFinancialsFromPayload(payload),
-		ownership:          rawCompanyOwnershipFromPayload(src.Name, payload, "beneficial_owners", "ownership", "owners"),
+		ownership:          rawCompanyOwnershipFromPayload(src.Name, payload, "shareholders", "beneficial_owners", "ownership", "owners"),
 	}
 	if email != nil {
 		candidate.emails = append(candidate.emails, rawCompanyContact{Kind: "official", Value: *email, Source: src.Name})
@@ -411,6 +411,9 @@ func persistRawCompanyEnrichment(ctx context.Context, q *db.Queries, company db.
 			RevenueCurrency: currency,
 			ProfitAmount:    financial.ProfitAmount,
 		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
 			return db.Company{}, errors.Wrap(err, "create company financial")
 		}
 	}
@@ -486,18 +489,23 @@ func financialsFromArray(value any) []rawCompanyFinancial {
 }
 
 func rawCompanyOwnershipFromPayload(source string, payload map[string]any, keys ...string) []rawCompanyOwnership {
-	value := payloadValue(payload, keys...)
-	items, ok := value.([]any)
-	if !ok {
-		if m, ok := value.(map[string]any); ok {
-			return []rawCompanyOwnership{{Source: source, Data: m}}
+	ownership := []rawCompanyOwnership{}
+	for _, key := range keys {
+		value, ok := payload[key]
+		if !ok {
+			continue
 		}
-		return nil
-	}
-	ownership := make([]rawCompanyOwnership, 0, len(items))
-	for _, item := range items {
-		if m, ok := item.(map[string]any); ok {
-			ownership = append(ownership, rawCompanyOwnership{Source: source, Data: m})
+		items, ok := value.([]any)
+		if !ok {
+			if m, ok := value.(map[string]any); ok {
+				ownership = append(ownership, rawCompanyOwnership{Source: source, Data: m})
+			}
+			continue
+		}
+		for _, item := range items {
+			if m, ok := item.(map[string]any); ok {
+				ownership = append(ownership, rawCompanyOwnership{Source: source, Data: m})
+			}
 		}
 	}
 	return ownership

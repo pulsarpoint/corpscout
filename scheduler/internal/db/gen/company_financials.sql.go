@@ -97,6 +97,7 @@ DO UPDATE SET
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
     updated_at       = now()
+WHERE company_financials.status = 'suggested'
 RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at
 `
 

@@ -109,3 +109,47 @@ func TestBuildCVRRawCompanyCandidateKeepsTableScalarsBeforePayload(t *testing.T)
 	require.Len(t, candidate.phones, 1)
 	require.Equal(t, "+4512345678", candidate.phones[0].Value)
 }
+
+func TestBuildCVRRawCompanyCandidatePreservesOwnersAndBeneficialOwners(t *testing.T) {
+	row := db.CvrCompanyRawInput{
+		ID:                uuid.New(),
+		SourceNativeID:    "12345678",
+		CvrNumber:         "12345678",
+		CompanyName:       ptrStringValue("Ownership ApS"),
+		ProcessingStatus:  "pending",
+		TranslationStatus: "translated",
+		RawPayloadEn: []byte(`{
+			"owners": [{"name": "Direct Owner ApS"}],
+			"beneficial_owners": [{"name": "Beneficial Owner"}]
+		}`),
+	}
+
+	candidate, err := buildCVRRawCompanyCandidate(row, db.DataSource{Name: "cvr"})
+	require.NoError(t, err)
+
+	require.Len(t, candidate.ownership, 2)
+	require.Equal(t, "Direct Owner ApS", candidate.ownership[0].Data["name"])
+	require.Equal(t, "Beneficial Owner", candidate.ownership[1].Data["name"])
+}
+
+func TestBuildAriregisterRawCompanyCandidatePreservesShareholdersAndBeneficialOwners(t *testing.T) {
+	row := db.AriregisterCompanyRawInput{
+		ID:                uuid.New(),
+		SourceNativeID:    "10000001",
+		RegistryCode:      "10000001",
+		LegalName:         ptrStringValue("Ownership OU"),
+		ProcessingStatus:  "pending",
+		TranslationStatus: "translated",
+		RawPayloadEn: []byte(`{
+			"shareholders": [{"name": "Direct Shareholder OU"}],
+			"beneficial_owners": [{"name": "Beneficial Owner"}]
+		}`),
+	}
+
+	candidate, err := buildAriregisterRawCompanyCandidate(row, db.DataSource{Name: "ariregister"})
+	require.NoError(t, err)
+
+	require.Len(t, candidate.ownership, 2)
+	require.Equal(t, "Direct Shareholder OU", candidate.ownership[0].Data["name"])
+	require.Equal(t, "Beneficial Owner", candidate.ownership[1].Data["name"])
+}

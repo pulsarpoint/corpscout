@@ -23,6 +23,7 @@ DO UPDATE SET
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
     updated_at       = now()
+WHERE company_financials.status = 'suggested'
 RETURNING *;
 
 -- name: GetCompanyFinancial :one
