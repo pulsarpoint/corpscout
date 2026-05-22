@@ -94,6 +94,14 @@ func TestDataTaskWorkerWork_buildsWorkflowInput(t *testing.T) {
 			expectedMode:       "refresh",
 			expectedCursor:     "snapshot:2026-05-20",
 		},
+		{
+			name:               "ariregister first run starts bulk",
+			args:               DataTaskArgs{Source: "ariregister"},
+			expectedWorkflow:   "PullAriregister",
+			expectedWorkflowID: "pull-ariregister-EE-42",
+			expectedCountry:    "EE",
+			expectedMode:       "bulk",
+		},
 	}
 
 	for _, tc := range cases {
