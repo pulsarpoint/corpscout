@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,8 @@ type rawCompanyCandidate struct {
 	id                 uuid.UUID
 	sourceName         string
 	sourceNativeID     string
+	sourceRunID        *string
+	payloadHash        string
 	displayName        string
 	countryISO2        string
 	registrationNumber *string
@@ -59,6 +62,8 @@ type rawCompanyFinancial struct {
 	RevenueAmount   *int64
 	RevenueCurrency string
 	ProfitAmount    *int64
+	OriginalFields  []string
+	RawFragments    []map[string]any
 }
 
 type rawCompanyOwnership struct {
@@ -192,6 +197,8 @@ func loadRawCompanyCandidate(ctx context.Context, q *db.Queries, src db.DataSour
 			id:                 row.ID,
 			sourceName:         src.Name,
 			sourceNativeID:     row.SourceNativeID,
+			sourceRunID:        row.RunID,
+			payloadHash:        row.PayloadHash,
 			displayName:        displayName,
 			countryISO2:        fallbackString(row.HeadquartersCountryCode, ""),
 			lei:                &row.Lei,
@@ -214,6 +221,8 @@ func loadRawCompanyCandidate(ctx context.Context, q *db.Queries, src db.DataSour
 			id:                 row.ID,
 			sourceName:         src.Name,
 			sourceNativeID:     row.SourceNativeID,
+			sourceRunID:        row.RunID,
+			payloadHash:        row.PayloadHash,
 			displayName:        displayName,
 			countryISO2:        countryISO2,
 			registrationNumber: &row.CompanyNumber,
@@ -237,6 +246,8 @@ func loadRawCompanyCandidate(ctx context.Context, q *db.Queries, src db.DataSour
 			id:                 row.ID,
 			sourceName:         src.Name,
 			sourceNativeID:     row.SourceNativeID,
+			sourceRunID:        row.RunID,
+			payloadHash:        row.PayloadHash,
 			displayName:        displayName,
 			countryISO2:        countryISO2,
 			registrationNumber: &row.OrganizationNumber,
@@ -287,6 +298,8 @@ func buildCVRRawCompanyCandidate(row db.CvrCompanyRawInput, src db.DataSource) (
 		id:                 row.ID,
 		sourceName:         src.Name,
 		sourceNativeID:     row.SourceNativeID,
+		sourceRunID:        row.RunID,
+		payloadHash:        row.PayloadHash,
 		displayName:        displayName,
 		countryISO2:        countryISO2,
 		registrationNumber: &row.CvrNumber,
@@ -294,7 +307,7 @@ func buildCVRRawCompanyCandidate(row db.CvrCompanyRawInput, src db.DataSource) (
 		registrationStatus: registrationStatus,
 		processingStatus:   row.ProcessingStatus,
 		translated:         true,
-		financials:         rawCompanyFinancialsFromPayload(payload),
+		financials:         rawCompanyFinancialsFromPayload(src.Name, payload),
 		ownership:          rawCompanyOwnershipFromPayload(src.Name, payload, "ownership", "owners", "beneficial_owners"),
 	}
 	if email != nil {
@@ -326,6 +339,8 @@ func buildAriregisterRawCompanyCandidate(row db.AriregisterCompanyRawInput, src 
 		id:                 row.ID,
 		sourceName:         src.Name,
 		sourceNativeID:     row.SourceNativeID,
+		sourceRunID:        row.RunID,
+		payloadHash:        row.PayloadHash,
 		displayName:        displayName,
 		countryISO2:        countryISO2,
 		registrationNumber: &row.RegistryCode,
@@ -333,7 +348,7 @@ func buildAriregisterRawCompanyCandidate(row db.AriregisterCompanyRawInput, src 
 		registrationStatus: registrationStatus,
 		processingStatus:   row.ProcessingStatus,
 		translated:         true,
-		financials:         rawCompanyFinancialsFromPayload(payload),
+		financials:         rawCompanyFinancialsFromPayload(src.Name, payload),
 		ownership:          rawCompanyOwnershipFromPayload(src.Name, payload, "shareholders", "beneficial_owners", "ownership", "owners"),
 	}
 	if email != nil {
@@ -411,6 +426,10 @@ func persistRawCompanyEnrichment(ctx context.Context, q *db.Queries, company db.
 		if financial.Year == 0 {
 			continue
 		}
+		evidence, err := rawInputFinancialEvidence(candidate, financial)
+		if err != nil {
+			return db.Company{}, errors.Wrap(err, "build financial evidence")
+		}
 		var currency *string
 		if strings.TrimSpace(financial.RevenueCurrency) != "" {
 			currency = ptrStringValue(strings.TrimSpace(financial.RevenueCurrency))
@@ -423,6 +442,7 @@ func persistRawCompanyEnrichment(ctx context.Context, q *db.Queries, company db.
 			RevenueAmount:   financial.RevenueAmount,
 			RevenueCurrency: currency,
 			ProfitAmount:    financial.ProfitAmount,
+			Evidence:        evidence,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				continue
@@ -495,19 +515,32 @@ func decodeRawCompanyPayload(payload []byte) (map[string]any, error) {
 	return data, nil
 }
 
-func rawCompanyFinancialsFromPayload(payload map[string]any) []rawCompanyFinancial {
-	var financials []rawCompanyFinancial
-	financials = append(financials, financialsFromArray(payloadValue(payload, "financials"))...)
-	financials = append(financials, financialsFromArray(payloadValue(payload, "annual_reports", "annual_reports_en"))...)
+func rawCompanyFinancialsFromPayload(source string, payload map[string]any) []rawCompanyFinancial {
+	byYear := map[int]*rawCompanyFinancial{}
+	originalFields := map[int]map[string]struct{}{}
+	mergeFinancialsFromArray(source, payloadValue(payload, "financials"), byYear, originalFields)
+	mergeFinancialsFromArray(source, payloadValue(payload, "annual_reports", "annual_reports_en"), byYear, originalFields)
+
+	years := make([]int, 0, len(byYear))
+	for year := range byYear {
+		years = append(years, year)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(years)))
+
+	financials := make([]rawCompanyFinancial, 0, len(years))
+	for _, year := range years {
+		financial := *byYear[year]
+		financial.OriginalFields = sortedFieldNames(originalFields[year])
+		financials = append(financials, financial)
+	}
 	return financials
 }
 
-func financialsFromArray(value any) []rawCompanyFinancial {
+func mergeFinancialsFromArray(source string, value any, byYear map[int]*rawCompanyFinancial, originalFields map[int]map[string]struct{}) {
 	items, ok := value.([]any)
 	if !ok {
-		return nil
+		return
 	}
-	financials := make([]rawCompanyFinancial, 0, len(items))
 	for _, item := range items {
 		m, ok := item.(map[string]any)
 		if !ok {
@@ -518,15 +551,103 @@ func financialsFromArray(value any) []rawCompanyFinancial {
 		if year == 0 {
 			continue
 		}
-		financials = append(financials, rawCompanyFinancial{
-			Year:            year,
-			EmployeeCount:   int32PtrFromAny(firstAny(m["employee_count"], m["employees"], indicators["employee_count"], indicators["employees"])),
-			RevenueAmount:   int64PtrFromAny(firstAny(m["revenue_amount"], m["revenue"], m["sales_revenue"], indicators["revenue_amount"], indicators["revenue"], indicators["sales_revenue"])),
-			RevenueCurrency: stringFromAny(firstAny(m["revenue_currency"], m["currency"], indicators["revenue_currency"], indicators["currency"])),
-			ProfitAmount:    int64PtrFromAny(firstAny(m["profit_amount"], m["profit"], indicators["profit_amount"], indicators["profit"])),
-		})
+		financial := byYear[year]
+		if financial == nil {
+			financial = &rawCompanyFinancial{Year: year}
+			byYear[year] = financial
+		}
+		fields := originalFields[year]
+		if fields == nil {
+			fields = map[string]struct{}{}
+			originalFields[year] = fields
+		}
+		addFinancialOriginalFields(fields, m)
+		financial.RawFragments = append(financial.RawFragments, m)
+
+		if financial.EmployeeCount == nil {
+			financial.EmployeeCount = int32PtrFromAny(firstAny(m["employee_count"], m["employees"], indicators["employee_count"], indicators["employees"]))
+		}
+		if financial.RevenueAmount == nil {
+			financial.RevenueAmount = int64PtrFromAny(firstAny(m["revenue_amount"], m["revenue"], m["sales_revenue"], indicators["revenue_amount"], indicators["revenue"], indicators["sales_revenue"]))
+		}
+		if strings.TrimSpace(financial.RevenueCurrency) == "" {
+			financial.RevenueCurrency = stringFromAny(firstAny(m["revenue_currency"], m["currency"], indicators["revenue_currency"], indicators["currency"]))
+		}
+		if financial.ProfitAmount == nil {
+			financial.ProfitAmount = int64PtrFromAny(firstAny(m["profit_amount"], m["profit"], indicators["profit_amount"], indicators["profit"]))
+		}
+		if source == "ariregister" {
+			applyIndicatorFinancialValue(m, financial)
+		}
+		if source == "ariregister" && strings.TrimSpace(financial.RevenueCurrency) == "" && (financial.RevenueAmount != nil || financial.ProfitAmount != nil) {
+			financial.RevenueCurrency = "EUR"
+		}
 	}
-	return financials
+}
+
+func addFinancialOriginalFields(fields map[string]struct{}, fragment map[string]any) {
+	for key, value := range fragment {
+		fields[key] = struct{}{}
+		if nested, ok := value.(map[string]any); ok {
+			for nestedKey := range nested {
+				fields[key+"."+nestedKey] = struct{}{}
+			}
+		}
+	}
+}
+
+func applyIndicatorFinancialValue(fragment map[string]any, financial *rawCompanyFinancial) {
+	indicator := normalizeFinancialIndicator(stringFromAny(fragment["indicator"]))
+	if indicator == "" {
+		return
+	}
+	value := firstAny(fragment["value"], fragment["amount"])
+	switch financialMetricFromIndicator(indicator) {
+	case "employee_count":
+		if financial.EmployeeCount == nil {
+			financial.EmployeeCount = int32PtrFromAny(value)
+		}
+	case "revenue_amount":
+		if financial.RevenueAmount == nil {
+			financial.RevenueAmount = int64PtrFromAny(value)
+		}
+	case "profit_amount":
+		if financial.ProfitAmount == nil {
+			financial.ProfitAmount = int64PtrFromAny(value)
+		}
+	}
+	if strings.TrimSpace(financial.RevenueCurrency) == "" {
+		currency := stringFromAny(firstAny(fragment["revenue_currency"], fragment["currency"]))
+		financial.RevenueCurrency = currency
+	}
+}
+
+func normalizeFinancialIndicator(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer("ü", "u", "õ", "o", "ä", "a", "ö", "o")
+	return replacer.Replace(value)
+}
+
+func financialMetricFromIndicator(indicator string) string {
+	switch {
+	case strings.Contains(indicator, "employee") || strings.Contains(indicator, "tootaja"):
+		return "employee_count"
+	case strings.Contains(indicator, "revenue") || strings.Contains(indicator, "sales") || strings.Contains(indicator, "muugitulu"):
+		return "revenue_amount"
+	case strings.Contains(indicator, "profit") || strings.Contains(indicator, "kasum"):
+		return "profit_amount"
+	default:
+		return ""
+	}
+}
+
+func sortedFieldNames(fields map[string]struct{}) []string {
+	names := make([]string, 0, len(fields))
+	for name := range fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func rawCompanyOwnershipFromPayload(source string, payload map[string]any, keys ...string) []rawCompanyOwnership {
@@ -660,6 +781,27 @@ func rawInputEnrichmentEvidence(candidate rawCompanyCandidate, source, kind stri
 		"source_input_id":  candidate.id.String(),
 		"source_native_id": candidate.sourceNativeID,
 		"kind":             kind,
+	}
+	b, err := json.Marshal(payload)
+	return json.RawMessage(b), err
+}
+
+func rawInputFinancialEvidence(candidate rawCompanyCandidate, financial rawCompanyFinancial) (json.RawMessage, error) {
+	sourceSnapshot := map[string]any{
+		"payload_hash": candidate.payloadHash,
+	}
+	if candidate.sourceRunID != nil && strings.TrimSpace(*candidate.sourceRunID) != "" {
+		sourceSnapshot["run_id"] = strings.TrimSpace(*candidate.sourceRunID)
+	}
+	payload := map[string]any{
+		"source":           candidate.sourceName,
+		"source_input_id":  candidate.id.String(),
+		"source_native_id": candidate.sourceNativeID,
+		"kind":             "financial",
+		"year":             financial.Year,
+		"source_snapshot":  sourceSnapshot,
+		"original_fields":  financial.OriginalFields,
+		"raw_fragments":    financial.RawFragments,
 	}
 	b, err := json.Marshal(payload)
 	return json.RawMessage(b), err

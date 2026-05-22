@@ -2,7 +2,7 @@
 INSERT INTO company_financials (
     company_id, year, source_name,
     employee_count, revenue_amount, revenue_currency, revenue_usd,
-    profit_amount, profit_usd
+    profit_amount, profit_usd, evidence
 ) VALUES (
     sqlc.arg('company_id')::uuid,
     sqlc.arg('year')::int,
@@ -12,7 +12,8 @@ INSERT INTO company_financials (
     sqlc.narg('revenue_currency')::text,
     sqlc.narg('revenue_usd')::bigint,
     sqlc.narg('profit_amount')::bigint,
-    sqlc.narg('profit_usd')::bigint
+    sqlc.narg('profit_usd')::bigint,
+    sqlc.arg('evidence')::jsonb
 )
 ON CONFLICT (company_id, year, source_name)
 DO UPDATE SET
@@ -22,6 +23,7 @@ DO UPDATE SET
     revenue_usd      = EXCLUDED.revenue_usd,
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
+    evidence          = EXCLUDED.evidence,
     updated_at       = now()
 RETURNING *;
 
@@ -29,7 +31,7 @@ RETURNING *;
 INSERT INTO company_financials (
     company_id, year, source_name,
     employee_count, revenue_amount, revenue_currency, revenue_usd,
-    profit_amount, profit_usd
+    profit_amount, profit_usd, evidence
 ) VALUES (
     sqlc.arg('company_id')::uuid,
     sqlc.arg('year')::int,
@@ -39,7 +41,8 @@ INSERT INTO company_financials (
     sqlc.narg('revenue_currency')::text,
     sqlc.narg('revenue_usd')::bigint,
     sqlc.narg('profit_amount')::bigint,
-    sqlc.narg('profit_usd')::bigint
+    sqlc.narg('profit_usd')::bigint,
+    sqlc.arg('evidence')::jsonb
 )
 ON CONFLICT (company_id, year, source_name)
 DO UPDATE SET
@@ -49,6 +52,7 @@ DO UPDATE SET
     revenue_usd      = EXCLUDED.revenue_usd,
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
+    evidence          = EXCLUDED.evidence,
     updated_at       = now()
 WHERE company_financials.status = 'suggested'
 RETURNING *;
@@ -73,6 +77,7 @@ SELECT
     cf.revenue_usd,
     cf.profit_amount,
     cf.profit_usd,
+    cf.evidence,
     cf.status,
     cf.reviewed_by,
     cf.reviewed_at,

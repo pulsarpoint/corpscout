@@ -66,6 +66,14 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 
 	year := int32(acc.Year)
 	currency := "NOK"
+	evidence, err := json.Marshal(map[string]any{
+		"source":           args.SourceName,
+		"source_native_id": args.OrgNumber,
+		"kind":             "financial",
+	})
+	if err != nil {
+		return fmt.Errorf("build financial evidence: %w", err)
+	}
 	_, err = w.db.CreateCompanyFinancial(ctx, db.CreateCompanyFinancialParams{
 		CompanyID:       companyID,
 		Year:            year,
@@ -75,6 +83,7 @@ func (w *FinancialEnrichWorker) Work(ctx context.Context, job *river.Job[EnrichC
 		RevenueUsd:      revenueUSDPtr,
 		ProfitAmount:    &profitOrig,
 		ProfitUsd:       profitUSDPtr,
+		Evidence:        evidence,
 	})
 	if err != nil {
 		return fmt.Errorf("create company financial: %w", err)

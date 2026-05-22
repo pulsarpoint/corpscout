@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -218,6 +219,7 @@ func (h *Handlers) handlePatchCompanyFinancials(w http.ResponseWriter, r *http.R
 		EmployeeCount: body.EmployeeCount,
 		RevenueUsd:    body.RevenueUsd,
 		ProfitUsd:     body.ProfitUsd,
+		Evidence:      json.RawMessage(`{"source":"manual","kind":"financial"}`),
 	})
 	if err != nil {
 		slog.Error("create company financial", "error", err)

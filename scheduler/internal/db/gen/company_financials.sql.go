@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -76,7 +77,7 @@ const createCompanyFinancial = `-- name: CreateCompanyFinancial :one
 INSERT INTO company_financials (
     company_id, year, source_name,
     employee_count, revenue_amount, revenue_currency, revenue_usd,
-    profit_amount, profit_usd
+    profit_amount, profit_usd, evidence
 ) VALUES (
     $1::uuid,
     $2::int,
@@ -86,7 +87,8 @@ INSERT INTO company_financials (
     $6::text,
     $7::bigint,
     $8::bigint,
-    $9::bigint
+    $9::bigint,
+    $10::jsonb
 )
 ON CONFLICT (company_id, year, source_name)
 DO UPDATE SET
@@ -96,20 +98,22 @@ DO UPDATE SET
     revenue_usd      = EXCLUDED.revenue_usd,
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
+    evidence          = EXCLUDED.evidence,
     updated_at       = now()
-RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at
+RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at, evidence
 `
 
 type CreateCompanyFinancialParams struct {
-	CompanyID       uuid.UUID `json:"company_id"`
-	Year            int32     `json:"year"`
-	SourceName      string    `json:"source_name"`
-	EmployeeCount   *int32    `json:"employee_count"`
-	RevenueAmount   *int64    `json:"revenue_amount"`
-	RevenueCurrency *string   `json:"revenue_currency"`
-	RevenueUsd      *int64    `json:"revenue_usd"`
-	ProfitAmount    *int64    `json:"profit_amount"`
-	ProfitUsd       *int64    `json:"profit_usd"`
+	CompanyID       uuid.UUID       `json:"company_id"`
+	Year            int32           `json:"year"`
+	SourceName      string          `json:"source_name"`
+	EmployeeCount   *int32          `json:"employee_count"`
+	RevenueAmount   *int64          `json:"revenue_amount"`
+	RevenueCurrency *string         `json:"revenue_currency"`
+	RevenueUsd      *int64          `json:"revenue_usd"`
+	ProfitAmount    *int64          `json:"profit_amount"`
+	ProfitUsd       *int64          `json:"profit_usd"`
+	Evidence        json.RawMessage `json:"evidence"`
 }
 
 func (q *Queries) CreateCompanyFinancial(ctx context.Context, arg CreateCompanyFinancialParams) (CompanyFinancial, error) {
@@ -123,6 +127,7 @@ func (q *Queries) CreateCompanyFinancial(ctx context.Context, arg CreateCompanyF
 		arg.RevenueUsd,
 		arg.ProfitAmount,
 		arg.ProfitUsd,
+		arg.Evidence,
 	)
 	var i CompanyFinancial
 	err := row.Scan(
@@ -141,6 +146,7 @@ func (q *Queries) CreateCompanyFinancial(ctx context.Context, arg CreateCompanyF
 		&i.ReviewedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Evidence,
 	)
 	return i, err
 }
@@ -149,7 +155,7 @@ const createSuggestedCompanyFinancial = `-- name: CreateSuggestedCompanyFinancia
 INSERT INTO company_financials (
     company_id, year, source_name,
     employee_count, revenue_amount, revenue_currency, revenue_usd,
-    profit_amount, profit_usd
+    profit_amount, profit_usd, evidence
 ) VALUES (
     $1::uuid,
     $2::int,
@@ -159,7 +165,8 @@ INSERT INTO company_financials (
     $6::text,
     $7::bigint,
     $8::bigint,
-    $9::bigint
+    $9::bigint,
+    $10::jsonb
 )
 ON CONFLICT (company_id, year, source_name)
 DO UPDATE SET
@@ -169,21 +176,23 @@ DO UPDATE SET
     revenue_usd      = EXCLUDED.revenue_usd,
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
+    evidence          = EXCLUDED.evidence,
     updated_at       = now()
 WHERE company_financials.status = 'suggested'
-RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at
+RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at, evidence
 `
 
 type CreateSuggestedCompanyFinancialParams struct {
-	CompanyID       uuid.UUID `json:"company_id"`
-	Year            int32     `json:"year"`
-	SourceName      string    `json:"source_name"`
-	EmployeeCount   *int32    `json:"employee_count"`
-	RevenueAmount   *int64    `json:"revenue_amount"`
-	RevenueCurrency *string   `json:"revenue_currency"`
-	RevenueUsd      *int64    `json:"revenue_usd"`
-	ProfitAmount    *int64    `json:"profit_amount"`
-	ProfitUsd       *int64    `json:"profit_usd"`
+	CompanyID       uuid.UUID       `json:"company_id"`
+	Year            int32           `json:"year"`
+	SourceName      string          `json:"source_name"`
+	EmployeeCount   *int32          `json:"employee_count"`
+	RevenueAmount   *int64          `json:"revenue_amount"`
+	RevenueCurrency *string         `json:"revenue_currency"`
+	RevenueUsd      *int64          `json:"revenue_usd"`
+	ProfitAmount    *int64          `json:"profit_amount"`
+	ProfitUsd       *int64          `json:"profit_usd"`
+	Evidence        json.RawMessage `json:"evidence"`
 }
 
 func (q *Queries) CreateSuggestedCompanyFinancial(ctx context.Context, arg CreateSuggestedCompanyFinancialParams) (CompanyFinancial, error) {
@@ -197,6 +206,7 @@ func (q *Queries) CreateSuggestedCompanyFinancial(ctx context.Context, arg Creat
 		arg.RevenueUsd,
 		arg.ProfitAmount,
 		arg.ProfitUsd,
+		arg.Evidence,
 	)
 	var i CompanyFinancial
 	err := row.Scan(
@@ -215,12 +225,13 @@ func (q *Queries) CreateSuggestedCompanyFinancial(ctx context.Context, arg Creat
 		&i.ReviewedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Evidence,
 	)
 	return i, err
 }
 
 const getCompanyFinancial = `-- name: GetCompanyFinancial :one
-SELECT id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at FROM company_financials WHERE id = $1
+SELECT id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at, evidence FROM company_financials WHERE id = $1
 `
 
 func (q *Queries) GetCompanyFinancial(ctx context.Context, id uuid.UUID) (CompanyFinancial, error) {
@@ -242,12 +253,13 @@ func (q *Queries) GetCompanyFinancial(ctx context.Context, id uuid.UUID) (Compan
 		&i.ReviewedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Evidence,
 	)
 	return i, err
 }
 
 const listCompanyFinancials = `-- name: ListCompanyFinancials :many
-SELECT id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at FROM company_financials
+SELECT id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at, evidence FROM company_financials
 WHERE company_id = $1
 ORDER BY year DESC, created_at DESC
 `
@@ -277,6 +289,7 @@ func (q *Queries) ListCompanyFinancials(ctx context.Context, companyID uuid.UUID
 			&i.ReviewedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Evidence,
 		); err != nil {
 			return nil, err
 		}
@@ -324,6 +337,7 @@ SELECT
     cf.revenue_usd,
     cf.profit_amount,
     cf.profit_usd,
+    cf.evidence,
     cf.status,
     cf.reviewed_by,
     cf.reviewed_at,
@@ -353,6 +367,7 @@ type ListPendingCompanyFinancialsRow struct {
 	RevenueUsd      *int64             `json:"revenue_usd"`
 	ProfitAmount    *int64             `json:"profit_amount"`
 	ProfitUsd       *int64             `json:"profit_usd"`
+	Evidence        json.RawMessage    `json:"evidence"`
 	Status          string             `json:"status"`
 	ReviewedBy      *string            `json:"reviewed_by"`
 	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
@@ -381,6 +396,7 @@ func (q *Queries) ListPendingCompanyFinancials(ctx context.Context, arg ListPend
 			&i.RevenueUsd,
 			&i.ProfitAmount,
 			&i.ProfitUsd,
+			&i.Evidence,
 			&i.Status,
 			&i.ReviewedBy,
 			&i.ReviewedAt,

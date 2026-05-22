@@ -316,6 +316,7 @@ type CompanyFinancial struct {
 	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       time.Time          `json:"updated_at"`
+	Evidence        json.RawMessage    `json:"evidence"`
 }
 
 type CompanyIndustry struct {
