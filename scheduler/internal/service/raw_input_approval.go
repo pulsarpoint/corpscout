@@ -402,7 +402,7 @@ func persistRawCompanyEnrichment(ctx context.Context, q *db.Queries, company db.
 		if strings.TrimSpace(financial.RevenueCurrency) != "" {
 			currency = ptrStringValue(strings.TrimSpace(financial.RevenueCurrency))
 		}
-		if _, err := q.CreateCompanyFinancial(ctx, db.CreateCompanyFinancialParams{
+		if _, err := q.CreateSuggestedCompanyFinancial(ctx, db.CreateSuggestedCompanyFinancialParams{
 			CompanyID:       company.ID,
 			Year:            int32(financial.Year),
 			SourceName:      candidate.sourceName,

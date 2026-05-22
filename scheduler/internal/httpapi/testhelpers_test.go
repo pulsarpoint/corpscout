@@ -717,6 +717,10 @@ func (s *stubQuerier) CreateCompanyFinancial(ctx context.Context, arg db.CreateC
 	return db.CompanyFinancial{}, nil
 }
 
+func (s *stubQuerier) CreateSuggestedCompanyFinancial(ctx context.Context, arg db.CreateSuggestedCompanyFinancialParams) (db.CompanyFinancial, error) {
+	return db.CompanyFinancial{}, nil
+}
+
 func (s *stubQuerier) ApproveCompanyFinancial(ctx context.Context, arg db.ApproveCompanyFinancialParams) error {
 	return nil
 }

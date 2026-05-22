@@ -97,7 +97,6 @@ DO UPDATE SET
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
     updated_at       = now()
-WHERE company_financials.status = 'suggested'
 RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at
 `
 
@@ -115,6 +114,80 @@ type CreateCompanyFinancialParams struct {
 
 func (q *Queries) CreateCompanyFinancial(ctx context.Context, arg CreateCompanyFinancialParams) (CompanyFinancial, error) {
 	row := q.db.QueryRow(ctx, createCompanyFinancial,
+		arg.CompanyID,
+		arg.Year,
+		arg.SourceName,
+		arg.EmployeeCount,
+		arg.RevenueAmount,
+		arg.RevenueCurrency,
+		arg.RevenueUsd,
+		arg.ProfitAmount,
+		arg.ProfitUsd,
+	)
+	var i CompanyFinancial
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyID,
+		&i.Year,
+		&i.SourceName,
+		&i.EmployeeCount,
+		&i.RevenueAmount,
+		&i.RevenueCurrency,
+		&i.RevenueUsd,
+		&i.ProfitAmount,
+		&i.ProfitUsd,
+		&i.Status,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSuggestedCompanyFinancial = `-- name: CreateSuggestedCompanyFinancial :one
+INSERT INTO company_financials (
+    company_id, year, source_name,
+    employee_count, revenue_amount, revenue_currency, revenue_usd,
+    profit_amount, profit_usd
+) VALUES (
+    $1::uuid,
+    $2::int,
+    $3::text,
+    $4::int,
+    $5::bigint,
+    $6::text,
+    $7::bigint,
+    $8::bigint,
+    $9::bigint
+)
+ON CONFLICT (company_id, year, source_name)
+DO UPDATE SET
+    employee_count   = EXCLUDED.employee_count,
+    revenue_amount   = EXCLUDED.revenue_amount,
+    revenue_currency = EXCLUDED.revenue_currency,
+    revenue_usd      = EXCLUDED.revenue_usd,
+    profit_amount    = EXCLUDED.profit_amount,
+    profit_usd       = EXCLUDED.profit_usd,
+    updated_at       = now()
+WHERE company_financials.status = 'suggested'
+RETURNING id, company_id, year, source_name, employee_count, revenue_amount, revenue_currency, revenue_usd, profit_amount, profit_usd, status, reviewed_by, reviewed_at, created_at, updated_at
+`
+
+type CreateSuggestedCompanyFinancialParams struct {
+	CompanyID       uuid.UUID `json:"company_id"`
+	Year            int32     `json:"year"`
+	SourceName      string    `json:"source_name"`
+	EmployeeCount   *int32    `json:"employee_count"`
+	RevenueAmount   *int64    `json:"revenue_amount"`
+	RevenueCurrency *string   `json:"revenue_currency"`
+	RevenueUsd      *int64    `json:"revenue_usd"`
+	ProfitAmount    *int64    `json:"profit_amount"`
+	ProfitUsd       *int64    `json:"profit_usd"`
+}
+
+func (q *Queries) CreateSuggestedCompanyFinancial(ctx context.Context, arg CreateSuggestedCompanyFinancialParams) (CompanyFinancial, error) {
+	row := q.db.QueryRow(ctx, createSuggestedCompanyFinancial,
 		arg.CompanyID,
 		arg.Year,
 		arg.SourceName,

@@ -23,6 +23,33 @@ DO UPDATE SET
     profit_amount    = EXCLUDED.profit_amount,
     profit_usd       = EXCLUDED.profit_usd,
     updated_at       = now()
+RETURNING *;
+
+-- name: CreateSuggestedCompanyFinancial :one
+INSERT INTO company_financials (
+    company_id, year, source_name,
+    employee_count, revenue_amount, revenue_currency, revenue_usd,
+    profit_amount, profit_usd
+) VALUES (
+    sqlc.arg('company_id')::uuid,
+    sqlc.arg('year')::int,
+    sqlc.arg('source_name')::text,
+    sqlc.narg('employee_count')::int,
+    sqlc.narg('revenue_amount')::bigint,
+    sqlc.narg('revenue_currency')::text,
+    sqlc.narg('revenue_usd')::bigint,
+    sqlc.narg('profit_amount')::bigint,
+    sqlc.narg('profit_usd')::bigint
+)
+ON CONFLICT (company_id, year, source_name)
+DO UPDATE SET
+    employee_count   = EXCLUDED.employee_count,
+    revenue_amount   = EXCLUDED.revenue_amount,
+    revenue_currency = EXCLUDED.revenue_currency,
+    revenue_usd      = EXCLUDED.revenue_usd,
+    profit_amount    = EXCLUDED.profit_amount,
+    profit_usd       = EXCLUDED.profit_usd,
+    updated_at       = now()
 WHERE company_financials.status = 'suggested'
 RETURNING *;
 

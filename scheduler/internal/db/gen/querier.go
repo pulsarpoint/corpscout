@@ -28,6 +28,7 @@ type Querier interface {
 	CountPendingCompanySuggestions(ctx context.Context) (int64, error)
 	CreateCompanyFinancial(ctx context.Context, arg CreateCompanyFinancialParams) (CompanyFinancial, error)
 	CreatePullRun(ctx context.Context, arg CreatePullRunParams) (SourcePullRun, error)
+	CreateSuggestedCompanyFinancial(ctx context.Context, arg CreateSuggestedCompanyFinancialParams) (CompanyFinancial, error)
 	CreateTemporalExecution(ctx context.Context, arg CreateTemporalExecutionParams) (TemporalExecution, error)
 	FailPullRun(ctx context.Context, arg FailPullRunParams) error
 	GetAriregisterRawInputForCompanyApproval(ctx context.Context, id uuid.UUID) (AriregisterCompanyRawInput, error)
